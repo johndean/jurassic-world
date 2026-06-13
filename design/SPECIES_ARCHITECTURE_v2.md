@@ -147,6 +147,8 @@ Hybrids reference an existing archetype (or compose two) — **no new code**.
 
 ## 7. Migration path (fewest breaking changes)
 
+> **Status:** steps 1–3 implemented (commit `c90d43d`). `data/archetypes.json` added; all 3 species carry an `archetype`; `game.js` loads archetypes at boot and dispatches via `isPrey`/`usesPackTactics`/`isApex`/`baseStateFor` instead of the `role` enum. Behavior verified equivalent for the current 3 species. Steps 4–7 remain.
+
 1. **Additive schema:** add `archetype` + new blocks to the existing 3 rows; keep old `behavior.*` as deprecated aliases. *(No behavior change yet.)*
 2. **Loader:** introduce `archetypes.json` + reader; map archetype→state set. Existing code still runs off `role`.
 3. **Refactor dispatch:** swap `decide()`/`spawnDino()`/`updatePackRoles()` from `role` enum → `archetype`. **This is the only real breaking change** — isolate and test against the current 3 species (behavior must match today's).
