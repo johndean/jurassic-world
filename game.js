@@ -431,12 +431,24 @@ function spawnDino(speciesId, x, z) {
 // fit a .glb object into a group: scaled to targetH, centered in x/z, feet at y=0, yaw-corrected.
 // NOTE: caller passes the object to use. Clone static meshes before passing (dinos, multi-instance);
 // pass a rigged/skinned model directly (single instance) — .clone(true) breaks skinned skeletons.
+// skeleton-aware world bbox: setFromObject measures bind-pose geometry, which is wrong for
+// rigged meshes (the rig can scale the rendered result). Use computeBoundingBox() for skinned.
+function measureBox(obj) {
+  obj.updateMatrixWorld(true);
+  let skinned = null;
+  obj.traverse(o => { if (o.isSkinnedMesh && !skinned) skinned = o; });
+  if (skinned) {
+    skinned.computeBoundingBox();
+    if (skinned.boundingBox) return skinned.boundingBox.clone().applyMatrix4(skinned.matrixWorld);
+  }
+  return new THREE.Box3().setFromObject(obj);
+}
 function fitModel(model, targetH, yawOffset) {
   const g = new THREE.Group();
-  let box = new THREE.Box3().setFromObject(model);
+  let box = measureBox(model);
   const size = new THREE.Vector3(); box.getSize(size);
   model.scale.setScalar(targetH / (size.y || 1));
-  box = new THREE.Box3().setFromObject(model);
+  box = measureBox(model);
   const c = new THREE.Vector3(); box.getCenter(c);
   model.position.x -= c.x; model.position.z -= c.z; model.position.y -= box.min.y;  // center + drop feet to 0
   model.rotation.y = yawOffset || 0;     // facing correction (model forward axis vs game +Z)
