@@ -1,1 +1,1 @@
-v2 art swap target: real .glb dino models replace grey-box primitives here (milestone M7).
+v2 art swap target: real .glb dino models. Models are served from the Higgsfield CDN (CORS *) and referenced by URL in data/species.json (modelPath) and game.js (PLAYER_MODEL) — kept out of git to keep the repo light.

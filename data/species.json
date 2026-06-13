@@ -60,7 +60,7 @@
         "fleeHealthPct": 0.0,
         "noiseDrawWeight": 1.0
       },
-      "modelPath": "/assets/models/dinos/trex.glb",
+      "modelPath": "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/581e00fc-e7a7-4c29-8d7c-fa60dd771350.glb",
       "animSet": ["idle", "walk", "run", "attack", "roar", "stagger", "die"],
       "greybox": { "color": "#2b2d2e", "bodyL": 3.4, "bodyW": 1.2, "bodyH": 1.7, "standH": 4.6, "crest": false }
     }

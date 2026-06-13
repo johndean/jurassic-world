@@ -1,5 +1,6 @@
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
+import { RoomEnvironment } from "./vendor/RoomEnvironment.js";
 import { STR } from "./strings.js";
 
 /* ============================================================================
@@ -49,13 +50,17 @@ function isApex(sp) { return !!archOf(sp).apexThreat; }
 function baseStateFor(sp) { return archOf(sp).baseState || (isPrey(sp) ? "Graze" : "Patrol"); }
 
 // ---- 3D model cache (real .glb dino models replace grey-box primitives) ----
-const MODELS = {};                 // modelPath -> prepared THREE.Object3D template, or null if unavailable
-const PLAYER_MODEL = "/assets/models/characters/survival_specialist.glb";
+const MODELS = {};                 // modelPath/url -> prepared THREE.Object3D template, or null if unavailable
+const MODEL_ANIMS = {};            // modelPath/url -> AnimationClip[] (for rigged/animated models)
+// Served from the Higgsfield CDN (CORS *), so big .glb files stay out of the git repo.
+const PLAYER_MODEL = "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/f4ba47e8-eace-41a6-910a-d21d61f5bfb0.glb";
 const PLAYER_MODEL_YAW = 0;        // facing correction; flip to Math.PI if the player faces the camera
+let playerMixer = null, playerAction = null;
+const GAIT_RATE = { idle: 0, walk: 1, run: 1.7, crouch: 0.6 };  // walk-clip playback speed per gait
 const _gltfLoader = new GLTFLoader();
 function loadModel(path) {
   return new Promise(res => _gltfLoader.load(path,
-    gltf => { gltf.scene.traverse(o => { if (o.isMesh) o.frustumCulled = true; }); res(gltf.scene); },
+    gltf => { gltf.scene.traverse(o => { if (o.isMesh) o.frustumCulled = true; }); MODEL_ANIMS[path] = gltf.animations || []; res(gltf.scene); },
     undefined,
     () => res(null)));            // missing/failed model -> null -> grey-box fallback
 }
@@ -114,10 +119,15 @@ function initRenderer() {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, DPR_CAP));
   renderer.setSize(innerWidth, innerHeight, false);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic response = more cinematic
+  renderer.toneMappingExposure = 1.2;
   scene = new THREE.Scene();
   const m = BIOME.map;
   scene.background = new THREE.Color(m.skyColor);
   scene.fog = new THREE.Fog(new THREE.Color(m.fogColor), m.fogNear, m.fogFar); // fog = dread + culling aid
+  // image-based lighting: procedural neutral studio env so PBR materials get real ambient + reflections
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
   camera = new THREE.PerspectiveCamera(64, innerWidth / innerHeight, 0.1, 400);
   addEventListener("resize", onResize);
   onResize();
@@ -201,6 +211,12 @@ function buildWorld() {
     playerMesh.add(fig);
     scene.add(playerMesh);
     addBlob(playerMesh, 0.7);
+    const clips = MODEL_ANIMS[PLAYER_MODEL];
+    if (clips && clips.length) {           // play the baked walk clip; speed scaled by gait in frame()
+      playerMixer = new THREE.AnimationMixer(playerMesh);
+      playerAction = playerMixer.clipAction(clips[0]);
+      playerAction.play();
+    }
   } else {
     const pGeo = new THREE.CapsuleGeometry(0.4, 1.0, 4, 10);
     playerMesh = new THREE.Mesh(pGeo, new THREE.MeshStandardMaterial({ color: 0xe0a24a, roughness: 0.7, flatShading: true, emissive: 0x3a2a08, emissiveIntensity: 0.4 }));
@@ -895,6 +911,7 @@ function frame(now) {
   if (hudAcc > 1 / 12) { hudAcc = 0; if (S.phase !== "menu") updateHUD(); }
   // toast fade
   if (toastTimer > 0) { toastTimer -= dtMs / 1000; if (toastTimer <= 0) $("toast").style.opacity = "0"; }
+  if (playerMixer) { playerAction.timeScale = GAIT_RATE[S.player.gait] ?? 1; playerMixer.update(dtMs / 1000); }
   renderer.render(scene, camera);
   if (dev) {
     devFrames++; if (now - devAt >= 500) { devFps = Math.round(devFrames * 1000 / (now - devAt)); devFrames = 0; devAt = now; }
