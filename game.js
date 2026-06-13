@@ -50,6 +50,8 @@ function baseStateFor(sp) { return archOf(sp).baseState || (isPrey(sp) ? "Graze"
 
 // ---- 3D model cache (real .glb dino models replace grey-box primitives) ----
 const MODELS = {};                 // modelPath -> prepared THREE.Object3D template, or null if unavailable
+const PLAYER_MODEL = "/assets/models/characters/survival_specialist.glb";
+const PLAYER_MODEL_YAW = 0;        // facing correction; flip to Math.PI if the player faces the camera
 const _gltfLoader = new GLTFLoader();
 function loadModel(path) {
   return new Promise(res => _gltfLoader.load(path,
@@ -58,7 +60,7 @@ function loadModel(path) {
     () => res(null)));            // missing/failed model -> null -> grey-box fallback
 }
 async function preloadModels() {
-  const paths = [...new Set(Object.values(SPECIES).map(s => s.modelPath).filter(Boolean))];
+  const paths = [...new Set([PLAYER_MODEL, ...Object.values(SPECIES).map(s => s.modelPath).filter(Boolean)])];
   await Promise.all(paths.map(async p => { MODELS[p] = await loadModel(p); }));
 }
 
@@ -191,14 +193,23 @@ function buildWorld() {
   }
   scene.add(rocks);
 
-  // player capsule — warm amber, pops against grey
-  const pGeo = new THREE.CapsuleGeometry(0.4, 1.0, 4, 10);
-  playerMesh = new THREE.Mesh(pGeo, new THREE.MeshStandardMaterial({ color: 0xe0a24a, roughness: 0.7, flatShading: true, emissive: 0x3a2a08, emissiveIntensity: 0.4 }));
-  scene.add(playerMesh);
-  // facing nub so orientation reads
-  const nub = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.4), new THREE.MeshStandardMaterial({ color: 0xfff0c0 }));
-  nub.position.set(0, 0.5, 0.45); playerMesh.add(nub);
-  addBlob(playerMesh, 0.7);
+  // player — real character model if loaded, else amber capsule fallback
+  if (MODELS[PLAYER_MODEL]) {
+    playerMesh = new THREE.Group();
+    const fig = fitModel(MODELS[PLAYER_MODEL], 1.8, PLAYER_MODEL_YAW);
+    fig.position.y = -0.9;   // line ~372 sets group center to ground+0.9; drop feet to ground
+    playerMesh.add(fig);
+    scene.add(playerMesh);
+    addBlob(playerMesh, 0.7);
+  } else {
+    const pGeo = new THREE.CapsuleGeometry(0.4, 1.0, 4, 10);
+    playerMesh = new THREE.Mesh(pGeo, new THREE.MeshStandardMaterial({ color: 0xe0a24a, roughness: 0.7, flatShading: true, emissive: 0x3a2a08, emissiveIntensity: 0.4 }));
+    scene.add(playerMesh);
+    // facing nub so orientation reads
+    const nub = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.4), new THREE.MeshStandardMaterial({ color: 0xfff0c0 }));
+    nub.position.set(0, 0.5, 0.45); playerMesh.add(nub);
+    addBlob(playerMesh, 0.7);
+  }
 
   buildBeacon();
   // blob shadow pool for dinos
@@ -401,19 +412,23 @@ function spawnDino(speciesId, x, z) {
     cd: 0, decideIn: rand(0, 0.25), lod: "full", anim: 0, alive: true,
   };
 }
-// real .glb model instance, scaled to the species' grey-box stand height, feet at y=0
-function buildModelMesh(sp, tmpl) {
+// fit a cloned .glb into a group: scaled to targetH, centered in x/z, feet at y=0, yaw-corrected
+function fitModel(tmpl, targetH, yawOffset) {
   const g = new THREE.Group();
   const model = tmpl.clone(true);
-  const box = new THREE.Box3().setFromObject(model);
+  let box = new THREE.Box3().setFromObject(model);
   const size = new THREE.Vector3(); box.getSize(size);
-  const targetH = sp.greybox.standH || sp.size.eyeHeightM || 3;
   model.scale.setScalar(targetH / (size.y || 1));
-  const box2 = new THREE.Box3().setFromObject(model);
-  const c = new THREE.Vector3(); box2.getCenter(c);
-  model.position.x -= c.x; model.position.z -= c.z; model.position.y -= box2.min.y;  // center + drop feet to 0
-  model.rotation.y = sp.modelYaw || 0;   // per-species facing correction (model forward axis vs game +Z)
+  box = new THREE.Box3().setFromObject(model);
+  const c = new THREE.Vector3(); box.getCenter(c);
+  model.position.x -= c.x; model.position.z -= c.z; model.position.y -= box.min.y;  // center + drop feet to 0
+  model.rotation.y = yawOffset || 0;     // facing correction (model forward axis vs game +Z)
   g.add(model);
+  return g;
+}
+// real .glb dino instance, scaled to the species' grey-box stand height
+function buildModelMesh(sp, tmpl) {
+  const g = fitModel(tmpl, sp.greybox.standH || sp.size.eyeHeightM || 3, sp.modelYaw || 0);
   const blob = new THREE.Mesh(new THREE.CircleGeometry((sp.greybox.bodyL || 1) * 0.9, 14), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.3, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; blob.position.y = 0.03; g.add(blob);
   return g;
