@@ -26,8 +26,26 @@ const $ = (id) => document.getElementById(id);
 const canvas = $("c");
 
 // ---- data, loaded at boot (data-driven content; no per-species code)
-let SPECIES = {};      // id -> profile
+let SPECIES = {};      // id -> profile (with resolved .arch attached at boot)
+let ARCHETYPES = {};   // archetype name -> behavior profile (data/archetypes.json)
 let BIOME = null;
+
+// Map the legacy per-species `role` enum onto archetypes, so a species missing
+// an explicit `archetype` (or archetypes.json failing to load) still behaves.
+const ROLE_ARCH = { grazer: "herd-grazer", pack: "pack-hunter", apex: "apex" };
+function resolveArchetype(sp) {
+  return ARCHETYPES[sp.archetype] || ARCHETYPES[ROLE_ARCH[sp.role]] || {
+    behaviorClass: sp.diet === "herbivore" ? "prey" : "predator",
+    baseState: sp.diet === "herbivore" ? "Graze" : "Patrol",
+    packTactics: sp.role === "pack", apexThreat: sp.role === "apex",
+  };
+}
+// AI reads these, never the role enum. role stays as HUD/minimap metadata.
+function archOf(sp) { return sp.arch || (sp.arch = resolveArchetype(sp)); }
+function isPrey(sp) { return archOf(sp).behaviorClass === "prey"; }
+function usesPackTactics(sp) { return !!archOf(sp).packTactics; }
+function isApex(sp) { return !!archOf(sp).apexThreat; }
+function baseStateFor(sp) { return archOf(sp).baseState || (isPrey(sp) ? "Graze" : "Patrol"); }
 
 // ---- core state object (the "room snapshot")
 const S = {
@@ -56,11 +74,13 @@ const cam = { yaw: 0, pitch: -0.18, dist: 7.2, height: 2.4 };
 
 /* ---------------------------------------------------------------- boot ---- */
 async function boot() {
-  const [sp, bi] = await Promise.all([
+  const [sp, bi, ar] = await Promise.all([
     fetch("./data/species.json").then(r => r.json()),
     fetch("./data/biome.alpha.json").then(r => r.json()),
+    fetch("./data/archetypes.json").then(r => r.json()).catch(() => ({ archetypes: {} })),
   ]);
-  sp.species.forEach(s => SPECIES[s.id] = s);
+  ARCHETYPES = ar.archetypes || {};
+  sp.species.forEach(s => { s.arch = resolveArchetype(s); SPECIES[s.id] = s; });
   BIOME = bi;
 
   initRenderer();
@@ -360,7 +380,7 @@ function spawnDino(speciesId, x, z) {
   return {
     id: speciesId + "_" + (Math.random() * 1e6 | 0), sp, mesh: g,
     x, z, yaw: rand(0, 6.28), vx: 0, vz: 0, hp: sp.combat.health,
-    state: sp.role === "grazer" ? "Graze" : "Patrol",
+    state: baseStateFor(sp),
     bb: { lastSeenX: 0, lastSeenZ: 0, hasTarget: false, threat: 0, role: "harry", scared: 0, homeX: x, homeZ: z, hue: 0 },
     cd: 0, decideIn: rand(0, 0.25), lod: "full", anim: 0, alive: true,
   };
@@ -412,9 +432,9 @@ function perceive(a, P) {
 function decide(a, P) {
   const sp = a.sp, bb = a.bb;
   const per = (a.lod === "full") ? perceive(a, P) : { seen: false, heard: false, d: 999 };
-  const aggr = sp.behavior.aggression + (S.extraction.called ? (BIOME.spawnDirector.escalation.trexAggroBonus * (sp.role === "apex" ? 1 : 0.4)) : 0);
+  const aggr = sp.behavior.aggression + (S.extraction.called ? (BIOME.spawnDirector.escalation.trexAggroBonus * (isApex(sp) ? 1 : 0.4)) : 0);
 
-  if (sp.role === "grazer") {
+  if (isPrey(sp)) {
     // herd prey: flee from nearest predator (and propagate = stampede)
     const pred = nearestPredatorTo(a.x, a.z, 1);
     const predD = pred ? Math.hypot(pred.x - a.x, pred.z - a.z) : 999;
@@ -425,7 +445,7 @@ function decide(a, P) {
   // carnivores
   if (a.hp < sp.combat.health * sp.behavior.fleeHealthPct) { a.state = "Retreat"; return; }
   if (per.seen && per.d < sp.combat.attackRangeM + 0.5) { a.state = "Attack"; return; }
-  if ((per.seen || (bb.hasTarget && rng() < aggr)) && per.d < sp.senses.sightRangeM * 1.4) { a.state = (sp.role === "pack" ? "Chase" : (per.seen ? "Chase" : "Stalk")); return; }
+  if ((per.seen || (bb.hasTarget && rng() < aggr)) && per.d < sp.senses.sightRangeM * 1.4) { a.state = (usesPackTactics(sp) ? "Chase" : (per.seen ? "Chase" : "Stalk")); return; }
   if (bb.hasTarget && (per.heard || rng() < aggr * 0.6)) { a.state = "Investigate"; return; }
   // no player interest → hunt herd prey (predator vs prey) or patrol
   const prey = nearestPreyTo(a.x, a.z);
@@ -440,18 +460,18 @@ function nearestPredatorTo(x, z, _) {
 }
 function nearestPreyTo(x, z) {
   let best = null, bd = 1e9;
-  for (const d of dinos) { if (d.sp.role !== "grazer" || !d.alive) continue; const dd = dist2(x, z, d.x, d.z); if (dd < bd) { bd = dd; best = d; } }
+  for (const d of dinos) { if (!isPrey(d.sp) || !d.alive) continue; const dd = dist2(x, z, d.x, d.z); if (dd < bd) { bd = dd; best = d; } }
   return best;
 }
 function herdCenter() {
   let n = 0, sx = 0, sz = 0;
-  for (const d of dinos) if (d.sp.role === "grazer" && d.alive) { sx += d.x; sz += d.z; n++; }
+  for (const d of dinos) if (isPrey(d.sp) && d.alive) { sx += d.x; sz += d.z; n++; }
   return n ? { x: sx / n, z: sz / n, n } : null;
 }
 
 // pack blackboard: assign lead/flank/harry roles around the target each frame
 function updatePackRoles() {
-  const pack = dinos.filter(d => d.sp.role === "pack" && d.alive);
+  const pack = dinos.filter(d => usesPackTactics(d.sp) && d.alive);
   if (!pack.length) return;
   const P = S.player;
   // lead = closest; flanks alternate sides; rest harry from behind
@@ -479,7 +499,7 @@ function steer(a, dt, P) {
       run = true; bb.scared = 0.8;
       tx = a.x + (a.x - bb.fleeFromX); tz = a.z + (a.z - bb.fleeFromZ);
       // stampede propagation: scare nearby herdmates
-      for (const o of dinos) if (o.sp.role === "grazer" && o.alive && o !== a && dist2(a.x, a.z, o.x, o.z) < 220) o.bb.scared = Math.max(o.bb.scared, 0.6);
+      for (const o of dinos) if (isPrey(o.sp) && o.alive && o !== a && dist2(a.x, a.z, o.x, o.z) < 220) o.bb.scared = Math.max(o.bb.scared, 0.6);
       break;
     }
     case "Patrol": { tx = bb.homeX + Math.sin(S.t * 0.2 + bb.homeX) * sp.behavior.territoryRadiusM * 0.5; tz = bb.homeZ + Math.cos(S.t * 0.17 + bb.homeZ) * sp.behavior.territoryRadiusM * 0.5; break; }
@@ -490,7 +510,7 @@ function steer(a, dt, P) {
       let gx = bb.preyHunt ? bb.preyHunt.x : (bb.hasTarget ? bb.lastSeenX : P.x);
       let gz = bb.preyHunt ? bb.preyHunt.z : (bb.hasTarget ? bb.lastSeenZ : P.z);
       if (!bb.preyHunt) { gx = P.x; gz = P.z; }
-      if (sp.role === "pack" && !bb.preyHunt) {  // role offset → flanking
+      if (usesPackTactics(sp) && !bb.preyHunt) {  // pack offset → flanking
         const toA = Math.atan2(a.x - P.x, a.z - P.z);
         if (bb.role === "flank") { const ang = toA + (bb.flankSide || 1) * 0.9; gx = P.x + Math.sin(ang) * 7; gz = P.z + Math.cos(ang) * 7; }
         else if (bb.role === "harry") { gx = P.x - Math.sin(P.yaw) * 8; gz = P.z - Math.cos(P.yaw) * 8; }
@@ -538,7 +558,7 @@ function updateDinos(dt, P) {
     if (!a.alive) continue;
     a.lod = dist2(a.x, a.z, P.x, P.z) < BIOME.spawnDirector.activeRadiusM ** 2 ? "full" : "background";
     a.decideIn -= dt;
-    if (a.decideIn <= 0) { a.decideIn = 0.25; if (a.lod === "full") decide(a, P); else { a.state = (a.sp.role === "grazer" ? "Graze" : "Patrol"); } }
+    if (a.decideIn <= 0) { a.decideIn = 0.25; if (a.lod === "full") decide(a, P); else { a.state = baseStateFor(a.sp); } }
     steer(a, dt, P);
     if (a.hp <= 0) killDino(a);
   }
@@ -583,7 +603,7 @@ function updateThreat(dt, P) {
     if (!d.alive || d.sp.diet !== "carnivore") continue;
     const dd = Math.sqrt(dist2(P.x, P.z, d.x, d.z));
     if (dd < 60 && (d.state === "Chase" || d.state === "Attack" || d.state === "Stalk" || d.state === "Investigate")) near++;
-    if (d.sp.role === "apex") rexAggro = clamp(1 - dd / 120, 0, 1);
+    if (isApex(d.sp)) rexAggro = clamp(1 - dd / 120, 0, 1);
     if (dd < cd && (d.state === "Chase" || d.state === "Attack" || d.state === "Stalk")) { cd = dd; cb = d.sp.displayName; S.contact.bearing = bearingTo(P.x, P.z, d.x, d.z); }
   }
   if (cd < 70) { S.contact.active = true; S.contact.dist = cd; S.contact.label = cb; }

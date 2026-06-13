@@ -1,0 +1,13 @@
+{
+  "_note": "Behavior profiles. A species references one archetype via its `archetype` field; the AI reads these flags instead of the per-species `role` enum. New species = new species row + an archetype reference here, with no AI/gameplay code change. behaviorClass: prey|predator. baseState: initial/background state. packTactics: coordinated lead/flank/harry. apexThreat: counts as the apex pressure source. The extra flags (stalkPreferred, fightsWhenCornered, ...) are forward declarations for states added in migration steps 4-5; the current AI reads only behaviorClass, baseState, packTactics, apexThreat.",
+  "archetypes": {
+    "small-herbivore":     { "behaviorClass": "prey",     "baseState": "Graze",  "packTactics": false, "apexThreat": false },
+    "herd-grazer":         { "behaviorClass": "prey",     "baseState": "Graze",  "packTactics": false, "apexThreat": false },
+    "herd-grazer-armored": { "behaviorClass": "prey",     "baseState": "Graze",  "packTactics": false, "apexThreat": false, "fightsWhenCornered": true },
+    "pack-hunter":         { "behaviorClass": "predator", "baseState": "Patrol", "packTactics": true,  "apexThreat": false },
+    "ambush":              { "behaviorClass": "predator", "baseState": "Patrol", "packTactics": false, "apexThreat": false, "stalkPreferred": true },
+    "pursuit":             { "behaviorClass": "predator", "baseState": "Patrol", "packTactics": false, "apexThreat": false },
+    "water":               { "behaviorClass": "predator", "baseState": "Patrol", "packTactics": false, "apexThreat": false },
+    "apex":                { "behaviorClass": "predator", "baseState": "Patrol", "packTactics": false, "apexThreat": true }
+  }
+}
