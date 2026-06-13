@@ -117,6 +117,12 @@
     text-align:center;color:#d7e0da;background:radial-gradient(circle at 50% 35%,rgba(20,26,24,.82),rgba(6,9,8,.96));
     font-family:ui-monospace,monospace;padding:24px;}
   .screen.hidden{display:none;}
+  /* start screen: hero background image with dark scrim for legibility */
+  #startScreen{
+    background:
+      linear-gradient(rgba(6,9,8,.55),rgba(6,9,8,.80)),
+      url("./background.webp") center/cover no-repeat;
+  }
   .screen h1{font-size:clamp(30px,7vw,64px);letter-spacing:.08em;margin:0;color:#fff;font-weight:800;}
   .screen .accent{color:#e0772f;letter-spacing:.34em;font-size:clamp(13px,3vw,18px);margin-top:6px;}
   .screen p{max-width:520px;color:#a9b3ad;font-size:13px;line-height:1.7;margin:18px 0;}
