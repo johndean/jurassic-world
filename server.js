@@ -52,7 +52,7 @@ const server = createServer(async (req, res) => {
     const type = MIME[extname(filePath).toLowerCase()] || "application/octet-stream";
     res.writeHead(200, {
       "content-type": type,
-      "cache-control": urlPath === "/index.html" ? "no-cache" : "public, max-age=3600",
+      "cache-control": /\.(html|js|mjs|json)$/.test(filePath) ? "no-cache" : "public, max-age=3600",
     });
     res.end(body);
   } catch (err) {

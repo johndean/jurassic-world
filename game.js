@@ -412,10 +412,11 @@ function spawnDino(speciesId, x, z) {
     cd: 0, decideIn: rand(0, 0.25), lod: "full", anim: 0, alive: true,
   };
 }
-// fit a cloned .glb into a group: scaled to targetH, centered in x/z, feet at y=0, yaw-corrected
-function fitModel(tmpl, targetH, yawOffset) {
+// fit a .glb object into a group: scaled to targetH, centered in x/z, feet at y=0, yaw-corrected.
+// NOTE: caller passes the object to use. Clone static meshes before passing (dinos, multi-instance);
+// pass a rigged/skinned model directly (single instance) — .clone(true) breaks skinned skeletons.
+function fitModel(model, targetH, yawOffset) {
   const g = new THREE.Group();
-  const model = tmpl.clone(true);
   let box = new THREE.Box3().setFromObject(model);
   const size = new THREE.Vector3(); box.getSize(size);
   model.scale.setScalar(targetH / (size.y || 1));
@@ -428,7 +429,7 @@ function fitModel(tmpl, targetH, yawOffset) {
 }
 // real .glb dino instance, scaled to the species' grey-box stand height
 function buildModelMesh(sp, tmpl) {
-  const g = fitModel(tmpl, sp.greybox.standH || sp.size.eyeHeightM || 3, sp.modelYaw || 0);
+  const g = fitModel(tmpl.clone(true), sp.greybox.standH || sp.size.eyeHeightM || 3, sp.modelYaw || 0);
   const blob = new THREE.Mesh(new THREE.CircleGeometry((sp.greybox.bodyL || 1) * 0.9, 14), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.3, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; blob.position.y = 0.03; g.add(blob);
   return g;
