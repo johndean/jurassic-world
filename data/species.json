@@ -1,0 +1,65 @@
+{
+  "_note": "SpeciesProfile rows. AI reads ONLY this. New dinosaur = new row + (v2) new .glb. No gameplay/AI code per species.",
+  "species": [
+    {
+      "id": "parasaurolophus",
+      "displayName": "Parasaurolophus",
+      "diet": "herbivore",
+      "role": "grazer",
+      "size": { "lengthM": 9.5, "massKg": 2500, "eyeHeightM": 2.6 },
+      "move": { "walk": 2.2, "run": 9.5, "turnRate": 160 },
+      "senses": { "sightRangeM": 45, "sightFovDeg": 230, "hearingRangeM": 40 },
+      "combat": { "damage": 0, "attackRangeM": 0, "attackCooldownS": 0, "health": 220 },
+      "behavior": {
+        "aggression": 0.0,
+        "territoryRadiusM": 60,
+        "social": "herd",
+        "fleeHealthPct": 1.0,
+        "fleeFromPredatorM": 38
+      },
+      "modelPath": "/assets/models/dinos/parasaurolophus.glb",
+      "animSet": ["idle", "walk", "run", "graze", "stagger", "die"],
+      "greybox": { "color": "#7d837c", "bodyL": 2.6, "bodyW": 1.0, "bodyH": 1.1, "standH": 3.0, "crest": true }
+    },
+    {
+      "id": "deinonychus",
+      "displayName": "Deinonychus",
+      "diet": "carnivore",
+      "role": "pack",
+      "size": { "lengthM": 3.4, "massKg": 73, "eyeHeightM": 1.0 },
+      "move": { "walk": 2.6, "run": 12.5, "turnRate": 320 },
+      "senses": { "sightRangeM": 55, "sightFovDeg": 150, "hearingRangeM": 50 },
+      "combat": { "damage": 9, "attackRangeM": 2.0, "attackCooldownS": 1.1, "health": 60 },
+      "behavior": {
+        "aggression": 0.7,
+        "territoryRadiusM": 120,
+        "social": "pack",
+        "packRoles": ["lead", "flank", "harry"],
+        "fleeHealthPct": 0.25
+      },
+      "modelPath": "/assets/models/dinos/deinonychus.glb",
+      "animSet": ["idle", "walk", "run", "attack", "stagger", "die"],
+      "greybox": { "color": "#3a3d3c", "bodyL": 1.1, "bodyW": 0.45, "bodyH": 0.55, "standH": 1.4, "crest": false }
+    },
+    {
+      "id": "trex",
+      "displayName": "Tyrannosaurus Rex",
+      "diet": "carnivore",
+      "role": "apex",
+      "size": { "lengthM": 12.5, "massKg": 8000, "eyeHeightM": 4.0 },
+      "move": { "walk": 2.8, "run": 10.5, "turnRate": 110 },
+      "senses": { "sightRangeM": 70, "sightFovDeg": 130, "hearingRangeM": 110 },
+      "combat": { "damage": 55, "attackRangeM": 4.5, "attackCooldownS": 1.8, "health": 600 },
+      "behavior": {
+        "aggression": 0.55,
+        "territoryRadiusM": 220,
+        "social": "solitary",
+        "fleeHealthPct": 0.0,
+        "noiseDrawWeight": 1.0
+      },
+      "modelPath": "/assets/models/dinos/trex.glb",
+      "animSet": ["idle", "walk", "run", "attack", "roar", "stagger", "die"],
+      "greybox": { "color": "#2b2d2e", "bodyL": 3.4, "bodyW": 1.2, "bodyH": 1.7, "standH": 4.6, "crest": false }
+    }
+  ]
+}

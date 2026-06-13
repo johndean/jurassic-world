@@ -1,0 +1,19 @@
+id,role,type,description,size/ratio,style line ref,source
+ground_terrain,world ground plane,procedural-mesh,pale concrete-grey valley floor with subtle height noise,240x240 units,"flat-shaded low-poly, pale concrete-grey terrain",generate
+fog_volume,atmosphere + culling aid,procedural-shader,volumetric blue-grey exponential fog,scene-wide,"volumetric blue-grey fog, low moonlight, oppressive mood",generate
+slab_trees,instanced cover/occluders,procedural-mesh,charcoal slab and trunk box trees instanced as one draw call,2-9 units tall,"flat-shaded low-poly slabs, matte charcoal",generate
+rocks,instanced low cover,procedural-mesh,grey faceted boulder boxes,1-3 units,"flat-shaded low-poly, pale concrete-grey",generate
+player_capsule,local hero avatar,procedural-mesh,warm-amber survivor capsule that pops against grey,1.8 units tall,"warm-amber survivor capsule contrasting the grey, clean silhouette",generate
+trex_box,apex predator grey-box,procedural-mesh,large matte-charcoal box-and-capsule tyrannosaur with snapping jaw,6 units long,"matte charcoal predator, readable silhouette",generate
+deinonychus_box,pack predator grey-box,procedural-mesh,small dark-charcoal raptor boxes that flank,1.4 units tall,"matte charcoal predator, readable silhouette",generate
+parasaur_box,herd prey grey-box,procedural-mesh,mid grey crested herbivore boxes that graze and stampede,3 units tall,"mid-grey herbivore, distinct from charcoal predators",generate
+extraction_beacon,objective marker,procedural-mesh+shader,acid-green glowing beacon pylon with rotating ring,4 units tall,"extraction beacon keyed in acid-green glow",generate
+threat_pulse,threat/aggro visual cue,procedural-shader,acid-green screen-edge vignette pulse on rising threat,screen overlay,"acid-green hazard signal hue",generate
+amb_drone,ambient bed,procedural-audio,low oppressive blue-grey jungle wind drone,loop,"tense oppressive jungle-valley mood",generate
+heartbeat,fear feedback,procedural-audio,heartbeat thump scaling with fear,loop,"tense oppressive mood",generate
+rex_roar,apex aggro cue,procedural-audio,deep synth roar when the rex acquires the player,one-shot,"oppressive dread",generate
+footstep,movement feedback,procedural-audio,soft/loud footstep keyed to gait noise,one-shot,"grey-box prototype feedback",generate
+beacon_beep,extraction feedback,procedural-audio,acid-green beacon beep + escalating evac tone,loop/one-shot,"acid-green signal",generate
+ui_hud,HUD readability,procedural-ui,vitals bars, threat meter, extraction timer, compass arrow,screen overlay,"high contrast HUD, acid-green signal accents on warm-amber base",generate
+thumbnail,catalog cover + OG image,image,foggy grey-box jungle valley with charcoal T-Rex silhouette and acid-green extraction beacon,16:9,"grey-box prototype, blue-grey fog, acid-green beacon",generate
+favicon,catalog icon + site favicon,image,acid-green extraction beacon glyph on dark blue-grey,1:1,"acid-green beacon on blue-grey",generate

@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Jurassic Survival: Island Alpha</title>
+<link rel="icon" type="image/jpeg" href="./favicon.jpg">
+<link rel="apple-touch-icon" href="./favicon.jpg">
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0b0f0e;
+    font-family:ui-monospace,"SFMono-Regular","Roboto Mono",Menlo,Consolas,monospace;}
+  #c{display:block;position:fixed;inset:0;width:100%;height:100%;}
+  #dev{position:fixed;top:6px;left:50%;transform:translateX(-50%);z-index:50;color:#7CFC00;
+    font:11px ui-monospace,monospace;display:none;background:rgba(0,0,0,.45);padding:3px 8px;white-space:pre;}
+
+  /* fear / threat vignette */
+  #vig{position:fixed;inset:0;pointer-events:none;z-index:30;opacity:0;transition:opacity .25s;
+    box-shadow:inset 0 0 220px 60px rgba(214,86,47,.0);}
+  #flash{position:fixed;inset:0;pointer-events:none;z-index:31;background:#d6562f;opacity:0;}
+
+  /* ===== HUD (ported from ExtractionHUD.jsx, wired to live sim state) ===== */
+  #hud{
+    --hud-bg: rgba(10,14,13,0.62);
+    --hud-line: rgba(150,170,160,0.28);
+    --hud-text:#d7e0da; --hud-dim:#8a978f;
+    --hud-good:#6fae6b; --hud-warn:#c9a23a; --hud-alert:#d6562f; --hud-dead:#5a4242;
+    --hud-stam:#8fb8c4; --hud-water:#5b9fd6; --hud-accent:#e0772f;
+    position:fixed;inset:0;pointer-events:none;z-index:40;
+    color:var(--hud-text);letter-spacing:.04em;text-shadow:0 1px 3px rgba(0,0,0,.7);
+    user-select:none;overflow:hidden;
+  }
+  #hud *{box-sizing:border-box;}
+  #hud button{pointer-events:auto;}
+  .frame{position:absolute;width:34px;height:34px;border-color:var(--hud-line);border-style:solid;opacity:.7;}
+  .frame.tl{top:14px;left:14px;border-width:1px 0 0 1px;}
+  .frame.tr{top:14px;right:14px;border-width:1px 1px 0 0;}
+  .frame.bl{bottom:14px;left:14px;border-width:0 0 1px 1px;}
+  .frame.br{bottom:14px;right:14px;border-width:0 1px 1px 0;}
+  .panel{position:absolute;background:var(--hud-bg);backdrop-filter:blur(2px);
+    border:1px solid var(--hud-line);padding:10px 13px;}
+  .obj{top:24px;left:30px;min-width:248px;}
+  .obj-head{font-size:12px;font-weight:700;letter-spacing:.14em;display:flex;align-items:center;gap:8px;color:#fff;}
+  .obj-dot{width:7px;height:7px;background:var(--hud-accent);transform:rotate(45deg);}
+  .obj-sub{font-size:10.5px;color:var(--hud-dim);margin:5px 0 8px;}
+  .obj-list{list-style:none;margin:0;padding:0;font-size:11.5px;}
+  .obj-list li{display:flex;gap:7px;padding:2px 0;color:var(--hud-text);}
+  .obj-list li.done{color:var(--hud-dim);text-decoration:line-through;}
+  .obj-check{color:var(--hud-accent);}
+  .obj-list li.done .obj-check{color:var(--hud-good);}
+  .compass{position:absolute;top:22px;left:50%;transform:translateX(-50%);width:360px;height:40px;}
+  .cmp-strip{position:relative;height:24px;border-bottom:1px solid var(--hud-line);overflow:hidden;
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);
+            mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);}
+  .cmp-mark{position:absolute;bottom:0;transform:translateX(-50%);text-align:center;}
+  .cmp-tick{width:1px;height:8px;background:var(--hud-text);margin:0 auto;}
+  .cmp-label{font-size:12px;font-weight:700;color:#fff;}
+  .cmp-num{font-size:9px;color:var(--hud-dim);}
+  .cmp-pointer{position:absolute;top:-2px;left:50%;transform:translateX(-50%);
+    border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid var(--hud-accent);}
+  .cmp-heading{text-align:center;font-size:13px;font-weight:700;color:var(--hud-accent);margin-top:3px;}
+  .squad{top:24px;right:30px;min-width:230px;}
+  .sq-head{display:flex;justify-content:space-between;font-size:11px;letter-spacing:.14em;color:var(--hud-dim);margin-bottom:7px;}
+  .sq-count{color:#fff;font-weight:700;}
+  .sq-row{display:grid;grid-template-columns:64px 1fr;align-items:center;gap:7px;padding:2px 0;font-size:10px;}
+  .sq-tag{color:var(--hud-text);font-weight:600;}
+  .sq-bar{height:4px;background:rgba(255,255,255,.1);}
+  .sq-bar i{display:block;height:100%;transition:width .4s;}
+  .sq-row.ko .sq-tag{color:var(--hud-dead);text-decoration:line-through;}
+  .threat{margin-top:9px;padding-top:8px;border-top:1px solid var(--hud-line);
+    display:flex;align-items:center;gap:8px;font-size:10px;letter-spacing:.12em;color:var(--hud-dim);}
+  .threat-meter{display:flex;gap:2px;flex:1;}
+  .threat-meter span{flex:1;height:8px;background:rgba(255,255,255,.08);}
+  .threat-meter span.on{background:var(--hud-accent);}
+  .threat-meter span.hot{background:var(--hud-alert);}
+  .threat-num{color:#fff;font-weight:700;}
+  .contact{position:absolute;top:124px;right:30px;font-size:10px;letter-spacing:.12em;
+    color:var(--hud-alert);display:flex;align-items:center;gap:7px;animation:blink 1.4s steps(2) infinite;}
+  .contact-bracket{width:13px;height:13px;border:2px solid var(--hud-alert);border-left:none;border-bottom:none;}
+  @keyframes blink{50%{opacity:.35;}}
+  .vitals{position:absolute;left:30px;bottom:150px;display:flex;flex-direction:column;gap:7px;width:230px;}
+  .vital{display:grid;grid-template-columns:70px 1fr 30px;align-items:center;gap:8px;font-size:10px;letter-spacing:.1em;color:var(--hud-dim);}
+  .vital-bar{height:6px;background:rgba(255,255,255,.1);}
+  .vital-bar i{display:block;height:100%;transition:width .25s;}
+  .vital-num{color:#fff;text-align:right;font-weight:700;}
+  .exfil{position:absolute;top:76px;left:50%;transform:translateX(-50%);
+    width:236px;text-align:center;background:var(--hud-bg);border:1px solid var(--hud-line);padding:9px 12px;}
+  .exfil.live{border-color:var(--hud-accent);}
+  .exfil-label{font-size:10px;letter-spacing:.16em;color:var(--hud-dim);}
+  .exfil-time{font-size:30px;font-weight:700;color:var(--hud-accent);line-height:1.1;}
+  .exfil-wave{display:flex;align-items:flex-end;gap:2px;height:22px;margin:5px 0;justify-content:center;}
+  .exfil-wave i{width:3px;background:var(--hud-stam);opacity:.6;transition:height .25s;}
+  .exfil.live .exfil-wave i{background:var(--hud-accent);opacity:.9;}
+  .exfil-btn{font:inherit;font-size:11px;letter-spacing:.12em;color:#fff;background:transparent;
+    border:1px solid var(--hud-accent);padding:6px 12px;cursor:pointer;transition:.2s;}
+  .exfil-btn:hover{background:var(--hud-accent);}
+  .exfil-btn:disabled{opacity:.4;cursor:not-allowed;border-color:var(--hud-dim);}
+  .exfil-warn{font-size:9px;letter-spacing:.1em;color:var(--hud-alert);margin-top:4px;}
+  .minimap{position:absolute;left:30px;bottom:30px;width:150px;height:150px;
+    border:1px solid var(--hud-line);background:var(--hud-bg);overflow:hidden;}
+  .mm-grid{position:absolute;inset:0;
+    background-image:linear-gradient(var(--hud-line) 1px,transparent 1px),linear-gradient(90deg,var(--hud-line) 1px,transparent 1px);
+    background-size:25px 25px;opacity:.25;}
+  .mm-svg{position:absolute;inset:0;width:100%;height:100%;}
+  .mm-exfil{fill:var(--hud-accent);}
+  .mm-self{fill:var(--hud-good);}
+  .mm-threat{fill:var(--hud-alert);}
+  .mm-prey{fill:var(--hud-stam);}
+  .mm-label{position:absolute;bottom:5px;left:7px;font-size:8px;letter-spacing:.1em;color:var(--hud-dim);}
+
+  /* toast / banner */
+  #toast{position:absolute;top:150px;left:50%;transform:translateX(-50%);z-index:42;
+    font:12px ui-monospace,monospace;letter-spacing:.14em;color:#fff;background:rgba(10,14,13,.7);
+    border:1px solid var(--hud-accent,#e0772f);padding:7px 14px;opacity:0;transition:opacity .3s;pointer-events:none;}
+
+  /* overlays: start / end */
+  .screen{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;color:#d7e0da;background:radial-gradient(circle at 50% 35%,rgba(20,26,24,.82),rgba(6,9,8,.96));
+    font-family:ui-monospace,monospace;padding:24px;}
+  .screen.hidden{display:none;}
+  .screen h1{font-size:clamp(30px,7vw,64px);letter-spacing:.08em;margin:0;color:#fff;font-weight:800;}
+  .screen .accent{color:#e0772f;letter-spacing:.34em;font-size:clamp(13px,3vw,18px);margin-top:6px;}
+  .screen p{max-width:520px;color:#a9b3ad;font-size:13px;line-height:1.7;margin:18px 0;}
+  .screen .how{color:#8a978f;font-size:11px;max-width:560px;line-height:1.9;margin-bottom:22px;}
+  .bigbtn{font:inherit;font-size:15px;letter-spacing:.16em;color:#0b0f0e;background:#e0772f;border:none;
+    padding:14px 30px;cursor:pointer;font-weight:700;transition:.2s;}
+  .bigbtn:hover{background:#fff;}
+  #endTitle.win{color:#8fd07a;}
+  #endTitle.lose{color:#d6562f;}
+
+  /* mobile touch controls */
+  #touch{position:fixed;inset:0;z-index:45;display:none;pointer-events:none;}
+  #stick{position:absolute;left:0;bottom:0;width:46%;height:55%;pointer-events:auto;}
+  #stickKnob{position:absolute;width:64px;height:64px;border-radius:50%;border:2px solid rgba(224,119,47,.7);
+    background:rgba(224,119,47,.18);transform:translate(-50%,-50%);left:-200px;top:-200px;}
+  #lookpad{position:absolute;right:0;bottom:0;width:54%;height:62%;pointer-events:auto;}
+  .tbtn{position:absolute;pointer-events:auto;width:74px;height:74px;border-radius:50%;
+    border:1px solid rgba(150,170,160,.5);background:rgba(10,14,13,.55);color:#d7e0da;
+    font:10px ui-monospace,monospace;letter-spacing:.08em;display:flex;align-items:center;justify-content:center;}
+  .tbtn:active{background:rgba(224,119,47,.4);}
+  #btnSprint{right:18px;bottom:200px;}
+  #btnCrouch{right:104px;bottom:140px;}
+  #btnCall{right:18px;bottom:114px;border-color:rgba(224,119,47,.7);}
+  @media (max-width:760px){
+    .obj{min-width:0;max-width:172px;left:18px;}
+    .compass,.squad,.contact{display:none;}
+    .vitals{width:150px;bottom:130px;left:18px;}
+    .minimap{width:104px;height:104px;left:18px;bottom:18px;}
+    .exfil{width:178px;top:64px;}
+    .exfil-time{font-size:22px;}
+  }
+  @media (prefers-reduced-motion:reduce){.contact{animation:none;}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="vig"></div>
+<div id="flash"></div>
+<div id="dev"></div>
+
+<!-- HUD overlay -->
+<div id="hud">
+  <div class="frame tl"></div><div class="frame tr"></div>
+  <div class="frame bl"></div><div class="frame br"></div>
+
+  <section class="panel obj">
+    <div class="obj-head"><span class="obj-dot"></span><span id="objTitle"></span></div>
+    <div class="obj-sub" id="objSub"></div>
+    <ul class="obj-list" id="objList"></ul>
+  </section>
+
+  <div class="compass">
+    <div class="cmp-strip" id="cmpStrip"></div>
+    <div class="cmp-pointer"></div>
+    <div class="cmp-heading" id="cmpHeading">0°</div>
+  </div>
+
+  <section class="panel squad">
+    <div class="sq-head"><span id="sqTitle"></span><span class="sq-count" id="sqCount"></span></div>
+    <div id="sqRows"></div>
+    <div class="threat">
+      <span id="thrTitle"></span>
+      <div class="threat-meter" id="thrMeter"></div>
+      <span class="threat-num" id="thrNum">0/10</span>
+    </div>
+  </section>
+
+  <div class="contact" id="contact" style="display:none">
+    <span class="contact-bracket"></span><span id="contactTxt"></span>
+  </div>
+
+  <section class="vitals">
+    <div class="vital"><span id="vHealthL"></span><div class="vital-bar"><i id="vHealth"></i></div><span class="vital-num" id="vHealthN"></span></div>
+    <div class="vital"><span id="vStaminaL"></span><div class="vital-bar"><i id="vStamina"></i></div><span class="vital-num" id="vStaminaN"></span></div>
+    <div class="vital"><span id="vNoiseL"></span><div class="vital-bar"><i id="vNoise"></i></div><span class="vital-num" id="vNoiseN"></span></div>
+  </section>
+
+  <section class="exfil" id="exfil">
+    <div class="exfil-label" id="exfilLabel"></div>
+    <div class="exfil-time" id="exfilTime">00:00</div>
+    <div class="exfil-wave" id="exfilWave"></div>
+    <button class="exfil-btn" id="exfilBtn"></button>
+    <div class="exfil-warn" id="exfilWarn" style="display:none"></div>
+  </section>
+
+  <div class="minimap">
+    <div class="mm-grid"></div>
+    <svg viewBox="0 0 100 100" class="mm-svg" id="mmSvg"></svg>
+    <div class="mm-label" id="mmLabel"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- touch controls -->
+<div id="touch">
+  <div id="stick"><div id="stickKnob"></div></div>
+  <div id="lookpad"></div>
+  <button class="tbtn" id="btnSprint">SPRINT</button>
+  <button class="tbtn" id="btnCrouch">CROUCH</button>
+  <button class="tbtn" id="btnCall">CALL</button>
+</div>
+
+<!-- start screen -->
+<div class="screen" id="startScreen">
+  <h1 id="sTitle"></h1>
+  <div class="accent" id="sSub"></div>
+  <p id="sBlurb"></p>
+  <div class="how" id="sHow"></div>
+  <button class="bigbtn" id="startBtn"></button>
+</div>
+
+<!-- end screen -->
+<div class="screen hidden" id="endScreen">
+  <h1 id="endTitle"></h1>
+  <p id="endBody"></p>
+  <button class="bigbtn" id="againBtn"></button>
+</div>
+
+<script type="module" src="./game.js"></script>
+</body>
+</html>

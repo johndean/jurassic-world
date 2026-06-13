@@ -1,0 +1,13 @@
+{
+  "name": "jurassic-survival-island-alpha",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Jurassic Survival: Island Alpha — a browser-based dinosaur survival game.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  }
+}
