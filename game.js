@@ -1,6 +1,10 @@
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
 import { RoomEnvironment } from "./vendor/RoomEnvironment.js";
+import { EffectComposer } from "./vendor/postprocessing/EffectComposer.js";
+import { RenderPass } from "./vendor/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "./vendor/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "./vendor/postprocessing/OutputPass.js";
 import { STR } from "./strings.js";
 
 /* ============================================================================
@@ -81,7 +85,7 @@ const S = {
 };
 
 // ---- three.js scaffolding
-let renderer, scene, camera, sun;
+let renderer, scene, camera, sun, composer, bloomPass;
 const DPR_CAP = 1.5;
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
@@ -129,6 +133,12 @@ function initRenderer() {
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
   camera = new THREE.PerspectiveCamera(64, innerWidth / innerHeight, 0.1, 400);
+  // post-processing: subtle cinematic bloom on bright/foggy areas; OutputPass does tone-map + sRGB
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.5, 0.8); // strength, radius, threshold
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
   addEventListener("resize", onResize);
   onResize();
 }
@@ -138,6 +148,7 @@ function onResize() {
   renderer.setSize(innerWidth, innerHeight, false);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
+  if (composer) { composer.setPixelRatio(Math.min(devicePixelRatio || 1, DPR_CAP)); composer.setSize(innerWidth, innerHeight); }
 }
 
 /* --------------------------------------------------------------- world ---- */
@@ -924,7 +935,7 @@ function frame(now) {
   // toast fade
   if (toastTimer > 0) { toastTimer -= dtMs / 1000; if (toastTimer <= 0) $("toast").style.opacity = "0"; }
   if (playerMixer) { playerAction.timeScale = GAIT_RATE[S.player.gait] ?? 1; playerMixer.update(dtMs / 1000); }
-  renderer.render(scene, camera);
+  composer.render();
   if (dev) {
     devFrames++; if (now - devAt >= 500) { devFps = Math.round(devFrames * 1000 / (now - devAt)); devFrames = 0; devAt = now; }
     $("dev").textContent = `${devFps} fps  tick ${tickMs.toFixed(1)}ms  dinos ${dinos.filter(d => d.alive).length}  draws ${renderer.info.render.calls}  state ${S.phase}`;
