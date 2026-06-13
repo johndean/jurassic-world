@@ -1,4 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
+import { GLTFLoader } from "./vendor/GLTFLoader.js";
 import { STR } from "./strings.js";
 
 /* ============================================================================
@@ -47,6 +48,20 @@ function usesPackTactics(sp) { return !!archOf(sp).packTactics; }
 function isApex(sp) { return !!archOf(sp).apexThreat; }
 function baseStateFor(sp) { return archOf(sp).baseState || (isPrey(sp) ? "Graze" : "Patrol"); }
 
+// ---- 3D model cache (real .glb dino models replace grey-box primitives) ----
+const MODELS = {};                 // modelPath -> prepared THREE.Object3D template, or null if unavailable
+const _gltfLoader = new GLTFLoader();
+function loadModel(path) {
+  return new Promise(res => _gltfLoader.load(path,
+    gltf => { gltf.scene.traverse(o => { if (o.isMesh) o.frustumCulled = true; }); res(gltf.scene); },
+    undefined,
+    () => res(null)));            // missing/failed model -> null -> grey-box fallback
+}
+async function preloadModels() {
+  const paths = [...new Set(Object.values(SPECIES).map(s => s.modelPath).filter(Boolean))];
+  await Promise.all(paths.map(async p => { MODELS[p] = await loadModel(p); }));
+}
+
 // ---- core state object (the "room snapshot")
 const S = {
   phase: "menu",        // menu | playing | won | lost
@@ -82,6 +97,7 @@ async function boot() {
   ARCHETYPES = ar.archetypes || {};
   sp.species.forEach(s => { s.arch = resolveArchetype(s); SPECIES[s.id] = s; });
   BIOME = bi;
+  await preloadModels();
 
   initRenderer();
   buildWorld();
@@ -385,7 +401,26 @@ function spawnDino(speciesId, x, z) {
     cd: 0, decideIn: rand(0, 0.25), lod: "full", anim: 0, alive: true,
   };
 }
+// real .glb model instance, scaled to the species' grey-box stand height, feet at y=0
+function buildModelMesh(sp, tmpl) {
+  const g = new THREE.Group();
+  const model = tmpl.clone(true);
+  const box = new THREE.Box3().setFromObject(model);
+  const size = new THREE.Vector3(); box.getSize(size);
+  const targetH = sp.greybox.standH || sp.size.eyeHeightM || 3;
+  model.scale.setScalar(targetH / (size.y || 1));
+  const box2 = new THREE.Box3().setFromObject(model);
+  const c = new THREE.Vector3(); box2.getCenter(c);
+  model.position.x -= c.x; model.position.z -= c.z; model.position.y -= box2.min.y;  // center + drop feet to 0
+  model.rotation.y = sp.modelYaw || 0;   // per-species facing correction (model forward axis vs game +Z)
+  g.add(model);
+  const blob = new THREE.Mesh(new THREE.CircleGeometry((sp.greybox.bodyL || 1) * 0.9, 14), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.3, depthWrite: false }));
+  blob.rotation.x = -Math.PI / 2; blob.position.y = 0.03; g.add(blob);
+  return g;
+}
 function buildDinoMesh(sp) {
+  const tmpl = MODELS[sp.modelPath];
+  if (tmpl) return buildModelMesh(sp, tmpl);
   const gb = sp.greybox, col = new THREE.Color(gb.color);
   const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 1, flatShading: true });
   const g = new THREE.Group();
