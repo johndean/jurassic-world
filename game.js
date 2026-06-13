@@ -4,6 +4,7 @@ import { RoomEnvironment } from "./vendor/RoomEnvironment.js";
 import { EffectComposer } from "./vendor/postprocessing/EffectComposer.js";
 import { RenderPass } from "./vendor/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "./vendor/postprocessing/UnrealBloomPass.js";
+import { ShaderPass } from "./vendor/postprocessing/ShaderPass.js";
 import { OutputPass } from "./vendor/postprocessing/OutputPass.js";
 import { STR } from "./strings.js";
 
@@ -119,6 +120,12 @@ async function boot() {
   requestAnimationFrame(frame);
 }
 
+// subtle vignette (edge darkening) for cinematic framing
+const VIGNETTE = {
+  uniforms: { tDiffuse: { value: null }, strength: { value: 0.85 } },
+  vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+  fragmentShader: "uniform sampler2D tDiffuse; uniform float strength; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); vec2 d = vUv - 0.5; float v = smoothstep(0.85, 0.2, dot(d,d)*strength*2.0); gl_FragColor = vec4(c.rgb * mix(0.78, 1.0, v), c.a); }",
+};
 function initRenderer() {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, DPR_CAP));
@@ -128,7 +135,7 @@ function initRenderer() {
   scene = new THREE.Scene();
   const m = BIOME.map;
   scene.background = new THREE.Color(m.skyColor);
-  scene.fog = new THREE.Fog(new THREE.Color(m.fogColor), m.fogNear, m.fogFar); // fog = dread + culling aid
+  scene.fog = new THREE.FogExp2(new THREE.Color(m.fogColor), 0.016); // exponential = thick atmospheric valley haze
   // image-based lighting: procedural neutral studio env so PBR materials get real ambient + reflections
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
@@ -138,6 +145,7 @@ function initRenderer() {
   composer.addPass(new RenderPass(scene, camera));
   bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.5, 0.8); // strength, radius, threshold
   composer.addPass(bloomPass);
+  composer.addPass(new ShaderPass(VIGNETTE));   // subtle edge darkening = cinematic framing
   composer.addPass(new OutputPass());
   addEventListener("resize", onResize);
   onResize();
