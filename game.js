@@ -179,10 +179,10 @@ Object.assign(MISSIONS, {
     short: "Recover the final DNA sample from the research facility, then evac.",
     blurb: "The genetics program has collapsed. One final DNA sample remains inside the Sector 4 research facility — but predators have already entered. Restore power, retrieve the container, reach the Cold Storage Vault, and hold for extraction as the T-Rex closes in.",
     phases: [
-      { t: "reach", l: "Reach the research dock — find the access card", x: -74, z: -56, r: 7 },
-      { t: "interact", l: "Restore facility power", x: -42, z: -74, r: 7 },
-      { t: "interact", l: "Retrieve the DNA container", x: 36, z: -52, r: 7 },
-      { t: "interact", l: "Reach the Cold Storage Vault — insert DNA", x: 66, z: 48, r: 7 },
+      { t: "reach", l: "Reach the research dock — find the access card", x: -74, z: -56, r: 7, site: "safehouse" },
+      { t: "interact", l: "Restore facility power", x: -42, z: -74, r: 7, site: "generator" },
+      { t: "interact", l: "Retrieve the DNA container", x: 36, z: -52, r: 7, site: "facility" },
+      { t: "interact", l: "Reach the Cold Storage Vault — insert DNA", x: 66, z: 48, r: 7, site: "facility" },
       { t: "interact", l: "Activate the distress beacon", atBeacon: true, r: 7, starts: "evac" },
       { t: "extract", l: "Survive the hold — T-REX inbound — board the evac", species: "trex" },
     ],
@@ -192,12 +192,12 @@ Object.assign(MISSIONS, {
     short: "Restart three power stations and the island grid, then escape.",
     blurb: "The power grid failed and the fences are offline — predators roam freely. Restart Power Stations Alpha, Bravo and Charlie (every generator draws dinosaurs), return to the Control Center to restart the grid, then escape before the trapped predators reach you.",
     phases: [
-      { t: "reach", l: "Reach Power Station Alpha", x: -80, z: 40, r: 7 },
-      { t: "interact", l: "Repair Generator Alpha — the noise draws predators", x: -80, z: 40, r: 7 },
-      { t: "reach", l: "Reach Power Station Bravo", x: 18, z: -82, r: 7 },
-      { t: "interact", l: "Repair Generator Bravo", x: 18, z: -82, r: 7 },
-      { t: "interact", l: "Restart Generator Charlie", x: 84, z: 10, r: 7 },
-      { t: "interact", l: "Return to Control Center — restart the grid", x: 0, z: 0, r: 8, starts: "evac" },
+      { t: "reach", l: "Reach Power Station Alpha", x: -80, z: 40, r: 7, site: "generator" },
+      { t: "interact", l: "Repair Generator Alpha — the noise draws predators", x: -80, z: 40, r: 7, site: "generator" },
+      { t: "reach", l: "Reach Power Station Bravo", x: 18, z: -82, r: 7, site: "generator" },
+      { t: "interact", l: "Repair Generator Bravo", x: 18, z: -82, r: 7, site: "generator" },
+      { t: "interact", l: "Restart Generator Charlie", x: 84, z: 10, r: 7, site: "generator" },
+      { t: "interact", l: "Return to Control Center — restart the grid", x: 0, z: 0, r: 8, starts: "evac", site: "command" },
       { t: "extract", l: "Escape before the trapped predators reach you", species: "allosaurus" },
     ],
   },
@@ -206,11 +206,11 @@ Object.assign(MISSIONS, {
     short: "Track the missing survey team through Spinosaurus territory.",
     blurb: "A survey team vanished in Sector 9 and satellite shows movement. Investigate the campsite, follow the tracks through the cave system — Spinosaurus territory — find the survivor and get them to extraction.",
     phases: [
-      { t: "reach", l: "Investigate the abandoned campsite", x: -60, z: 70, r: 7 },
-      { t: "interact", l: "Examine the attack evidence — follow the tracks", x: -60, z: 70, r: 7 },
-      { t: "reach", l: "Recover the survivor's radio log", x: 10, z: 88, r: 7 },
-      { t: "reach", l: "Enter the cave system — Spinosaurus territory", x: 78, z: 64, r: 7 },
-      { t: "interact", l: "Find the missing surveyor", x: 78, z: 64, r: 7 },
+      { t: "reach", l: "Investigate the abandoned campsite", x: -60, z: 70, r: 7, site: "campsite" },
+      { t: "interact", l: "Examine the attack evidence — follow the tracks", x: -60, z: 70, r: 7, site: "campsite" },
+      { t: "reach", l: "Recover the survivor's radio log", x: 10, z: 88, r: 7, site: "safehouse" },
+      { t: "reach", l: "Enter the cave system — Spinosaurus territory", x: 78, z: 64, r: 7, site: "cave" },
+      { t: "interact", l: "Find the missing surveyor", x: 78, z: 64, r: 7, site: "cave" },
       { t: "interact", l: "Signal for extraction", atBeacon: true, r: 7, starts: "evac" },
       { t: "extract", l: "Protect the survivor & reach the evac", species: "spinosaurus" },
     ],
@@ -220,10 +220,10 @@ Object.assign(MISSIONS, {
     short: "Reach the injured ranger, stabilise her, escort to extraction.",
     blurb: "An emergency beacon is transmitting from Ranger Outpost Echo — Ranger Maya is injured, alone, and being hunted. Reach her, stabilise the bleeding, escort her to the safehouse, then hold the extraction as Carnotaurus and the T-Rex arrive. Load Maya first.",
     phases: [
-      { t: "reach", l: "Reach Ranger Outpost Echo", x: 70, z: -70, r: 7 },
-      { t: "interact", l: "Search the collapsed watchtower — find Maya", x: 70, z: -70, r: 7 },
-      { t: "interact", l: "Stabilise Maya — stop the bleeding", x: 70, z: -70, r: 7 },
-      { t: "reach", l: "Escort Maya to the safehouse (raptors pursue)", x: -20, z: -30, r: 7 },
+      { t: "reach", l: "Reach Ranger Outpost Echo", x: 70, z: -70, r: 7, site: "outpost" },
+      { t: "interact", l: "Search the collapsed watchtower — find Maya", x: 70, z: -70, r: 7, site: "outpost" },
+      { t: "interact", l: "Stabilise Maya — stop the bleeding", x: 70, z: -70, r: 7, site: "outpost" },
+      { t: "reach", l: "Escort Maya to the safehouse (raptors pursue)", x: -20, z: -30, r: 7, site: "safehouse" },
       { t: "interact", l: "Activate the emergency extraction beacon", atBeacon: true, r: 7, starts: "evac" },
       { t: "extract", l: "Hold — Carnotaurus then T-Rex — load Maya & escape", species: "carnotaurus" },
     ],
@@ -233,11 +233,11 @@ Object.assign(MISSIONS, {
     short: "Reach Command, activate the protocol, escape the collapsing island.",
     blurb: "Jurassic World is collapsing — a containment breach has freed multiple apex predators and the evacuation has begun. Reach the Command Center, restore comms, unlock the evacuation routes, defend the line, ACTIVATE EXTINCTION PROTOCOL, then reach the final helicopter as the apexes converge.",
     phases: [
-      { t: "reach", l: "Reach the Command Center", x: 0, z: -86, r: 8 },
-      { t: "interact", l: "Restore communications", x: 0, z: -86, r: 8 },
-      { t: "reach", l: "Activate sector emergency systems", x: -88, z: -20, r: 7 },
-      { t: "interact", l: "Unlock the evacuation routes", x: -88, z: -20, r: 7 },
-      { t: "interact", l: "Defend the Command Center — hold the line", x: 0, z: -86, r: 9 },
+      { t: "reach", l: "Reach the Command Center", x: 0, z: -86, r: 8, site: "command" },
+      { t: "interact", l: "Restore communications", x: 0, z: -86, r: 8, site: "command" },
+      { t: "reach", l: "Activate sector emergency systems", x: -88, z: -20, r: 7, site: "generator" },
+      { t: "interact", l: "Unlock the evacuation routes", x: -88, z: -20, r: 7, site: "generator" },
+      { t: "interact", l: "Defend the Command Center — hold the line", x: 0, z: -86, r: 9, site: "command" },
       { t: "interact", l: "ACTIVATE EXTINCTION PROTOCOL", atBeacon: true, r: 7, starts: "evac" },
       { t: "extract", l: "Reach the final helicopter — apexes converge", species: "trex" },
     ],
@@ -342,6 +342,7 @@ function updateAction(dt) {
 function updateMission(dt) {
   const m = activeCampaign(); if (!m || !MC) return;
   if (objMarker) objMarker.userData.ring.rotation.z += dt * 1.2;
+  if (maya) { maya.following = (m.id === "fallen_outpost" && MC.idx >= 3); updateMaya(dt); }   // Maya stands & follows once stabilised
   const ph = m.phases[MC.idx]; if (!ph) return;
   const P = S.player; let done = false;
   if (ph.t === "reach") { const [x, z] = phaseSite(ph); if (dist2(P.x, P.z, x, z) < (ph.r || 7) * (ph.r || 7)) done = true; }
@@ -867,6 +868,93 @@ function buildTowers() {
   if (TOWERS.length) return;
   const spots = [[40, 34], [-46, -16], [14, 62], [-30, 50]];
   for (const [x, z] of spots) buildTower(x, z, Math.atan2(-x, -z) + (rand(-0.5, 0.5)));   // zip aims roughly toward open valley
+}
+
+/* ===== mission set-pieces: real structures (+ Maya the survivor) at objective sites ===== *
+ * Campaign phases tag a `site` type; these build a believable structure there so an objective
+ * is a place you SEE, not a bare beam. Rebuilt per run, cleared on reset. */
+let missionSites = [], maya = null;
+function clearMissionSites() { for (const s of missionSites) scene.remove(s); missionSites = []; maya = null; }
+const _mm = (c, r, m) => new THREE.MeshStandardMaterial({ color: c, roughness: r == null ? 0.9 : r, metalness: m || 0 });
+function buildCollapsedTower(g) {                         // a toppled ranger watchtower + ruined cabin + sandbags
+  const wood = _mm(0x6f5a3c, 0.92), wood2 = _mm(0x4a3c28, 0.95), metal = _mm(0x6e736f, 0.6, 0.6);
+  const l1 = new THREE.Mesh(new THREE.BoxGeometry(0.28, 4.4, 0.28), wood); l1.position.set(-1.4, 2.0, 0.7); l1.rotation.z = 0.18; g.add(l1);   // snapped legs, leaning
+  const l2 = new THREE.Mesh(new THREE.BoxGeometry(0.28, 3.0, 0.28), wood); l2.position.set(1.1, 1.4, -0.9); l2.rotation.x = -0.22; g.add(l2);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.3, 4.2), wood); deck.position.set(0.6, 1.0, 0.4); deck.rotation.set(0.42, 0.3, 0.24); g.add(deck);   // collapsed deck slab
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(2.3, 1.4, 4), wood2); roof.position.set(2.8, 0.8, 1.7); roof.rotation.set(1.4, 0.5, 0.3); g.add(roof);   // snapped roof, fallen
+  for (let i = 0; i < 6; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(rand(1.4, 3), 0.18, 0.22), wood2); b.position.set(rand(-3.5, 3.5), 0.14, rand(-3.5, 3.5)); b.rotation.set(0, rand(0, 6.28), rand(-0.25, 0.25)); g.add(b); }   // scattered beams
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.2, 2.6), _mm(0x55503f, 1)); cab.position.set(-4.2, 1.1, -2); g.add(cab);   // ruined cabin
+  const cabRoof = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.2, 3.0), wood2); cabRoof.position.set(-4.2, 2.3, -2); cabRoof.rotation.z = 0.06; g.add(cabRoof);
+  for (let i = 0; i < 7; i++) { const sb = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.5, 4, 6), _mm(0x6b6347, 1)); sb.rotation.z = Math.PI / 2; sb.position.set(-2.4 + i * 0.6, 0.3, 3); g.add(sb); }   // sandbag wall
+  const flood = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 2.6, 6), metal); flood.position.set(3.4, 1.3, -2.6); flood.rotation.z = 0.3; g.add(flood);   // toppled floodlight
+}
+function buildMaya(x, z) {                                // injured ranger survivor — slumped until stabilised, then follows
+  const g = new THREE.Group(); g.position.set(x, groundH(x, z), z);
+  const cloth = _mm(0x9a5a3c, 0.9), dark = _mm(0x2a2620, 0.8), skin = _mm(0xb98a6a, 0.7);
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.58, 5, 10), cloth); torso.position.y = 1.0; g.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), skin); head.position.y = 1.52; g.add(head);
+  for (const sx of [-1, 1]) { const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.58, 4, 8), dark); leg.position.set(sx * 0.14, 0.4, 0); g.add(leg); const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.5, 4, 8), cloth); arm.position.set(sx * 0.34, 1.04, 0); g.add(arm); }
+  const wound = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshStandardMaterial({ color: 0xc23a2a, emissive: 0x5a1206, roughness: 0.6 })); wound.position.set(0.24, 1.0, 0.16); g.add(wound);
+  const halo = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 20), new THREE.MeshBasicMaterial({ color: 0x6fae6b, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); halo.rotation.x = -Math.PI / 2; halo.position.y = 2.3; g.add(halo);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 6, 6), new THREE.MeshBasicMaterial({ color: 0x6fae6b, transparent: true, opacity: 0.25, depthWrite: false })); beam.position.y = 3; g.add(beam);
+  addBlob(g, 0.55); scene.add(g);
+  g.rotation.x = 0.5;                                     // slumped against the wreckage
+  return { mesh: g, x, z, following: false, slumped: true, halo, beam };
+}
+function buildGenerator(g) {                              // power-station generator (BLACKOUT)
+  const metal = _mm(0x6a6e68, 0.6, 0.6), dark = _mm(0x2a2d28, 0.8, 0.4);
+  const house = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.0, 2.2), metal); house.position.y = 1.0; g.add(house);
+  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.3, 1.7), dark), { position: new THREE.Vector3(1.62, 1.1, 0) }));
+  for (const px of [-0.8, 0, 0.8]) g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 8), dark), { position: new THREE.Vector3(px, 2.4, 0) }));
+  g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 2.2, 8), dark), { position: new THREE.Vector3(-1.0, 2.6, -0.6) }));
+  const warn = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), new THREE.MeshStandardMaterial({ color: 0xc9a23a, emissive: 0x3a2e08, roughness: 0.5 })); warn.position.set(0, 2.25, 1.2); g.add(warn);
+  for (let i = 0; i < 4; i++) g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.4, 0.1), dark), { position: new THREE.Vector3(-2.4 + i * 1.6, 0.7, 2.2) }));
+}
+function buildCave(g) {                                   // cave mouth (GHOSTS — Spinosaurus territory)
+  const rock = _mm(0x4a4f4a, 1);
+  for (let i = 0; i < 7; i++) { const a = (i / 6) * Math.PI - Math.PI / 2; const r = new THREE.Mesh(new THREE.IcosahedronGeometry(rand(1.3, 2.3), 0), rock); r.position.set(Math.cos(a) * 3.3, 0.4 + Math.sin(a) * 3.2, -1 + Math.sin(a) * 0.4); g.add(r); }
+  g.add(Object.assign(new THREE.Mesh(new THREE.CircleGeometry(2.5, 20), new THREE.MeshBasicMaterial({ color: 0x05060a })), { position: new THREE.Vector3(0, 2.0, -1.1) }));
+}
+function buildBuilding(g, kind) {                         // generic structure: supply / safehouse / facility / command / campsite
+  const big = kind === "command" || kind === "facility";
+  const wall = _mm(kind === "command" ? 0x555a52 : 0x55503f, 1), wood = _mm(0x4a3c28, 0.95), metal = _mm(0x6e736f, 0.6, 0.6);
+  const w = big ? 5 : 3.4, h = big ? 3.0 : 2.2, d = big ? 4 : 2.6;
+  const bld = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wall); bld.position.y = h / 2; g.add(bld);
+  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.2, d + 0.4), wood), { position: new THREE.Vector3(0, h + 0.1, 0) }));
+  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.6, 0.1), _mm(0x20231d, 0.9)), { position: new THREE.Vector3(0, 0.8, d / 2 + 0.02) }));
+  const winMat = big ? new THREE.MeshStandardMaterial({ color: 0x1d6b76, emissive: 0x1d6b76, emissiveIntensity: 0.7 }) : _mm(0x3a3026, 1);
+  for (const sx of [-1, 1]) g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.06), winMat), { position: new THREE.Vector3(sx * w * 0.28, h * 0.6, d / 2 + 0.03) }));
+  if (kind === "command") { const dish = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), metal); dish.rotation.x = -0.7; dish.position.set(1.3, h + 1.0, -1); g.add(dish); g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.0, 6), metal), { position: new THREE.Vector3(1.3, h + 0.5, -1) })); }
+  if (kind === "campsite") { for (const c of [[2.6, 1], [-2.6, -1.4]]) { const tent = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.4, 4), _mm(0x4a5236, 0.95)); tent.position.set(c[0], 0.7, c[1]); tent.rotation.y = 0.5; g.add(tent); } const fire = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 6), new THREE.MeshStandardMaterial({ color: 0xff7e2a, emissive: 0xff5a1e, emissiveIntensity: 1.2 })); fire.position.set(0, 0.25, 2.8); g.add(fire); g.add(Object.assign(new THREE.PointLight(0xff7e2a, 1.0, 10), { position: new THREE.Vector3(0, 0.7, 2.8) })); }
+  for (const c of [[w * 0.5 + 0.7, 1], [-w * 0.5 - 0.7, -1]]) g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), wood), { position: new THREE.Vector3(c[0], 0.45, c[1]) }));
+}
+function buildSiteProp(type, x, z) {
+  const g = new THREE.Group(); g.position.set(x, groundH(x, z), z); scene.add(g); missionSites.push(g);
+  if (type === "outpost") { buildCollapsedTower(g); maya = buildMaya(x - 2.2, z + 1.6); }
+  else if (type === "generator") buildGenerator(g);
+  else if (type === "cave") buildCave(g);
+  else buildBuilding(g, type);   // command / facility / campsite / safehouse / supply
+  return g;
+}
+function buildMissionSites() {
+  const m = activeCampaign(); if (!m) return;
+  const seen = new Set();
+  for (const ph of m.phases) {
+    if (!ph.site || ph.atBeacon || ph.t === "extract") continue;
+    const key = ph.x + "," + ph.z; if (seen.has(key)) continue; seen.add(key);
+    buildSiteProp(ph.site, ph.x, ph.z);
+  }
+}
+function updateMaya(dt) {                                 // slumped idle → stands & follows once stabilised
+  if (!maya) return;
+  const m = maya.mesh, P = S.player;
+  if (maya.following) {
+    if (maya.slumped) { maya.slumped = false; m.rotation.x = 0; if (maya.halo) maya.halo.material.color.setHex(0x8fb8c4); if (maya.beam) maya.beam.material.color.setHex(0x8fb8c4); }
+    const dx = P.x - maya.x, dz = P.z - maya.z, d = Math.hypot(dx, dz) || 1;
+    if (d > 2.6) { const step = Math.min(5.2 * dt, d - 2.4); maya.x += dx / d * step; maya.z += dz / d * step; m.rotation.y = Math.atan2(dx, dz); }
+    m.position.set(maya.x, groundH(maya.x, maya.z) + 0.02, maya.z);
+  }
+  if (maya.halo) { maya.halo.rotation.z += dt * 1.5; maya.halo.position.y = 2.3 + Math.sin(S.t * 3) * 0.08; }
 }
 function playerFloorY(x, z) {   // player's floor: tower platform / zipline cable / terrain
   const P = S.player;
@@ -2771,7 +2859,7 @@ function skipIntro() {
 function startRun() {
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = [];
-  clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField(); clearIntroProp(); preloadRadio();
+  clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField(); clearIntroProp(); clearMissionSites(); preloadRadio();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
@@ -2803,6 +2891,7 @@ function startRun() {
   $("startScreen").classList.add("hidden"); $("endScreen").classList.add("hidden");
   cam.yaw = 0; cam.pitch = -0.18;
   try { startMission(); } catch (e) { console.error("startMission", e); }   // set up the mission phase chain + objective marker
+  try { buildMissionSites(); } catch (e) { console.error("missionSites", e); }   // build the real structures (outpost, generators, Maya…) at objective sites
   try { startIntro(); }                                                       // play the opening crash cinematic, then hand off to "playing"
   catch (e) { console.error("startIntro", e); S.phase = "playing"; if (playerMesh) playerMesh.visible = true; $("intro").classList.add("hidden"); $("hud").style.display = ""; Audio.ambient(true); if (!isTouch) lockPointer(); }
 }
