@@ -1834,6 +1834,10 @@ function clearEvac() { if (evac) { scene.remove(evac.heli.group); evac = null; }
 let intro = null, wreckMesh = null, introSeen = false;
 const introCine = () => intro !== null;                  // input locked while the intro plays
 const INTRO_CAM_END = 21;                                // after the crash the normal (wreck) camera takes over
+// ── per-mission insertion intros (data-driven; see design/MISSION_INTROS.md) ──
+// default insertion is the helicopter crash ("crash"); a mission id here overrides it.
+const INTRO_KIND = { dna: "research" };                  // future: ghosts:jeep, blackout:boat, last_sample:monorail, fallen_outpost:halo, extinction:airship
+const introKind = () => (selectedMission && INTRO_KIND[selectedMission.id]) || "crash";
 const INTRO_RADIO = [
   { t: 1.2, h: `<span class="rc">RANGER-6:</span> Entering Alpha airspace. Stay sharp.`, say: "Ranger Six, entering Alpha airspace. Stay sharp." },
   { t: 7.0, h: `<span class="rc">RANGER-6:</span> Thermal readings high… lost contact with Outpost Seven.`, say: "Thermal readings are high. We've lost contact with Outpost Seven." },
@@ -1841,6 +1845,12 @@ const INTRO_RADIO = [
   { t: 15.5, h: `<span class="rc">PILOT:</span> She's spinning — BRACE! BRACE!`, say: "She's spinning! Brace! Brace! Brace!" },
   { t: 22.8, h: `…ringing… muffled voices… you come to in the wreck.` },
   { t: 32.5, h: `The jungle has gone silent. Something heard the crash.` },
+];
+const INTRO_RADIO_RESEARCH = [   // DNA SAMPLE COLLECTION — research-heli deployment (calm scientist briefing, no crash)
+  { t: 1.0, h: `<span class="rc">DR. SOTO:</span> Research flight, you're cleared over Sector 4 — what's left of it.`, say: "Research flight, you're cleared over Sector four. What's left of it." },
+  { t: 5.5, h: `<span class="rc">DR. SOTO:</span> The program collapsed weeks ago. We need them <b>alive</b> — tranq or trap, do NOT kill them.`, say: "The program collapsed weeks ago. We need them alive. Tranq or trap — do not kill them." },
+  { t: 9.5, h: `<span class="rc">DR. SOTO:</span> Climb the watchtowers, glass the valley, bring me ${DNA_GOAL} samples. The beacon's hot for your evac.`, say: "Climb the watchtowers, glass the valley, and bring me three samples. The beacon is hot for your evac." },
+  { t: 13.5, h: `<span class="rc">PILOT:</span> Skids down. Good luck — we'll be listening.`, say: "Skids down. Good luck — we'll be listening." },
 ];
 function speakRadio(text) {   // actual spoken radio voice via the Web Speech API (no assets/credits)
   try {
@@ -1902,12 +1912,16 @@ function upgradeIntroHeli() {                             // swap the boxy fallb
   const heli = buildHeli(); heli.group.position.copy(pos); heli.group.rotation.copy(rot);
   buildRiders(heli.group); intro.heli = heli;
 }
-function startIntro() {
+function startIntro() {                                   // dispatch to the active mission's insertion cinematic
+  if (introKind() === "research") return startIntroResearch();
+  return startIntroCrash();
+}
+function startIntroCrash() {
   const wx = 6, wz = 4;
   Audio.rotor(true);
   const heli = buildHeli(); heli.group.position.set(60, 150, 120);
   buildRiders(heli.group);                                // the squad rides in the open door
-  intro = { t: 0, phase: "flight", heli, line: -1, shake: 0, crashed: false, camActive: true, wx, wz };
+  intro = { kind: "crash", t: 0, phase: "flight", heli, line: -1, shake: 0, crashed: false, camActive: true, wx, wz };
   if (playerMesh) playerMesh.visible = false;
   ["introTint", "introVig", "introBlack", "introRadio", "introBig"].forEach(k => { const e = $(k); if (e) e.style.opacity = "0"; });
   $("introMission").classList.remove("show");
@@ -1918,6 +1932,11 @@ function startIntro() {
   S.phase = "intro";
 }
 function updateIntro(dt) {
+  if (!intro) return;
+  if (intro.kind === "research") return updateIntroResearch(dt);
+  return updateIntroCrash(dt);
+}
+function updateIntroCrash(dt) {
   if (!intro) return;
   upgradeIntroHeli();                                     // promote fallback → realistic Huey the moment it's available
   intro.t += dt; const T = intro.t, g = intro.heli ? intro.heli.group : null;
@@ -1974,6 +1993,11 @@ function updateIntro(dt) {
   if (wreckMesh) updateWreck(dt);
 }
 function updateIntroCamera() {
+  if (!intro) return;
+  if (intro.kind === "research") return updateIntroCameraResearch();
+  return updateIntroCameraCrash();
+}
+function updateIntroCameraCrash() {
   const g = intro.heli ? intro.heli.group : null; if (!g) return;
   const T = intro.t;
   if (T < 15) {                           // trailing chase over the valley
@@ -1987,7 +2011,7 @@ function updateIntroCamera() {
   }
   if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; camera.position.z += (Math.random() - 0.5) * intro.shake; }
 }
-function endIntro() {
+function finishIntroCommon(msg) {                          // shared hand-off: return control, clear cinematic DOM
   introSeen = true; intro = null;
   try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
   Audio.rotor(false);
@@ -1996,8 +2020,67 @@ function endIntro() {
   camera.up.set(0, 1, 0); $("hud").style.display = "";
   S.phase = "playing"; Audio.ambient(true);
   if (playerMesh) playerMesh.visible = true;
-  toast("SURVIVE · find the extraction beacon");
+  if (msg) toast(msg);
   lockPointer();
+}
+function endIntro() { finishIntroCommon("SURVIVE · find the extraction beacon"); }
+
+/* ── DNA SAMPLE COLLECTION · research-heli deployment (clean landing, no crash) ── */
+function startIntroResearch() {
+  const lx = 6, lz = 4;                                   // landing zone; player stands at origin on hand-off
+  Audio.rotor(true);
+  const heli = buildHeli(); heli.group.position.set(86, 128, 150);
+  buildRiders(heli.group);
+  intro = { kind: "research", t: 0, phase: "approach", heli, line: -1, shake: 0, crashed: false, camActive: true, wx: lx, wz: lz, landed: false };
+  if (playerMesh) playerMesh.visible = false;
+  ["introTint", "introVig", "introBlack", "introRadio", "introBig"].forEach(k => { const e = $(k); if (e) e.style.opacity = "0"; });
+  $("introMission").classList.remove("show");
+  $("intro").classList.remove("hidden");
+  $("introCap").textContent = "Jurassic Survival · Field Science · Sector 4";
+  $("introCap").style.opacity = "1";
+  $("hud").style.display = "none";
+  S.phase = "intro";
+}
+function updateIntroResearch(dt) {
+  if (!intro) return;
+  upgradeIntroHeli();
+  intro.t += dt; const T = intro.t, g = intro.heli ? intro.heli.group : null;
+  const tint = $("introTint"), cap = $("introCap");
+  if (intro.line + 1 < INTRO_RADIO_RESEARCH.length && T >= INTRO_RADIO_RESEARCH[intro.line + 1].t) {
+    intro.line++; const e = INTRO_RADIO_RESEARCH[intro.line]; const r = $("introRadio"); r.innerHTML = e.h; r.style.opacity = "1";
+    if (e.say) { Audio.squelch(); speakRadio(e.say); }
+  }
+  if (g && intro.heli.rotor) { const rs = intro.landed ? 12 : 30; intro.heli.rotor.rotation.y += dt * rs; if (intro.heli.tailRotor) intro.heli.tailRotor.rotation.x += dt * rs * 2; }
+
+  if (T < 6) {                            // 1 · banking approach over the ruined labs (golden hour)
+    intro.phase = "approach"; intro.shake = 0.05;
+    if (g) { g.position.x += (24 - g.position.x) * dt * 0.5; g.position.z += (44 - g.position.z) * dt * 0.5; g.position.y += (62 - g.position.y) * dt * 0.5; }
+    tint.style.background = "#c98a3a"; tint.style.opacity = "0.16";
+    cap.style.opacity = T > 4.5 ? "0" : "1";
+  } else if (T < 12) {                    // 2 · descend toward the LZ while the scientist briefs you
+    intro.phase = "descend"; intro.shake = 0.06;
+    if (g) { g.position.x += (intro.wx - g.position.x) * dt; g.position.z += (intro.wz + 12 - g.position.z) * dt; g.position.y += (18 - g.position.y) * dt * 0.8; }
+  } else if (T < 16) {                    // 3 · skids down — controlled landing, no crash
+    intro.phase = "landing"; intro.shake = 0.04;
+    if (g) { g.position.x += (intro.wx - g.position.x) * dt * 2; g.position.z += (intro.wz + 3 - g.position.z) * dt * 2; g.position.y += (groundH(intro.wx, intro.wz) + 1.5 - g.position.y) * dt * 2; }
+    if (T > 14.4) intro.landed = true;
+  } else {                                // 4 · continuous hand-off (no fade, no wreck)
+    if (intro.heli) scene.remove(intro.heli.group);
+    Audio.rotor(false);
+    endIntroResearch();
+  }
+}
+function updateIntroCameraResearch() {
+  const g = intro.heli ? intro.heli.group : null; if (!g) return;
+  camera.position.lerp(tmp.set(g.position.x - 13, g.position.y + 7, g.position.z + 19), 0.05);
+  camera.lookAt(g.position.x, g.position.y - 1, g.position.z - 6);
+  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+}
+function endIntroResearch() {                             // stand the player at the LZ, facing into the valley
+  const P = S.player; P.x = 0; P.z = 0; P.yaw = 0;
+  cam.yaw = 0; cam.pitch = -0.06; camera.up.set(0, 1, 0);
+  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
+  finishIntroCommon(`FIELD SCIENCE · climb a tower, glass (B), tranq (4) & sample (6) · ${DNA_GOAL} needed`);
 }
 function lockPointer() {   // pointer lock needs a user gesture; the timer-driven auto-end may be rejected — canvas click recovers it
   if (isTouch) return;
@@ -2006,6 +2089,7 @@ function lockPointer() {   // pointer lock needs a user gesture; the timer-drive
 function skipIntro() {
   if (!intro) return;
   if (intro.heli) scene.remove(intro.heli.group);
+  if (intro.kind === "research") { Audio.rotor(false); endIntroResearch(); return; }
   if (!wreckMesh) wreckMesh = buildWreck(intro.wx, intro.wz);
   S.player.x = 0; S.player.z = 0; placeAtWreck();
   Audio.rotor(false); endIntro();
