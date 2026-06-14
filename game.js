@@ -284,6 +284,7 @@ function buildWorld() {
   scene.add(rocks);
 
   buildRuins();
+  buildTowers();
   buildPlayer();
 
   buildBeacon();
@@ -555,6 +556,85 @@ function buildBeacon() {
   buildFacility(bx, bz);
 }
 
+/* ============================================ ranger watchtowers ========= *
+ * Climbable hunting towers: a safe elevated vantage to glass with binoculars
+ * and tranq from cover (predators can't reach you up top — no damage). Climb
+ * the ladder up; ride the ZIPLINE down. Additive — free movement everywhere. */
+const TOWERS = [];                 // { x, z, platformY, half, zipX, zipZ }
+const ZIP_LEN = 24;
+function buildTower(x, z, dir) {
+  const baseY = groundH(x, z), H = 7.0, half = 2.4, platformY = baseY + H;
+  const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
+  const wood = new THREE.MeshStandardMaterial({ color: 0x6b563a, roughness: 1, flatShading: true });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x3a3128, roughness: 1 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x8a8f8c, roughness: 0.6, metalness: 0.5 });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {                          // 4 legs (splayed)
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, H, 6), wood);
+    leg.position.set(sx * (half - 0.2), baseY + H / 2, sz * (half - 0.2)); g.add(leg);
+  }
+  for (const yy of [H * 0.45, H * 0.8]) for (const [ax, az, len, rot] of [[0, 1, half * 2, 0], [1, 0, half * 2, Math.PI / 2]]) {  // cross-braces
+    for (const s of [-1, 1]) { const br = new THREE.Mesh(new THREE.BoxGeometry(len * 1.4, 0.08, 0.08), dark); br.position.set(0, baseY + yy, s * (half - 0.2) * az + 0 * ax); br.rotation.set(0, rot, 0.5 * (ax ? 1 : -1)); g.add(br); }
+  }
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(half * 2, 0.24, half * 2), wood); deck.position.y = platformY; g.add(deck);
+  // rails (gap on +Z for the ladder)
+  for (const [px, pz, w, dpth] of [[0, -half, half * 2, 0.12], [-half, 0, 0.12, half * 2], [half, 0, 0.12, half * 2]]) {
+    for (const ry of [0.55, 1.05]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(w, 0.08, dpth), dark); rail.position.set(px, platformY + ry, pz); g.add(rail); }
+  }
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(half * 1.7, 1.5, 4), dark); roof.position.y = platformY + 1.9; roof.rotation.y = Math.PI / 4; g.add(roof);
+  // ladder on +Z
+  for (const sx of [-0.5, 0.5]) { const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, H, 5), metal); rail.position.set(sx, baseY + H / 2, half + 0.1); g.add(rail); }
+  for (let r = 0; r < 8; r++) { const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.1, 5), metal); rung.rotation.z = Math.PI / 2; rung.position.set(0, baseY + 0.6 + r * (H - 0.6) / 8, half + 0.1); g.add(rung); }
+  // zipline: cable from a top corner down to a ground anchor
+  const zipX = x + Math.sin(dir) * ZIP_LEN, zipZ = z + Math.cos(dir) * ZIP_LEN;
+  const aY = groundH(zipX, zipZ) + 0.3;
+  const cable = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, platformY + 0.5, z), new THREE.Vector3(zipX, aY, zipZ)]), new THREE.LineBasicMaterial({ color: 0x20231e }));
+  g.add(cable);
+  const anchor = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 1.4, 6), wood); anchor.position.set(zipX - x, aY, zipZ - z); g.add(anchor);
+  TOWERS.push({ x, z, platformY, half, zipX, zipZ });
+}
+function buildTowers() {
+  if (TOWERS.length) return;
+  const spots = [[40, 34], [-46, -16], [14, 62], [-30, 50]];
+  for (const [x, z] of spots) buildTower(x, z, Math.atan2(-x, -z) + (rand(-0.5, 0.5)));   // zip aims roughly toward open valley
+}
+function playerFloorY(x, z) {   // player's floor: tower platform / zipline cable / terrain
+  const P = S.player;
+  if (P.zip) return P.zip.curFloor != null ? P.zip.curFloor : groundH(x, z);
+  return P.onTower ? P.onTower.platformY : groundH(x, z);
+}
+function nearTowerBase(P) {
+  for (const t of TOWERS) { if (dist2(P.x, P.z, t.x, t.z + t.half) < 9) return t; }   // within ~3m of the ladder
+  return null;
+}
+function climbTower(t) {
+  const P = S.player; P.onTower = t; P.zip = null;
+  P.x = t.x; P.z = t.z + t.half - 0.7; P.gait = "idle";   // step onto the deck by the ladder
+  toast("ON WATCHTOWER · safe vantage — glass (B) & tranq · press E to zip down");
+}
+function startZip(t) {
+  const P = S.player;
+  P.zip = { t: 0, dur: 1.7, x0: P.x, z0: P.z, y0: t.platformY, x1: t.zipX, z1: t.zipZ, curFloor: t.platformY };
+  P.onTower = null; Audio.step("run"); toast("ZIPLINE!");
+}
+function updateZip(dt) {
+  const P = S.player, z = P.zip; z.t += dt; const k = Math.min(1, z.t / z.dur);
+  const ease = k * k * (3 - 2 * k);
+  P.x = lerp(z.x0, z.x1, ease); P.z = lerp(z.z0, z.z1, ease);
+  const endFloor = groundH(z.x1, z.z1);
+  z.curFloor = lerp(z.y0, endFloor, ease) - Math.sin(k * Math.PI) * 0.7;   // cable sag
+  P.yaw = Math.atan2(z.x1 - z.x0, z.z1 - z.z0); P.gait = "idle";
+  if (playerMesh) { playerMesh.position.set(P.x, z.curFloor + 0.9, P.z); playerMesh.rotation.y = P.yaw; playerMesh.rotation.x = 0.25; }
+  if (k >= 1) { P.zip = null; Audio.step("run"); }
+}
+function interact() {   // context action shared by E / the CALL button
+  const P = S.player;
+  if (P.zip) return;
+  if (P.onTower) { startZip(P.onTower); return; }
+  const t = nearTowerBase(P);
+  if (t) { climbTower(t); return; }
+  tryCall();   // default: extraction
+}
+
 // extraction facility around the beacon: helipad, bunker, comms tower, floodlights, red warning beacons
 function buildFacility(bx, bz) {
   const concrete = new THREE.MeshStandardMaterial({ color: 0x8a8f8c, roughness: 0.9, metalness: 0.05 });
@@ -592,7 +672,7 @@ function initInput() {
     if (["KeyW", "KeyA", "KeyS", "KeyD", "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight",
       "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyE", "Space"].includes(e.code)) e.preventDefault();
     keys.add(e.code);
-    if (e.code === "KeyE") tryCall();
+    if (e.code === "KeyE") interact();   // climb tower / zip down / call extraction (context)
     if (e.code === "KeyM") toggleMap();
     if (e.code === "KeyF") useTool();                                   // use selected defense tool
     if (e.code === "Digit1") selectTool(0);
@@ -664,7 +744,7 @@ function setupTouch() {
   const hold = (el, on) => { el.addEventListener("pointerdown", () => on(true)); ["pointerup", "pointercancel", "pointerleave"].forEach(ev => el.addEventListener(ev, () => on(false))); };
   hold($("btnSprint"), v => input.sprint = v);
   hold($("btnCrouch"), v => input.crouch = v);
-  $("btnCall").addEventListener("pointerdown", e => { e.preventDefault(); tryCall(); });
+  $("btnCall").addEventListener("pointerdown", e => { e.preventDefault(); interact(); });
 }
 
 function pollGamepad() {
@@ -706,6 +786,7 @@ let hitCooldownVisual = 0, stepPhase = 0;
 function updatePlayer(dt) {
   const P = S.player, cfg = BIOME.player;
   if (evacCine()) return;   // evac cinematic drives the player (boarding); ignore input
+  if (P.zip) { updateZip(dt); return; }   // riding the zipline down (brief, ~1.7s)
   // intent from keyboard + touch/gamepad (input.mx/mz already set for touch/pad)
   let ix = input.mx, iz = input.mz;
   if (keys.has("KeyW") || keys.has("ArrowUp")) iz -= 1;
@@ -759,13 +840,17 @@ function updatePlayer(dt) {
   }
   const lim = BIOME.map.size / 2 - 3;
   P.x = clamp(P.x, -lim, lim); P.z = clamp(P.z, -lim, lim);
+  if (P.onTower) {   // stay on the platform (railed) — interact (E / CALL) to zip down
+    const t = P.onTower, b = t.half - 0.45;
+    P.x = clamp(P.x, t.x - b, t.x + b); P.z = clamp(P.z, t.z - b, t.z + b);
+  }
 
   // posture per gait: running pitches the torso forward into the stride (the single walk clip sped up
   // reads as a power-walk otherwise); crouch drops + leans; idle adds a breathing sway (clip frozen).
   const crouchDrop = P.gait === "crouch" ? 0.4 : 0;
   const idleBob = P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.02 : 0;
   const runBounce = P.gait === "run" ? Math.abs(Math.sin(S.t * 11)) * 0.05 : 0;   // light foot-strike bob
-  playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9 - crouchDrop + idleBob + runBounce, P.z);
+  playerMesh.position.set(P.x, playerFloorY(P.x, P.z) + 0.9 - crouchDrop + idleBob + runBounce, P.z);
   playerMesh.rotation.y = P.yaw;
   playerMesh.rotation.x = (P.gait === "run" ? 0.16 : 0) + (P.gait === "crouch" ? 0.22 : 0) + (P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.012 : 0);
 
@@ -780,7 +865,7 @@ function lerp2angle(a, b) { let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.P
 
 function damagePlayer(amount, bySpecies) {
   const P = S.player; if (!P.alive) return;
-  if (evacCine() || playerSafe()) return;   // invulnerable while boarding the chopper, and inside the beacon safe zone
+  if (evacCine() || playerSafe() || P.onTower || P.zip) return;   // safe boarding / in beacon zone / up a watchtower / ziplining
   P.hp = Math.max(0, P.hp - amount);
   hitCooldownVisual = 3.0; flash(); Audio.hit();
   if (P.hp <= 0) { P.alive = false; S.killedBy = bySpecies; endRun(false); }
@@ -1643,7 +1728,7 @@ function startRun() {
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
-  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole });
+  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole, onTower: null, zip: null });
   if (Net.on) {   // co-op: spawn beside each other like a squad — a small cluster, same facing, no overlap
     const a = (Net.id || 1) * 2.39996;   // golden-angle spread → distinct, non-overlapping spots
     S.player.x = Math.cos(a) * 3.0; S.player.z = Math.sin(a) * 3.0; S.player.yaw = 0;
@@ -1901,6 +1986,8 @@ function mapSVG(big) {
   s += `<rect x="${(bx - 2.2).toFixed(1)}" y="${(bz - 2.2).toFixed(1)}" width="4.4" height="4.4" fill="none" stroke="var(--hud-accent)" stroke-width="0.6"/>`;
   s += `<circle cx="${bx.toFixed(1)}" cy="${bz.toFixed(1)}" r="${pulse.toFixed(1)}" fill="none" stroke="var(--hud-accent)" stroke-width="0.7" opacity="0.85"/>`;
   s += `<circle cx="${bx.toFixed(1)}" cy="${bz.toFixed(1)}" r="1.1" class="mm-exfil"/>`;
+  // ranger watchtowers — safe vantage points
+  for (const t of TOWERS) { const [tx, tz] = toMM(t.x, t.z); s += `<polygon points="${tx.toFixed(1)},${(tz - 2).toFixed(1)} ${(tx - 1.7).toFixed(1)},${(tz + 1.4).toFixed(1)} ${(tx + 1.7).toFixed(1)},${(tz + 1.4).toFixed(1)}" fill="none" stroke="#8fb8c4" stroke-width="0.6"/>`; }
   // incoming evac helicopter — show its live position + a dashed inbound track to the beacon
   if (evac && evac.heli) {
     const [hx, hz] = toMM(evac.heli.group.position.x, evac.heli.group.position.z);
@@ -1945,11 +2032,11 @@ function updateCamera() {
     if (beaconRing) beaconRing.rotation.z += 0.08;
     return;
   }
-  const tx = P.x, ty = groundH(P.x, P.z) + 1.5, tz = P.z;
+  const tx = P.x, ty = playerFloorY(P.x, P.z) + 1.5, tz = P.z;
   const cp = Math.cos(cam.pitch), d = cam.dist * cp;
   let cx = tx - Math.sin(cam.yaw) * d, cz = tz - Math.cos(cam.yaw) * d, cy = ty + cam.height + Math.sin(cam.pitch) * cam.dist * -1 + cam.dist * cp * 0.0;
   cy = ty + cam.height - Math.sin(cam.pitch) * cam.dist;
-  const gh = groundH(cx, cz) + 0.6; if (cy < gh) cy = gh;
+  const gh = (P.onTower ? P.onTower.platformY : groundH(cx, cz)) + 0.6; if (cy < gh) cy = gh;
   camera.position.set(cx, cy, cz);
   camera.lookAt(tx, ty, tz);
   // beacon spin + glow pulse
