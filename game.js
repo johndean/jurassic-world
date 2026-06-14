@@ -686,8 +686,13 @@ function updatePlayer(dt) {
   const lim = BIOME.map.size / 2 - 3;
   P.x = clamp(P.x, -lim, lim); P.z = clamp(P.z, -lim, lim);
 
-  playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z);
+  // posture per gait: crouch drops + leans the body; idle adds a subtle breathing sway (the single
+  // walk clip is frozen at idle, so this keeps the character alive). walk/run drive the clip (below).
+  const crouchDrop = P.gait === "crouch" ? 0.4 : 0;
+  const idleBob = P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.02 : 0;
+  playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9 - crouchDrop + idleBob, P.z);
   playerMesh.rotation.y = P.yaw;
+  playerMesh.rotation.x = (P.gait === "crouch" ? 0.2 : 0) + (P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.012 : 0);
 
   // extraction proximity
   const bd = Math.sqrt(dist2(P.x, P.z, S.extraction.beacon.x, S.extraction.beacon.z));
@@ -716,7 +721,7 @@ function spawnDino(speciesId, x, z) {
     x, z, yaw: rand(0, 6.28), vx: 0, vz: 0, hp: sp.combat.health,
     state: baseStateFor(sp),
     bb: { lastSeenX: 0, lastSeenZ: 0, hasTarget: false, threat: 0, role: "harry", scared: 0, homeX: x, homeZ: z, hue: 0 },
-    cd: 0, decideIn: rand(0, 0.25), lod: "full", anim: 0, alive: true, gaitPhase: rand(0, 6.28),
+    cd: 0, decideIn: rand(0, 0.25), lod: "full", anim: 0, alive: true, gaitPhase: rand(0, 6.28), roar: 0, roarCd: rand(2, 6),
   };
 }
 // When a species' .glb finishes streaming, swap any already-spawned grey-box instances
@@ -942,31 +947,48 @@ function steer(a, dt, P) {
   a.mesh.position.set(a.x, groundH(a.x, a.z), a.z);
   a.mesh.rotation.y = a.yaw;
   a.anim = Math.max(0, a.anim - dt);
-  const moveAmt = Math.min(1, Math.hypot(a.vx, a.vz) / sp.move.run);
-  if (a.mixer) {   // rigged model: play the baked walk clip, cadence scaled by speed (frozen when idle)
-    const norm = Math.min(1, Math.hypot(a.vx, a.vz) / (sp.move.run || 8));
-    a.walkAction.timeScale = norm < 0.04 ? 0 : (0.5 + 1.7 * norm);
+  if (a.roar > 0) a.roar = Math.max(0, a.roar - dt);
+  const vmag = Math.hypot(a.vx, a.vz);
+  const moveAmt = Math.min(1, vmag / sp.move.run);
+  const body = a.mesh.children[0];
+  // ---- base locomotion ----
+  if (a.mixer) {   // rigged model (T-Rex): baked walk clip, cadence scaled by speed (frozen when idle)
+    a.walkAction.timeScale = moveAmt < 0.04 ? 0 : (0.5 + 1.7 * moveAmt);
     a.mixer.update(dt);
   } else {
     const legs = a.mesh.userData.legs;
     if (legs) { const sw = Math.sin(S.t * (run ? 16 : 8) + a.x) * 0.5 * moveAmt; legs[0].rotation.x = sw; legs[1].rotation.x = -sw; }
-    else {   // static .glb model (no skeleton): a distance-synced lumbering body gait. Cadence is tied
-             // to ground speed (so it reads as steps, not a glide); amplitude scales walk->run. Combines
-             // a stride bob, footfall pitch + head dip, a weight-shift roll, and a hip/tail waddle.
-      const spd = Math.hypot(a.vx, a.vz);
+    else if (body) {   // static .glb: distance-synced body gait (stride bob, footfall pitch, roll, waddle)
       const legLen = sp.greybox.standH || 2;
-      a.gaitPhase += spd * dt * (2.0 / Math.max(1, legLen));        // 2*PI ~ one full L+R stride cycle
-      const ph = a.gaitPhase, amp = Math.min(1.25, spd / (sp.move.walk || 2));
-      const body = a.mesh.children[0];
-      a.mesh.position.y += Math.abs(Math.sin(ph)) * legLen * 0.05 * amp;            // stride bob on each footfall
-      if (body) {
-        body.rotation.x = (Math.sin(ph * 2) * 0.05 + Math.sin(ph) * 0.035) * amp;   // footfall dip + head bob
-        body.rotation.z = Math.sin(ph) * 0.11 * amp;                                // weight-shift roll (lean onto planted leg)
-        body.rotation.y = (sp.modelYaw || 0) + Math.cos(ph) * 0.06 * amp;           // hip/tail waddle (keeps facing offset)
-      }
+      a.gaitPhase += vmag * dt * (2.0 / Math.max(1, legLen));        // 2*PI ~ one full L+R stride cycle
+      const ph = a.gaitPhase, amp = Math.min(1.25, vmag / (sp.move.walk || 2));
+      a.mesh.position.y += Math.abs(Math.sin(ph)) * legLen * 0.05 * amp;
+      body.rotation.x = (Math.sin(ph * 2) * 0.05 + Math.sin(ph) * 0.035) * amp;
+      body.rotation.z = Math.sin(ph) * 0.11 * amp;
+      body.rotation.y = (sp.modelYaw || 0) + Math.cos(ph) * 0.06 * amp;
     }
-    if (a.mesh.userData.jaw) a.mesh.userData.jaw.rotation.x = a.anim > 0 ? 0.5 : 0;
   }
+  // ---- roar: apex / heavy predators bellow periodically while engaged (with a camera-felt audio cue) ----
+  if ((isApex(sp) || sp.combat.health >= 300) && a.lod === "full" && (a.state === "Chase" || a.state === "Attack")) {
+    a.roarCd -= dt;
+    if (a.roarCd <= 0) { a.roar = 1.1; a.roarCd = rand(6, 11); if (dist2(a.x, a.z, P.x, P.z) < 62 * 62) Audio.roar(); }
+  }
+  // ---- procedural action overlays (additive on top of the gait) ----
+  if (body) {
+    if (a.anim > 0) {                                   // ATTACK: bite lunge — snap forward + head down
+      const snap = Math.sin((1 - a.anim / 0.4) * Math.PI);
+      if (!a.mixer) body.rotation.x += snap * 0.45;
+      a.mesh.position.x += Math.sin(a.yaw) * snap * 0.5;
+      a.mesh.position.z += Math.cos(a.yaw) * snap * 0.5;
+    }
+    if (a.roar > 0) {                                   // ROAR: rear up + chest swell
+      const rp = Math.sin((1 - a.roar / 1.1) * Math.PI);
+      if (!a.mixer) body.rotation.x -= rp * 0.3;
+      body.scale.setScalar(1 + rp * 0.06);
+    } else if (body.scale.x !== 1) body.scale.setScalar(1);
+    if (!a.mixer && a.state === "Flee") body.rotation.x += moveAmt * 0.12;   // FLEE: panic forward lean
+  }
+  if (a.mesh.userData.jaw) a.mesh.userData.jaw.rotation.x = a.anim > 0 ? 0.6 : 0;
 }
 
 function updateDinos(dt, P) {
