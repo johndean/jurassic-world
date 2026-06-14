@@ -281,6 +281,21 @@ function startMission() {
   MC = { idx: 0, started: false }; applyPhaseMarker();
 }
 const phLabel = ph => (typeof ph.l === "function" ? ph.l() : ph.l);
+// The single source of truth for "what's the current step + where" — used by the HUD and the map so the
+// objective always tracks the NEXT step of the active mission (not the fixed extraction beacon).
+function currentObjective() {
+  const cm = activeCampaign();
+  if (cm && MC) {
+    const ph = cm.phases[MC.idx]; if (!ph) return null;
+    if (ph.t === "extract" || ph.atBeacon) return { x: S.extraction.beacon.x, z: S.extraction.beacon.z, label: phLabel(ph), atBeacon: true };
+    const [x, z] = phaseSite(ph); return { x, z, label: phLabel(ph) };
+  }
+  if (selectedMission.id === "dna") {
+    if (dnaSamples < DNA_GOAL) return { roaming: true, label: `Tranq & sample a live dino  (${dnaSamples}/${DNA_GOAL})` };
+    return { x: S.extraction.beacon.x, z: S.extraction.beacon.z, label: "Reach the beacon & extract", atBeacon: true };
+  }
+  return { x: S.extraction.beacon.x, z: S.extraction.beacon.z, label: "Reach the extraction beacon", atBeacon: true };   // evac / default
+}
 function missionInteractInRange() {   // the active interact phase if the player is standing at its console, else null
   const m = activeCampaign(); if (!m || !MC) return null;
   const ph = m.phases[MC.idx]; if (!ph || ph.t !== "interact" || ph._done) return null;
@@ -1203,6 +1218,19 @@ function fitModel(model, targetH, yawOffset) {
   g.add(model);
   return g;
 }
+// Locate the main rotor hub on a helicopter model: average x/z of the top vertex band.
+// (Rotor blades are symmetric about the mast, so averaging the highest points lands on the hub —
+//  far more reliable than the bbox origin, which a long tail boom drags rearward.)
+function modelRotorXZ(obj) {
+  obj.updateMatrixWorld(true);
+  const v = new THREE.Vector3(); const meshes = [];
+  obj.traverse(o => { if (o.isMesh && o.geometry && o.geometry.attributes && o.geometry.attributes.position) meshes.push(o); });
+  let maxY = -Infinity;
+  for (const o of meshes) { const p = o.geometry.attributes.position, st = Math.max(1, Math.floor(p.count / 900)); for (let i = 0; i < p.count; i += st) { v.fromBufferAttribute(p, i).applyMatrix4(o.matrixWorld); if (v.y > maxY) maxY = v.y; } }
+  const band = 0.6; let sx = 0, sz = 0, n = 0;
+  for (const o of meshes) { const p = o.geometry.attributes.position, st = Math.max(1, Math.floor(p.count / 900)); for (let i = 0; i < p.count; i += st) { v.fromBufferAttribute(p, i).applyMatrix4(o.matrixWorld); if (v.y >= maxY - band) { sx += v.x; sz += v.z; n++; } } }
+  return n ? { x: sx / n, z: sz / n, y: maxY } : { x: 0, z: 0, y: maxY };
+}
 // real .glb dino instance, scaled to the species' grey-box stand height. Rigged+animated models
 // (e.g. hero bipeds with a baked walk clip) are cloned with SkeletonUtils (clone(true) breaks
 // skinned skeletons) and get their own AnimationMixer, surfaced on g.userData for the agent to drive.
@@ -1748,12 +1776,13 @@ function rotorBlurTexture() {
 
 function buildHeli() {
   const g = new THREE.Group();
-  let topY = 3.4, len = 12, tailRotor = null;
+  let topY = 3.4, len = 12, tailRotor = null, rotorX = 0, rotorZ = 0;
   const bladeMat = new THREE.MeshStandardMaterial({ color: 0x14160f, roughness: 0.95, metalness: 0.05 });
   if (MODELS[HELI_MODEL]) {
     const m = fitModel(MODELS[HELI_MODEL].clone(true), 4.6, 0);   // realistic model, ~4.6m tall, feet at y=0
     g.add(m);
     const bb = measureBox(m); topY = bb.max.y; len = Math.max(bb.max.x - bb.min.x, 7);
+    const rc = modelRotorXZ(m); rotorX = rc.x; rotorZ = rc.z; topY = rc.y;   // centre the blur disc on the actual main-rotor hub
   } else {                                                     // procedural fallback (boxy but functional)
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0x49513f, roughness: 0.85, metalness: 0.2, flatShading: true });
     const dark = new THREE.MeshStandardMaterial({ color: 0x20231e, roughness: 1 });
@@ -1764,7 +1793,7 @@ function buildHeli() {
     const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.8, 6), dark); mast.position.y = 3.2; g.add(mast);
     topY = 3.4; len = 12;
   }
-  const rotor = new THREE.Group(); rotor.position.y = topY + 0.1;
+  const rotor = new THREE.Group(); rotor.position.set(rotorX, topY + 0.1, rotorZ);   // sit on the main-rotor hub, not the bbox origin
   if (MODELS[HELI_MODEL]) {   // realistic model already has modelled blades — ONE spinning blur disc over them (no 2nd blade set)
     const disc = new THREE.Mesh(new THREE.CircleGeometry(7.4, 44), new THREE.MeshBasicMaterial({ map: rotorBlurTexture(), transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false }));
     disc.rotation.x = -Math.PI / 2; rotor.add(disc);
@@ -1840,34 +1869,62 @@ const INTRO_CAM_END = 21;                                // after the crash the 
 const INTRO_KIND = { dna: "research", ghosts: "jeep" };   // future: blackout:boat, last_sample:monorail, fallen_outpost:halo, extinction:airship
 const introKind = () => (selectedMission && INTRO_KIND[selectedMission.id]) || "crash";
 const INTRO_RADIO = [
-  { t: 1.2, h: `<span class="rc">RANGER-6:</span> Entering Alpha airspace. Stay sharp.`, say: "Ranger Six, entering Alpha airspace. Stay sharp." },
-  { t: 7.0, h: `<span class="rc">RANGER-6:</span> Thermal readings high… lost contact with Outpost Seven.`, say: "Thermal readings are high. We've lost contact with Outpost Seven." },
-  { t: 11.5, h: `<span class="rc">PILOT:</span> Mayday — losing navigation, controls unresponsive!`, say: "Mayday, mayday! Losing navigation — controls unresponsive!" },
-  { t: 15.5, h: `<span class="rc">PILOT:</span> She's spinning — BRACE! BRACE!`, say: "She's spinning! Brace! Brace! Brace!" },
+  { t: 1.2, h: `<span class="rc">RANGER-6:</span> Entering Alpha airspace. Stay sharp.`, say: "Ranger Six, entering Alpha airspace. Stay sharp.", voice: { rate: 1.0, pitch: 0.98 } },
+  { t: 7.0, h: `<span class="rc">RANGER-6:</span> Thermal readings high… lost contact with Outpost Seven.`, say: "Thermal readings are high. We've lost contact with Outpost Seven.", voice: { rate: 1.04, pitch: 1.0 } },
+  { t: 11.5, h: `<span class="rc">PILOT:</span> Mayday — losing navigation, controls unresponsive!`, say: "Mayday! Mayday! We're losing navigation — controls are unresponsive!", voice: { rate: 1.32, pitch: 1.14 } },
+  { t: 15.5, h: `<span class="rc">PILOT:</span> She's spinning — BRACE! BRACE!`, say: "She's going down! Hold on — brace! Brace! Brace!", voice: { rate: 1.5, pitch: 1.22 } },
   { t: 22.8, h: `…ringing… muffled voices… you come to in the wreck.` },
   { t: 32.5, h: `The jungle has gone silent. Something heard the crash.` },
 ];
 const INTRO_RADIO_RESEARCH = [   // DNA SAMPLE COLLECTION — research-heli deployment (calm scientist briefing, no crash)
-  { t: 1.0, h: `<span class="rc">DR. SOTO:</span> Research flight, you're cleared over Sector 4 — what's left of it.`, say: "Research flight, you're cleared over Sector four. What's left of it." },
-  { t: 5.5, h: `<span class="rc">DR. SOTO:</span> The program collapsed weeks ago. We need them <b>alive</b> — tranq or trap, do NOT kill them.`, say: "The program collapsed weeks ago. We need them alive. Tranq or trap — do not kill them." },
-  { t: 9.5, h: `<span class="rc">DR. SOTO:</span> Climb the watchtowers, glass the valley, bring me ${DNA_GOAL} samples. The beacon's hot for your evac.`, say: "Climb the watchtowers, glass the valley, and bring me three samples. The beacon is hot for your evac." },
-  { t: 13.5, h: `<span class="rc">PILOT:</span> Skids down. Good luck — we'll be listening.`, say: "Skids down. Good luck — we'll be listening." },
+  { t: 1.0, h: `<span class="rc">DR. SOTO:</span> Research flight, you're cleared over Sector 4 — what's left of it.`, say: "Research flight, you're cleared over Sector four. What's left of it.", voice: { rate: 0.98, pitch: 1.0 } },
+  { t: 5.5, h: `<span class="rc">DR. SOTO:</span> The program collapsed weeks ago. We need them <b>alive</b> — tranq or trap, do NOT kill them.`, say: "The program collapsed weeks ago. We need them alive. Tranq or trap — do not kill them.", voice: { rate: 1.0, pitch: 1.0 } },
+  { t: 9.5, h: `<span class="rc">DR. SOTO:</span> Climb the watchtowers, glass the valley, bring me ${DNA_GOAL} samples. The beacon's hot for your evac.`, say: "Climb the watchtowers, glass the valley, and bring me three samples. The beacon is hot for your evac.", voice: { rate: 1.0, pitch: 1.0 } },
+  { t: 13.5, h: `<span class="rc">PILOT:</span> Skids down. Good luck — we'll be listening.`, say: "Skids down. Good luck — we'll be listening.", voice: { rate: 1.04, pitch: 0.98 } },
 ];
 const INTRO_RADIO_JEEP = [   // GHOSTS OF SECTOR 9 — ranger jeep-convoy (chatter → unsettling silence)
-  { t: 1.0, h: `<span class="rc">CONVOY LEAD:</span> Sector 9 track ahead. Survey team went dark thirty-one hours ago.`, say: "Sector nine track ahead. Survey team went dark thirty-one hours ago." },
-  { t: 5.0, h: `<span class="rc">RANGER-2:</span> Last ping was the old checkpoint. We're almost on it.`, say: "Last ping was the old checkpoint. We're almost on it." },
-  { t: 8.5, h: `<span class="rc">CONVOY LEAD:</span> …checkpoint's wrecked. Gate's torn clean off. Eyes up, everybody.`, say: "The checkpoint's wrecked. Gate's torn clean off. Eyes up, everybody." },
-  { t: 12.0, h: `<span class="rc">CONVOY LEAD:</span> Tracks lead into the trees — wheels stop here. On foot from now.`, say: "Tracks lead into the trees. Wheels stop here. On foot from now." },
+  { t: 1.0, h: `<span class="rc">CONVOY LEAD:</span> Sector 9 track ahead. Survey team went dark thirty-one hours ago.`, say: "Sector nine track ahead. Survey team went dark thirty-one hours ago.", voice: { rate: 1.0, pitch: 0.97 } },
+  { t: 5.0, h: `<span class="rc">RANGER-2:</span> Last ping was the old checkpoint. We're almost on it.`, say: "Last ping was the old checkpoint. We're almost on it.", voice: { rate: 1.04, pitch: 1.02 } },
+  { t: 8.5, h: `<span class="rc">CONVOY LEAD:</span> …checkpoint's wrecked. Gate's torn clean off. Eyes up, everybody.`, say: "The checkpoint's wrecked. Gate's torn clean off — eyes up, everybody!", voice: { rate: 1.18, pitch: 1.08 } },
+  { t: 12.0, h: `<span class="rc">CONVOY LEAD:</span> Tracks lead into the trees — wheels stop here. On foot from now.`, say: "Tracks lead into the trees. Wheels stop here. On foot from now.", voice: { rate: 1.06, pitch: 1.0 } },
 ];
-function speakRadio(text) {   // actual spoken radio voice via the Web Speech API (no assets/credits)
+// Spoken radio via the Web Speech API. Quality is bounded by the OS voices, so we aggressively prefer
+// natural / neural / online voices (Chrome's "Google US English", macOS premium) over the built-in
+// robotic ones, and drive delivery per-line (frantic pilot vs calm briefing) via {rate,pitch,volume}.
+let _radioVoice = null;
+function pickRadioVoice() {
+  try {
+    const ss = window.speechSynthesis; if (!ss) return null;
+    const v = ss.getVoices(); if (!v.length) return null;
+    const score = x => {
+      const n = (x.name || "").toLowerCase(), lang = x.lang || "";
+      let s = 0;
+      if (/^en[-_]us/i.test(lang)) s += 4; else if (/^en/i.test(lang)) s += 2;
+      if (/natural|neural|premium|enhanced/.test(n)) s += 8;            // high-quality engines sound human
+      if (/google/.test(n)) s += 5;                                     // Chrome's online voices
+      if (x.localService === false) s += 3;                            // network voices beat robotic built-ins
+      if (/\b(daniel|alex|aaron|tom|guy|matthew|ryan|eric|christopher|james|arthur)\b/.test(n)) s += 2;
+      if (/female|samantha|victoria|karen|tessa|moira|fiona|zira|susan|hazel|allison/.test(n)) s -= 2;
+      if (/novelty|whisper|zarvox|bells|cellos|organ|robot|bubbles|trinoids|albert|bad news|boing|jester|wobble|superstar|grandma|grandpa|reed|rocko|sandy|shelley|flo|eddy/.test(n)) s -= 30; // macOS joke voices
+      return s;
+    };
+    return v.slice().sort((a, b) => score(b) - score(a))[0] || null;
+  } catch (e) { return null; }
+}
+function speakRadio(text, opt) {
   try {
     const ss = window.speechSynthesis; if (!ss) return;
-    const u = new SpeechSynthesisUtterance(text); u.rate = 1.06; u.pitch = 0.85; u.volume = 1;
-    const v = ss.getVoices(); const pick = v.find(x => /en[-_]/i.test(x.lang) && /male|david|daniel|fred|alex/i.test(x.name)) || v.find(x => /en[-_]/i.test(x.lang));
-    if (pick) u.voice = pick;
+    opt = opt || {};
+    if (!_radioVoice) _radioVoice = pickRadioVoice();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = opt.rate != null ? opt.rate : 1.0;
+    u.pitch = opt.pitch != null ? opt.pitch : 1.0;
+    u.volume = opt.volume != null ? opt.volume : 1;
+    if (_radioVoice) u.voice = _radioVoice;
     ss.speak(u);
   } catch (e) {}
 }
+try { if (window.speechSynthesis) { window.speechSynthesis.onvoiceschanged = () => { _radioVoice = pickRadioVoice(); }; _radioVoice = pickRadioVoice(); } } catch (e) {}
 
 function buildWreck(x, z) {
   const heli = buildHeli();                              // reuse the chopper, scorched + canted as wreckage
@@ -1953,7 +2010,7 @@ function updateIntroCrash(dt) {
   const tint = $("introTint"), big = $("introBig"), cap = $("introCap");
   if (intro.line + 1 < INTRO_RADIO.length && T >= INTRO_RADIO[intro.line + 1].t) {
     intro.line++; const e = INTRO_RADIO[intro.line]; const r = $("introRadio"); r.innerHTML = e.h; r.style.opacity = "1";
-    if (e.say) { Audio.squelch(); speakRadio(e.say); }    // actual spoken radio / mayday
+    if (e.say) { Audio.squelch(); speakRadio(e.say, e.voice); }    // actual spoken radio / mayday
   }
   if (g && !intro.crashed && intro.heli.rotor) { intro.heli.rotor.rotation.y += dt * 30; if (intro.heli.tailRotor) intro.heli.tailRotor.rotation.x += dt * 60; }
 
@@ -2059,7 +2116,7 @@ function updateIntroResearch(dt) {
   const tint = $("introTint"), cap = $("introCap");
   if (intro.line + 1 < INTRO_RADIO_RESEARCH.length && T >= INTRO_RADIO_RESEARCH[intro.line + 1].t) {
     intro.line++; const e = INTRO_RADIO_RESEARCH[intro.line]; const r = $("introRadio"); r.innerHTML = e.h; r.style.opacity = "1";
-    if (e.say) { Audio.squelch(); speakRadio(e.say); }
+    if (e.say) { Audio.squelch(); speakRadio(e.say, e.voice); }
   }
   if (g && intro.heli.rotor) { const rs = intro.landed ? 12 : 30; intro.heli.rotor.rotation.y += dt * rs; if (intro.heli.tailRotor) intro.heli.tailRotor.rotation.x += dt * rs * 2; }
 
@@ -2095,50 +2152,58 @@ function endIntroResearch() {                             // stand the player at
 }
 
 /* ── GHOSTS OF SECTOR 9 · ranger jeep-convoy expedition (ride in, dismount on foot) ── */
-function buildJeep() {                                    // reusable ranger jeep (front = local +x), headlights for the reveal
+function buildJeep() {                                    // ranger Land Rover Defender (front = local +x), headlights for the reveal
   const j = new THREE.Group();
-  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a5a3c, roughness: 0.84, metalness: 0.16 });   // ranger olive-drab
-  const trimMat = new THREE.MeshStandardMaterial({ color: 0x24271f, roughness: 0.9, metalness: 0.2 });
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x1b2a2c, roughness: 0.25, metalness: 0.5, transparent: true, opacity: 0.66 });
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a5a3c, roughness: 0.85, metalness: 0.15 });   // ranger olive
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0xd9ddd2, roughness: 0.82, metalness: 0.05 });   // classic white Defender roof
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0x23261f, roughness: 0.9, metalness: 0.2 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x1b2a2c, roughness: 0.22, metalness: 0.5, transparent: true, opacity: 0.62 });
   const tyreMat = new THREE.MeshStandardMaterial({ color: 0x14140f, roughness: 1 });
-  const hubMat = new THREE.MeshStandardMaterial({ color: 0x6a6e6a, roughness: 0.5, metalness: 0.6 });
-  const barMat = new THREE.MeshStandardMaterial({ color: 0x3a3d36, roughness: 0.7, metalness: 0.35 });
-  const chassis = new THREE.Mesh(new THREE.BoxGeometry(4.9, 0.5, 2.0), trimMat); chassis.position.y = 0.72; j.add(chassis);
-  const body = new THREE.Mesh(new THREE.BoxGeometry(4.7, 1.05, 2.24), bodyMat); body.position.y = 1.18; j.add(body);
-  const hood = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.66, 2.2), bodyMat); hood.position.set(1.75, 1.42, 0); j.add(hood);
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.18, 2.2), bodyMat); roof.position.set(-0.45, 2.52, 0); j.add(roof);
-  for (const [px, pz] of [[0.55, 1.0], [0.55, -1.0], [-1.45, 1.0], [-1.45, -1.0]]) { const pil = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.3, 0.14), trimMat); pil.position.set(px, 1.92, pz); j.add(pil); }
-  const ws = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.15, 2.02), glassMat); ws.position.set(0.6, 1.98, 0); ws.rotation.z = 0.2; j.add(ws);
-  for (const sz of [1.04, -1.04]) { const sg = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.05, 0.05), glassMat); sg.position.set(-0.45, 1.98, sz); j.add(sg); }
-  const wgeo = new THREE.CylinderGeometry(0.72, 0.72, 0.56, 16);
-  for (const [dx, dz] of [[1.62, 1.04], [1.62, -1.04], [-1.62, 1.04], [-1.62, -1.04]]) {
-    const w = new THREE.Mesh(wgeo, tyreMat); w.rotation.x = Math.PI / 2; w.position.set(dx, 0.72, dz); j.add(w);
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.58, 8), hubMat); hub.rotation.x = Math.PI / 2; hub.position.set(dx, 0.72, dz); j.add(hub);
-    const fender = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.34, 0.42), bodyMat); fender.position.set(dx, 1.32, dz > 0 ? 0.98 : -0.98); j.add(fender);   // bridges body→wheel (no gap)
-  }
-  const bumper = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.4, 2.3), trimMat); bumper.position.set(2.6, 0.95, 0); j.add(bumper);
-  const grille = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 1.9), trimMat); grille.position.set(2.52, 1.4, 0); j.add(grille);
-  // headlights (real lights, point forward = local +x) — used for the checkpoint reveal
+  const hubMat = new THREE.MeshStandardMaterial({ color: 0x8a8e8a, roughness: 0.45, metalness: 0.7 });
+  const rackMat = new THREE.MeshStandardMaterial({ color: 0x2f322c, roughness: 0.7, metalness: 0.35 });
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.4, 1.95), trimMat); chassis.position.y = 0.78; j.add(chassis);
+  // bonnet (front, low + flat) and the tall boxy cab — the Defender silhouette
+  const hood = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.72, 1.95), bodyMat); hood.position.set(1.55, 1.30, 0); j.add(hood);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.9, 1.5, 1.95), bodyMat); cab.position.set(-0.55, 1.55, 0); j.add(cab);
+  const ws = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.82, 1.82), glassMat); ws.position.set(0.93, 2.12, 0); ws.rotation.z = 0.1; j.add(ws);   // near-vertical windshield
+  for (const sz of [0.99, -0.99]) { const sg = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.66, 0.04), glassMat); sg.position.set(-0.7, 2.16, sz); j.add(sg); }   // flat upright side glass
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.16, 2.0), roofMat); roof.position.set(-0.6, 2.6, 0); j.add(roof);
+  // safari roof rack
+  const rack = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.1, 1.9), rackMat); rack.position.set(-0.7, 2.76, 0); j.add(rack);
+  for (const rx of [-1.8, 0.5]) for (const rz of [0.9, -0.9]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.18, 6), rackMat); leg.position.set(rx, 2.69, rz); j.add(leg); }
+  // vertical grille + round headlights (front face = +x) — beams used for the checkpoint reveal
+  const grille = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.72, 1.5), trimMat); grille.position.set(2.32, 1.18, 0); j.add(grille);
   const lights = [];
-  for (const lz of [0.72, -0.72]) {
-    const hl = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 12), new THREE.MeshStandardMaterial({ color: 0xfff1c0, roughness: 0.3, emissive: 0xfff1c0, emissiveIntensity: 1.4 }));
-    hl.rotation.z = Math.PI / 2; hl.position.set(2.58, 1.48, lz); j.add(hl);
-    const beam = new THREE.SpotLight(0xfff0c4, 6, 36, 0.5, 0.4, 1.4); beam.position.set(2.6, 1.5, lz);
-    beam.target.position.set(10, 0.6, lz); j.add(beam); j.add(beam.target); lights.push(beam);
+  for (const lz of [0.62, -0.62]) {
+    const hl = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.12, 16), new THREE.MeshStandardMaterial({ color: 0xfff1c0, roughness: 0.3, emissive: 0xfff1c0, emissiveIntensity: 1.5 }));
+    hl.rotation.z = Math.PI / 2; hl.position.set(2.37, 1.22, lz); j.add(hl);
+    const beam = new THREE.SpotLight(0xfff0c4, 6, 38, 0.5, 0.4, 1.4); beam.position.set(2.4, 1.3, lz);
+    beam.target.position.set(12, 0.6, lz); j.add(beam); j.add(beam.target); lights.push(beam);
   }
-  // roof light-bar (ranger marking)
-  const lb = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.22, 1.4), barMat); lb.position.set(-0.45, 2.74, 0); j.add(lb);
-  for (const lz of [0.45, -0.45]) { const dome = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, 0.36), new THREE.MeshStandardMaterial({ color: 0xc94a2a, roughness: 0.4, emissive: 0x3a1206 })); dome.position.set(-0.45, 2.86, lz); j.add(dome); }
-  // roll cage over the open bed (posts rooted in body — no floating bars)
-  for (const cx of [-1.5, 0.4]) for (const sz of [1, -1]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8), barMat); post.position.set(cx, 2.05, sz * 0.98); j.add(post); }
-  for (const cx of [-1.5, 0.4]) { const cb = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.1, 8), barMat); cb.rotation.x = Math.PI / 2; cb.position.set(cx, 2.78, 0); j.add(cb); }
-  for (const sz of [1, -1]) { const sr = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 8), barMat); sr.rotation.z = Math.PI / 2; sr.position.set(-0.55, 2.78, sz * 0.98); j.add(sr); }
+  const bumper = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.32, 1.95), trimMat); bumper.position.set(2.45, 0.78, 0); j.add(bumper);
+  // boxy wheel arches + chunky tyres
+  const wgeo = new THREE.CylinderGeometry(0.66, 0.66, 0.5, 16);
+  for (const dx of [1.45, -1.5]) for (const dz of [1.0, -1.0]) {
+    const w = new THREE.Mesh(wgeo, tyreMat); w.rotation.x = Math.PI / 2; w.position.set(dx, 0.66, dz); j.add(w);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.52, 8), hubMat); hub.rotation.x = Math.PI / 2; hub.position.set(dx, 0.66, dz); j.add(hub);
+    const arch = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.32, 0.36), bodyMat); arch.position.set(dx, 1.04, dz > 0 ? 0.93 : -0.93); j.add(arch);   // bridges body→wheel (no gap)
+  }
+  // rear-mounted spare wheel (back face = −x) — classic Defender
+  const spare = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.3, 16), tyreMat); spare.rotation.z = Math.PI / 2; spare.position.set(-2.12, 1.55, 0); j.add(spare);
+  const spareHub = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.32, 8), hubMat); spareHub.rotation.z = Math.PI / 2; spareHub.position.set(-2.16, 1.55, 0); j.add(spareHub);
+  // snorkel up the A-pillar
+  const snork = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.5, 8), trimMat); snork.position.set(1.12, 1.7, 0.92); j.add(snork);
+  // ranger roof light-bar
+  const lb = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.18, 1.2), rackMat); lb.position.set(0.55, 2.86, 0); j.add(lb);
+  for (const lz of [0.4, -0.4]) { const dome = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.14, 0.32), new THREE.MeshStandardMaterial({ color: 0xc94a2a, roughness: 0.4, emissive: 0x3a1206 })); dome.position.set(0.55, 2.96, lz); j.add(dome); }
   j.userData.lights = lights;
   return j;
 }
-function buildJeepRiders(j) {                             // driver + passenger seated in the cab
-  const cols = [0x4a5236, 0x595b40];
-  for (let i = 0; i < 2; i++) { const t = makeTrooper(cols[i]); t.position.set(-0.2, 0.95, i === 0 ? 0.55 : -0.55); t.rotation.y = Math.PI / 2; t.scale.setScalar(0.8); j.add(t); }
+function buildJeepRiders(j) {                             // driver + passenger up front, one in the back — clearly crewed
+  const seats = [[0.45, 1.3, 0.55], [0.45, 1.3, -0.55], [-1.2, 1.42, 0.55], [-1.2, 1.42, -0.55]];
+  const cols = [0x4a5236, 0x595b40, 0x6b6f4a, 0x47513f];
+  const n = Math.min(seats.length, Math.max(2, 1 + (typeof coopCount === "function" ? coopCount() : 2)));
+  for (let i = 0; i < n; i++) { const s = seats[i], t = makeTrooper(cols[i]); t.position.set(s[0], s[1], s[2]); t.rotation.y = Math.PI / 2; t.scale.setScalar(0.82); j.add(t); }
 }
 function startIntroJeep() {
   const j = buildJeep();
@@ -2160,7 +2225,7 @@ function updateIntroJeep(dt) {
   const tint = $("introTint"), cap = $("introCap");
   if (intro.line + 1 < INTRO_RADIO_JEEP.length && T >= INTRO_RADIO_JEEP[intro.line + 1].t) {
     intro.line++; const e = INTRO_RADIO_JEEP[intro.line]; const r = $("introRadio"); r.innerHTML = e.h; r.style.opacity = "1";
-    if (e.say) { Audio.squelch(); speakRadio(e.say); }
+    if (e.say) { Audio.squelch(); speakRadio(e.say, e.voice); }
   }
   tint.style.background = "#1f2733"; tint.style.opacity = "0.3";   // last light / dusk
   const driveTo = (tz, rate) => { if (j) { j.position.z += (tz - j.position.z) * dt * rate; j.position.y = groundH(j.position.x, j.position.z); } };
@@ -2489,15 +2554,17 @@ function mapSVG(big) {
   s += `<circle cx="${bx.toFixed(1)}" cy="${bz.toFixed(1)}" r="1.1" class="mm-exfil"/>`;
   // ranger watchtowers — safe vantage points
   for (const t of TOWERS) { const [tx, tz] = toMM(t.x, t.z); s += `<polygon points="${tx.toFixed(1)},${(tz - 2).toFixed(1)} ${(tx - 1.7).toFixed(1)},${(tz + 1.4).toFixed(1)} ${(tx + 1.7).toFixed(1)},${(tz + 1.4).toFixed(1)}" fill="none" stroke="#8fb8c4" stroke-width="0.6"/>`; }
-  // active mission objective — diamond + pulse + dashed guide line from the player
-  const _cm = activeCampaign();
-  if (_cm && MC) { const ph = _cm.phases[MC.idx]; if (ph && (ph.t === "reach" || ph.t === "interact")) {
-    const [ox, oz] = phaseSite(ph), [omx, omz] = toMM(ox, oz), [pmx, pmz] = toMM(P.x, P.z), pu = (2.0 + Math.sin(S.t * 4) * 0.7).toFixed(1);
+  // active mission objective — tracks the CURRENT step for every mission type (not the fixed beacon)
+  const obj = currentObjective();
+  if (obj && !obj.roaming) {
+    const [omx, omz] = toMM(obj.x, obj.z), [pmx, pmz] = toMM(P.x, P.z), pu = (2.0 + Math.sin(S.t * 4) * 0.7).toFixed(1);
     s += `<line x1="${pmx.toFixed(1)}" y1="${pmz.toFixed(1)}" x2="${omx.toFixed(1)}" y2="${omz.toFixed(1)}" stroke="#8fb8c4" stroke-width="0.4" stroke-dasharray="1.5 1.5" opacity="0.55"/>`;
     s += `<circle cx="${omx.toFixed(1)}" cy="${omz.toFixed(1)}" r="${pu}" fill="none" stroke="#8fb8c4" stroke-width="0.7" opacity="0.9"/>`;
-    s += `<polygon points="${omx.toFixed(1)},${(omz - 2).toFixed(1)} ${(omx + 2).toFixed(1)},${omz.toFixed(1)} ${omx.toFixed(1)},${(omz + 2).toFixed(1)} ${(omx - 2).toFixed(1)},${omz.toFixed(1)}" fill="#8fb8c4"${big ? `><title>${phLabel(ph)}</title></polygon` : "/"}>`;
+    s += `<polygon points="${omx.toFixed(1)},${(omz - 2).toFixed(1)} ${(omx + 2).toFixed(1)},${omz.toFixed(1)} ${omx.toFixed(1)},${(omz + 2).toFixed(1)} ${(omx - 2).toFixed(1)},${omz.toFixed(1)}" fill="#8fb8c4"${big ? `><title>${obj.label}</title></polygon` : "/"}>`;
     if (big) s += `<text x="${omx.toFixed(1)}" y="${(omz - 3).toFixed(1)}" fill="#bfe2ea" font-size="3" text-anchor="middle">OBJECTIVE</text>`;
-  } }
+  } else if (obj && obj.roaming && big) {   // roaming objective (e.g. DNA hunt) — no fixed point, so post it as a banner
+    s += `<text x="50" y="11" fill="#bfe2ea" font-size="3.2" text-anchor="middle">OBJECTIVE · ${obj.label}</text>`;
+  }
   // incoming evac helicopter — show its live position + a dashed inbound track to the beacon
   if (evac && evac.heli) {
     const [hx, hz] = toMM(evac.heli.group.position.x, evac.heli.group.position.z);
