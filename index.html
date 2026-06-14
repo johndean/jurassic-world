@@ -155,11 +155,15 @@
   .map-title{position:absolute;top:0;left:0;right:0;padding:8px 12px;font-size:12px;letter-spacing:.18em;
     color:var(--hud-text);border-bottom:1px solid var(--hud-line);background:rgba(10,14,13,.6);z-index:2;}
   .map-title span{color:var(--hud-accent);}
-  .map-legend{position:absolute;bottom:8px;left:12px;display:flex;gap:14px;font-size:9px;
-    letter-spacing:.1em;color:var(--hud-dim);z-index:2;}
+  .map-legend{position:absolute;bottom:8px;left:12px;right:12px;display:flex;flex-wrap:wrap;gap:6px 14px;font-size:9px;
+    letter-spacing:.1em;color:var(--hud-text);z-index:2;background:rgba(8,11,10,.66);border:1px solid var(--hud-line);
+    border-radius:5px;padding:6px 9px;max-width:max-content;}
   .map-legend span{display:flex;align-items:center;gap:5px;}
-  .map-legend i{width:9px;height:9px;display:inline-block;}
-  .map-hint{position:absolute;bottom:8px;right:12px;font-size:9px;letter-spacing:.12em;color:var(--hud-dim);z-index:2;}
+  .map-legend svg{width:12px;height:12px;flex:0 0 auto;}
+  .map-hint{position:absolute;top:9px;right:46px;font-size:9px;letter-spacing:.12em;color:var(--hud-dim);z-index:2;}
+  #mapClose{position:absolute;top:5px;right:8px;width:30px;height:30px;font:14px ui-monospace,monospace;color:#d7e0da;
+    background:transparent;border:1px solid var(--hud-line);border-radius:5px;cursor:pointer;z-index:3;-webkit-tap-highlight-color:transparent;}
+  #mapClose:hover{border-color:#e0772f;color:#fff;}
   .map-frame svg [title],.map-frame svg polygon,.map-frame svg circle{cursor:default;}
 
   /* toast / banner */
@@ -349,6 +353,7 @@
     border:1px solid var(--hud-line);border-bottom-width:2px;border-radius:4px;padding:2px 5px;}
   .kh-tip{margin-top:18px;font-size:11px;line-height:1.6;color:#8a978f;background:rgba(224,119,47,.08);border:1px solid rgba(224,119,47,.3);border-radius:6px;padding:10px 12px;}
   .kh-tip b{color:#e0772f;}
+  #btnMap{right:14px;top:14px;width:54px;height:54px;font-size:22px;}
   @media (max-width:760px){
     .obj{min-width:0;max-width:172px;left:18px;}
     .compass,.squad,.contact{display:none;}
@@ -357,6 +362,11 @@
     .mm-legend{display:none;}
     .exfil{width:178px;top:64px;}
     .exfil-time{font-size:22px;}
+    /* tactical map expands to fill the screen; legend wraps over a translucent strip */
+    .map-frame{width:min(96vw,82vh);height:min(96vw,82vh);max-width:none;}
+    .map-title{font-size:11px;letter-spacing:.1em;padding:8px 42px 8px 10px;}
+    .map-legend{font-size:10px;gap:6px 12px;background:rgba(8,11,10,.82);left:8px;right:8px;}
+    .map-hint{display:none;}
   }
   @media (prefers-reduced-motion:reduce){.contact{animation:none;}}
 </style>
@@ -439,22 +449,26 @@
       <span><i class="lg lg-exfil"></i>EXTRACTION</span>
     </div>
     <div class="mm-label" id="mmLabel"></div>
-    <div class="mm-hint">M · MAP</div>
+    <div class="mm-hint">🗺 / M · MAP</div>
   </div>
 </div>
 
 <div id="mapOverlay">
   <div class="map-frame">
-    <div class="map-title">TACTICAL MAP · ISLAND ALPHA <span id="mapDist"></span></div>
+    <div class="map-title">TACTICAL MAP · ISLAND ALPHA <span id="mapDist"></span><button id="mapClose">✕</button></div>
     <div class="mm-grid"></div>
     <svg viewBox="0 0 100 100" class="mm-svg" id="mapBigSvg"></svg>
     <div class="map-legend">
-      <span><i class="lg lg-self"></i>YOU</span>
-      <span><i class="lg lg-threat"></i>PREDATOR</span>
-      <span><i class="lg lg-prey"></i>HERBIVORE</span>
-      <span><i class="lg lg-exfil"></i>EXTRACTION</span>
+      <span><svg viewBox="0 0 10 10"><polygon points="5,1 9,9 1,9" fill="#6fae6b"/></svg>YOU</span>
+      <span><svg viewBox="0 0 10 10"><polygon points="5,1 9,9 1,9" fill="#d6562f"/></svg>PREDATOR</span>
+      <span><svg viewBox="0 0 10 10"><polygon points="5,1.2 8.8,8.8 1.2,8.8" fill="#d6562f" stroke="#fff" stroke-width="0.9"/></svg>APEX</span>
+      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.4" fill="#8fb8c4"/></svg>HERBIVORE</span>
+      <span><svg viewBox="0 0 10 10"><polygon points="5,1.2 8.8,8.8 1.2,8.8" fill="none" stroke="#8fb8c4" stroke-width="1.1"/></svg>WATCHTOWER</span>
+      <span><svg viewBox="0 0 10 10"><rect x="1.4" y="1.4" width="7.2" height="7.2" fill="none" stroke="#e0772f" stroke-width="1.1"/></svg>EXTRACTION</span>
+      <span><svg viewBox="0 0 10 10"><g stroke="#fff" stroke-width="0.9"><line x1="1" y1="5" x2="9" y2="5"/><line x1="5" y1="1" x2="5" y2="9"/></g><circle cx="5" cy="5" r="1.7" fill="#e0772f"/></svg>EVAC INBOUND</span>
+      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.6" fill="none" stroke="#6fae6b" stroke-width="1.1"/></svg>SAFE ZONE</span>
     </div>
-    <div class="map-hint">M / ESC TO CLOSE · HOVER A CONTACT FOR SPECIES</div>
+    <div class="map-hint">TAP OUTSIDE / ✕ / M / ESC TO CLOSE</div>
   </div>
 </div>
 
@@ -493,6 +507,7 @@
   <button class="tbtn" id="btnCall">CALL</button>
   <button class="tbtn use" id="btnUse">USE</button>
   <button class="tbtn" id="btnBinoc">👁</button>
+  <button class="tbtn" id="btnMap">🗺</button>
 </div>
 
 <!-- desktop keyboard reference (slideout) -->

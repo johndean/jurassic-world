@@ -124,7 +124,7 @@ function loadModel(path) {
 async function preloadModels() {
   // HELI is in the priority wave: it's the FIRST thing seen (the crash intro), so the realistic Huey
   // must be ready before any creature/foliage — otherwise the intro falls back to the boxy chopper.
-  if (HELI_MODEL) loadModel(HELI_MODEL).then(m => { MODELS[HELI_MODEL] = m; stripHeliRotor(m); });
+  if (HELI_MODEL) loadModel(HELI_MODEL).then(m => { MODELS[HELI_MODEL] = m; });   // load the realistic Huey pristine (no geometry edits)
   const creatures = [...new Set([PLAYER_MODEL, ...ROLES.map(r => r.model), ...Object.values(SPECIES).map(s => s.modelPath)].filter(Boolean))];
   await Promise.all(creatures.map(async p => { MODELS[p] = await loadModel(p); reskinDinos(p); }));
   if (!playerMixer) buildPlayer();
@@ -393,17 +393,35 @@ function buildRuins() {
     for (const yo of [0, -1.6, -3.2]) { const v = []; for (const [x, y, z] of pts) v.push(x, y + yo + Math.sin(x) * 0.3, z); const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); g.add(new THREE.Line(lg, wireMat)); }
   })();
 
-  // ---- abandoned tour jeep ----
-  (function jeep() {
+  // ---- abandoned safari ranger truck (gap-free: parts overlap at every joint) ----
+  (function truck() {
     const jx = 18, jz = 16, j = new THREE.Group();
-    j.add(new THREE.Mesh(new THREE.BoxGeometry(5, 1.5, 2.4), new THREE.MeshStandardMaterial({ color: 0xa7a48f, roughness: 0.95, flatShading: true })));
-    const cab = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.3, 2.2), new THREE.MeshStandardMaterial({ color: 0x8a322c, roughness: 0.95, flatShading: true })); cab.position.set(-0.4, 1.25, 0); j.add(cab);
-    // roll bars
-    const bar = new THREE.CylinderGeometry(0.08, 0.08, 2.4, 6);
-    for (const bx of [-0.6, 0.8]) { const b = new THREE.Mesh(bar, rust); b.rotation.x = Math.PI / 2; b.position.set(bx, 2.1, 0); j.add(b); }
-    const wgeo = new THREE.CylinderGeometry(0.72, 0.72, 0.5, 14), wm = new THREE.MeshStandardMaterial({ color: 0x161616, roughness: 1 });
-    for (const [dx, dz] of [[-1.8, -1.1], [1.8, -1.1], [-1.8, 1.1], [1.8, 1.1]]) { const w = new THREE.Mesh(wgeo, wm); w.rotation.x = Math.PI / 2; w.position.set(dx, -0.5, dz); j.add(w); }
-    j.position.set(jx, groundH(jx, jz) + 1.15, jz); j.rotation.set(0.04, 0.6, 0.05); g.add(j);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x5b6b46, roughness: 0.82, metalness: 0.18 });   // weathered olive
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0x2c2f28, roughness: 0.9, metalness: 0.2 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x1b2a2c, roughness: 0.25, metalness: 0.5, transparent: true, opacity: 0.66 });
+    const tyreMat = new THREE.MeshStandardMaterial({ color: 0x14140f, roughness: 1 });
+    const hubMat = new THREE.MeshStandardMaterial({ color: 0x6a6e6a, roughness: 0.5, metalness: 0.6 });
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(4.9, 0.5, 2.0), trimMat); chassis.position.y = 0.72; j.add(chassis);   // ties the wheels together
+    const body = new THREE.Mesh(new THREE.BoxGeometry(4.7, 1.05, 2.24), bodyMat); body.position.y = 1.18; j.add(body);          // tub overlaps chassis
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.66, 2.2), bodyMat); hood.position.set(1.75, 1.42, 0); j.add(hood);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.18, 2.2), bodyMat); roof.position.set(-0.45, 2.52, 0); j.add(roof);
+    for (const [px, pz] of [[0.55, 1.0], [0.55, -1.0], [-1.45, 1.0], [-1.45, -1.0]]) { const pil = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.3, 0.14), trimMat); pil.position.set(px, 1.92, pz); j.add(pil); }
+    const ws = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.15, 2.02), glassMat); ws.position.set(0.6, 1.98, 0); ws.rotation.z = 0.2; j.add(ws);
+    for (const sz of [1.04, -1.04]) { const sg = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.05, 0.05), glassMat); sg.position.set(-0.45, 1.98, sz); j.add(sg); }
+    const wgeo = new THREE.CylinderGeometry(0.72, 0.72, 0.56, 16);
+    for (const [dx, dz] of [[1.62, 1.04], [1.62, -1.04], [-1.62, 1.04], [-1.62, -1.04]]) {
+      const w = new THREE.Mesh(wgeo, tyreMat); w.rotation.x = Math.PI / 2; w.position.set(dx, 0.72, dz); j.add(w);
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.58, 8), hubMat); hub.rotation.x = Math.PI / 2; hub.position.set(dx, 0.72, dz); j.add(hub);
+      const fender = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.34, 0.42), bodyMat); fender.position.set(dx, 1.32, dz > 0 ? 0.98 : -0.98); j.add(fender);   // bridges body→wheel (no gap)
+    }
+    const bumper = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.4, 2.3), trimMat); bumper.position.set(2.6, 0.95, 0); j.add(bumper);
+    const grille = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 1.9), trimMat); grille.position.set(2.52, 1.4, 0); j.add(grille);
+    for (const lz of [0.72, -0.72]) { const hl = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 12), new THREE.MeshStandardMaterial({ color: 0xd8d2b0, roughness: 0.4, emissive: 0x201d12 })); hl.rotation.z = Math.PI / 2; hl.position.set(2.58, 1.48, lz); j.add(hl); }
+    // roll cage over the open bed, posts rooted in the body (connected, no floating bars)
+    for (const cx of [-1.5, 0.4]) for (const sz of [1, -1]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8), rust); post.position.set(cx, 2.05, sz * 0.98); j.add(post); }
+    for (const cx of [-1.5, 0.4]) { const cb = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.1, 8), rust); cb.rotation.x = Math.PI / 2; cb.position.set(cx, 2.78, 0); j.add(cb); }
+    for (const sz of [1, -1]) { const sr = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 8), rust); sr.rotation.z = Math.PI / 2; sr.position.set(-0.55, 2.78, sz * 0.98); j.add(sr); }
+    j.position.set(jx, groundH(jx, jz), jz); j.rotation.set(0, 0.6, 0.015); g.add(j);
   })();
 
   // ---- scattered ruins across the valley: broken columns, wall fragments, rubble ----
@@ -563,27 +581,31 @@ function buildBeacon() {
 const TOWERS = [];                 // { x, z, platformY, half, zipX, zipZ }
 const ZIP_LEN = 24;
 function buildTower(x, z, dir) {
-  const baseY = groundH(x, z), H = 7.0, half = 2.4, platformY = baseY + H;
+  const baseY = groundH(x, z), H = 7.0, half = 2.4, platformY = baseY + H, c = half - 0.15;
   const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
-  const wood = new THREE.MeshStandardMaterial({ color: 0x6b563a, roughness: 1, flatShading: true });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x3a3128, roughness: 1 });
-  const metal = new THREE.MeshStandardMaterial({ color: 0x8a8f8c, roughness: 0.6, metalness: 0.5 });
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {                          // 4 legs (splayed)
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, H, 6), wood);
-    leg.position.set(sx * (half - 0.2), baseY + H / 2, sz * (half - 0.2)); g.add(leg);
+  const wood = new THREE.MeshStandardMaterial({ color: 0x6f5a3c, roughness: 0.92, metalness: 0.05 });
+  const wood2 = new THREE.MeshStandardMaterial({ color: 0x574631, roughness: 0.95 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x7e837f, roughness: 0.55, metalness: 0.6 });
+  // 4 box legs — tops meet the deck (overlap, no gap)
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.26, H, 0.26), wood); leg.position.set(sx * c, baseY + H / 2, sz * c); g.add(leg); }
+  // X cross-braces spanning corner-to-corner on 3 faces (skip +Z = ladder face) — exact fit, no floating bars
+  const faceW = 2 * c, L = Math.hypot(faceW, H), th = Math.atan2(faceW, H);
+  const brace = () => new THREE.Mesh(new THREE.BoxGeometry(0.12, L, 0.12), wood2);
+  for (const sx of [-1, 1]) for (const s of [-1, 1]) { const b = brace(); b.position.set(sx * c, baseY + H / 2, 0); b.rotation.x = s * th; g.add(b); }   // ±X faces
+  for (const s of [-1, 1]) { const b = brace(); b.position.set(0, baseY + H / 2, -c); b.rotation.z = s * th; g.add(b); }                                  // -Z face
+  // deck — oversized to cap the legs (overlap)
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(half * 2 + 0.25, 0.3, half * 2 + 0.25), wood); deck.position.y = platformY; g.add(deck);
+  // railing posts + top/mid rails on 3 sides (gap on +Z), overlapping the posts
+  for (const [px, pz] of [[-c, -c], [c, -c], [-c, c], [c, c]]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.15, 0.1), wood2); post.position.set(px, platformY + 0.58, pz); g.add(post); }
+  for (const [px, pz, w, dpth] of [[0, -c, faceW + 0.1, 0.08], [-c, 0, 0.08, faceW + 0.1], [c, 0, 0.08, faceW + 0.1]]) {
+    for (const ry of [0.5, 1.0]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(w, 0.08, dpth), wood2); rail.position.set(px, platformY + ry, pz); g.add(rail); }
   }
-  for (const yy of [H * 0.45, H * 0.8]) for (const [ax, az, len, rot] of [[0, 1, half * 2, 0], [1, 0, half * 2, Math.PI / 2]]) {  // cross-braces
-    for (const s of [-1, 1]) { const br = new THREE.Mesh(new THREE.BoxGeometry(len * 1.4, 0.08, 0.08), dark); br.position.set(0, baseY + yy, s * (half - 0.2) * az + 0 * ax); br.rotation.set(0, rot, 0.5 * (ax ? 1 : -1)); g.add(br); }
-  }
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(half * 2, 0.24, half * 2), wood); deck.position.y = platformY; g.add(deck);
-  // rails (gap on +Z for the ladder)
-  for (const [px, pz, w, dpth] of [[0, -half, half * 2, 0.12], [-half, 0, 0.12, half * 2], [half, 0, 0.12, half * 2]]) {
-    for (const ry of [0.55, 1.05]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(w, 0.08, dpth), dark); rail.position.set(px, platformY + ry, pz); g.add(rail); }
-  }
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(half * 1.7, 1.5, 4), dark); roof.position.y = platformY + 1.9; roof.rotation.y = Math.PI / 4; g.add(roof);
-  // ladder on +Z
-  for (const sx of [-0.5, 0.5]) { const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, H, 5), metal); rail.position.set(sx, baseY + H / 2, half + 0.1); g.add(rail); }
-  for (let r = 0; r < 8; r++) { const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.1, 5), metal); rung.rotation.z = Math.PI / 2; rung.position.set(0, baseY + 0.6 + r * (H - 0.6) / 8, half + 0.1); g.add(rung); }
+  // roof: 4 corner posts on the deck + a pitched roof seated on them
+  for (const [px, pz] of [[-c, -c], [c, -c], [-c, c], [c, c]]) { const rp = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.1, 0.1), wood2); rp.position.set(px, platformY + 1.25, pz); g.add(rp); }
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(half * 1.7, 1.3, 4), wood2); roof.position.y = platformY + 2.4; roof.rotation.y = Math.PI / 4; g.add(roof);
+  // ladder on +Z — rails reach from the ground up into the deck
+  for (const sx of [-0.5, 0.5]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(0.09, H + 0.3, 0.09), metal); rail.position.set(sx, baseY + (H + 0.3) / 2, half + 0.12); g.add(rail); }
+  for (let r = 0; r < 9; r++) { const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.1, 6), metal); rung.rotation.z = Math.PI / 2; rung.position.set(0, baseY + 0.5 + r * (H - 0.4) / 8, half + 0.12); g.add(rung); }
   // zipline: cable from a top corner down to a ground anchor
   const zipX = x + Math.sin(dir) * ZIP_LEN, zipZ = z + Math.cos(dir) * ZIP_LEN;
   const aY = groundH(zipX, zipZ) + 0.3;
@@ -707,6 +729,10 @@ function initInput() {
   document.querySelectorAll("#tools .tool").forEach(el => el.addEventListener("click", () => { const i = +el.dataset.i; if (i === selTool) useTool(); else selectTool(i); }));
   const bu = $("btnUse"); if (bu) bu.addEventListener("pointerdown", e => { e.preventDefault(); useTool(); });
   const bn = $("btnBinoc"); if (bn) bn.addEventListener("pointerdown", e => { e.preventDefault(); toggleBinoc(); });
+  const bm = $("btnMap"); if (bm) bm.addEventListener("pointerdown", e => { e.preventDefault(); toggleMap(); });
+  const mc = $("mapClose"); if (mc) mc.addEventListener("click", e => { e.preventDefault(); if (mapOpen) toggleMap(); });
+  const mo = $("mapOverlay"); if (mo) mo.addEventListener("pointerdown", e => { if (e.target === mo && mapOpen) toggleMap(); });   // tap backdrop to close
+  const mm = document.querySelector(".minimap"); if (mm) mm.addEventListener("click", () => { if (!mapOpen) toggleMap(); });   // desktop: click minimap to expand
 
   // keyboard reference slideout — desktop only (touch users have on-screen labels + the joystick affordance)
   if (!isTouch) { const kb = $("keyHelpBtn"); if (kb) { kb.style.display = "block"; kb.addEventListener("click", toggleKeyHelp); } }
@@ -1431,24 +1457,22 @@ function updateExtraction(dt) {
  * screen. Phases: incoming → landing → grounded → boarding → climbing → liftoff. */
 let evac = null;   // { phase, t, heli:{group,rotor,tailRotor}, hx,hz, lx,lz, groundY, done }
 
-// The helicopter .glb is a SINGLE merged mesh with its main-rotor blades baked into the body, so they
-// can't be spun as a separate node. buildHeli() adds its own spinning rotor; to avoid TWO sets of blades
-// (one static, one moving) we collapse the baked main-rotor blade vertices into the mast. Per the GLB
-// vertex histogram those blades are the only geometry that is both high (y>6000) and far out in XZ
-// (radius>14000); the fuselage/mast up there stays well under r=14000, so this targets blades only.
-// Positions are quantized SHORT (KHR_mesh_quantization) → the attribute array is an Int16Array.
-function stripHeliRotor(root) {
-  if (!root) return;
-  root.traverse(o => {
-    const g = o.geometry; if (!g || !g.attributes || !g.attributes.position) return;
-    const p = g.attributes.position, arr = p.array, n = p.count;
-    if (!(arr instanceof Int16Array)) return;
-    const isBlade = i => arr[i * 3 + 1] > 6000 && Math.hypot(arr[i * 3], arr[i * 3 + 2]) > 14000;
-    let hit = 0; for (let i = 0; i < n; i++) if (isBlade(i)) hit++;
-    if (hit < 200 || hit > n * 0.4) return;   // safety: heuristic looks wrong → leave the model untouched
-    for (let i = 0; i < n; i++) if (isBlade(i)) { arr[i * 3] = 0; arr[i * 3 + 1] = 7000; arr[i * 3 + 2] = 0; }
-    p.needsUpdate = true; if (g.computeBoundingSphere) g.computeBoundingSphere(); if (g.computeBoundingBox) g.computeBoundingBox();
-  });
+// The helicopter .glb is a SINGLE merged mesh with its main rotor already modelled in, so we leave the
+// model PRISTINE (recognisable) and overlay just ONE spinning motion-blur disc at the rotor plane — it
+// reads as the turning rotor without adding a second hard set of blades. (The earlier vertex-strip
+// mangled the model and is gone.) The fallback chopper has no blades of its own, so it gets hard blades.
+let _rotorTex = null;
+function rotorBlurTexture() {
+  if (_rotorTex) return _rotorTex;
+  const SZ = 256, cv = document.createElement("canvas"); cv.width = cv.height = SZ;
+  const ctx = cv.getContext("2d"), c = SZ / 2;
+  ctx.translate(c, c);
+  for (let i = 0; i < 4; i++) { ctx.save(); ctx.rotate(i * Math.PI / 2 + 0.2); ctx.fillStyle = "rgba(22,24,18,0.22)"; ctx.beginPath(); ctx.moveTo(0, -3); ctx.lineTo(c - 8, -1); ctx.lineTo(c - 8, 1); ctx.lineTo(0, 3); ctx.closePath(); ctx.fill(); ctx.restore(); }
+  const grd = ctx.createRadialGradient(0, 0, 4, 0, 0, c);
+  grd.addColorStop(0, "rgba(30,32,26,0.5)"); grd.addColorStop(0.5, "rgba(25,27,22,0.1)"); grd.addColorStop(1, "rgba(20,22,18,0)");
+  ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(0, 0, c, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(15,16,12,0.9)"; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; _rotorTex = t; return t;
 }
 
 function buildHeli() {
@@ -1469,19 +1493,20 @@ function buildHeli() {
     const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.8, 6), dark); mast.position.y = 3.2; g.add(mast);
     topY = 3.4; len = 12;
   }
-  // --- visible spinning MAIN rotor: hub + crossed blades + faint blur disc (reads as motion on model + fallback) ---
-  const rotor = new THREE.Group(); rotor.position.y = topY + 0.18;
-  rotor.add(new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.42, 8), bladeMat));
-  for (let i = 0; i < 2; i++) { const bl = new THREE.Mesh(new THREE.BoxGeometry(13.4, 0.09, 0.52), bladeMat); bl.rotation.y = i * Math.PI / 2; rotor.add(bl); }
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(7.0, 36), new THREE.MeshBasicMaterial({ color: 0x0c0e0c, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false }));
-  disc.rotation.x = -Math.PI / 2; disc.position.y = 0.14; rotor.add(disc);
-  g.add(rotor);
-  // --- spinning TAIL rotor (fallback only; real model carries its own) ---
-  if (!MODELS[HELI_MODEL]) {
+  const rotor = new THREE.Group(); rotor.position.y = topY + 0.1;
+  if (MODELS[HELI_MODEL]) {   // realistic model already has modelled blades — ONE spinning blur disc over them (no 2nd blade set)
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(7.4, 44), new THREE.MeshBasicMaterial({ map: rotorBlurTexture(), transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false }));
+    disc.rotation.x = -Math.PI / 2; rotor.add(disc);
+  } else {                    // procedural fallback has no rotor — give it hard crossed blades + tail rotor
+    rotor.add(new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.42, 8), bladeMat));
+    for (let i = 0; i < 2; i++) { const bl = new THREE.Mesh(new THREE.BoxGeometry(13.4, 0.09, 0.52), bladeMat); bl.rotation.y = i * Math.PI / 2; rotor.add(bl); }
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(7.0, 36), new THREE.MeshBasicMaterial({ color: 0x0c0e0c, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false }));
+    disc.rotation.x = -Math.PI / 2; disc.position.y = 0.14; rotor.add(disc);
     tailRotor = new THREE.Group(); tailRotor.position.set(-len * 0.46, topY * 0.62, 0.45);
     for (let i = 0; i < 2; i++) { const tb = new THREE.Mesh(new THREE.BoxGeometry(0.07, 2.6, 0.24), bladeMat); tb.rotation.z = i * Math.PI / 2; tailRotor.add(tb); }
     g.add(tailRotor);
   }
+  g.add(rotor);
   scene.add(g);
   return { group: g, rotor, tailRotor, real: !!MODELS[HELI_MODEL] };
 }
@@ -1589,15 +1614,15 @@ function makeTrooper(color) {                              // simple seated squa
   for (const sx of [-1, 1]) { const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.42, 6), dark); shin.position.set(sx * 0.12, 0.12, 0.46); g.add(shin); }
   return g;
 }
-function buildRiders(group) {                             // show the player(s) riding in the open door
+function buildRiders(group) {                             // squad seated INSIDE the cabin (within the fuselage volume)
   const n = Math.min(5, Net.on ? (remotePlayers.size + 1) : 1);
   const colors = [0x5a6b3f, 0x4a5236, 0x6b6f4a, 0x47513f, 0x595b40];
   for (let i = 0; i < n; i++) {
     const t = makeTrooper(colors[i % colors.length]);
-    const x = n === 1 ? 0.1 : -1.05 + (i / (n - 1)) * 2.1;
-    t.position.set(x, 1.12, 1.55); group.add(t);          // seated at the +Z side door, facing out toward the camera
+    const x = n === 1 ? -0.3 : -1.0 + (i / (n - 1)) * 1.5;   // cabin row, well within the body
+    t.position.set(x, 1.0, (i % 2 ? 0.32 : -0.32)); t.scale.setScalar(0.82); group.add(t);
   }
-  const pilot = makeTrooper(0x3a3f30); pilot.position.set(1.9, 1.35, -0.3); pilot.rotation.y = -0.6; group.add(pilot);
+  const pilot = makeTrooper(0x3a3f30); pilot.position.set(1.15, 1.05, 0); pilot.scale.setScalar(0.82); group.add(pilot);   // cockpit
 }
 function upgradeIntroHeli() {                             // swap the boxy fallback for the realistic Huey the instant it loads
   if (!intro || intro.crashed || !intro.heli || intro.heli.real || !MODELS[HELI_MODEL]) return;
