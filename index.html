@@ -7,9 +7,9 @@
 <link rel="icon" type="image/jpeg" href="./favicon.jpg">
 <link rel="apple-touch-icon" href="./favicon.jpg">
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0b0f0e;
+  html,body{margin:0;height:100%;overflow:hidden;background:#0b0f0e;overscroll-behavior:none;
     font-family:ui-monospace,"SFMono-Regular","Roboto Mono",Menlo,Consolas,monospace;}
-  #c{display:block;position:fixed;inset:0;width:100%;height:100%;}
+  #c{display:block;position:fixed;inset:0;width:100%;height:100%;touch-action:none;}
   #dev{position:fixed;top:6px;left:50%;transform:translateX(-50%);z-index:50;color:#7CFC00;
     font:11px ui-monospace,monospace;display:none;background:rgba(0,0,0,.45);padding:3px 8px;white-space:pre;}
 
@@ -141,10 +141,13 @@
     border:1px solid var(--hud-accent,#e0772f);padding:7px 14px;opacity:0;transition:opacity .3s;pointer-events:none;}
 
   /* overlays: start / end */
-  .screen{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  .screen{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:safe center;
     text-align:center;color:#d7e0da;background:radial-gradient(circle at 50% 35%,rgba(20,26,24,.82),rgba(6,9,8,.96));
-    font-family:ui-monospace,monospace;padding:24px;}
+    font-family:ui-monospace,monospace;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding:max(24px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));}
   .screen.hidden{display:none;}
+  /* tighten the start screen on short/phone viewports so the cards + lobby + button all fit/scroll */
+  @media (max-height:760px){ .screen p{margin:10px 0;} .screen .how{margin-bottom:12px;} .char-card img{height:104px;} .cs-label{margin:2px 0 6px;} }
   /* start screen: hero background image with dark scrim for legibility */
   #startScreen{
     background:
