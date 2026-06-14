@@ -183,6 +183,7 @@ function buildWorld() {
   sun = new THREE.DirectionalLight(0xbcc6cf, 0.85); sun.position.set(-60, 90, 40); scene.add(sun);
   scene.add(new THREE.HemisphereLight(0x9aa6ad, 0x32383a, 0.55));
   scene.add(new THREE.AmbientLight(0x6b7378, 0.35));
+  buildSky();
 
   // ground: rolling valley floor ringed by mountains, carved by a winding river (shaped by groundH)
   const seg = 110;
@@ -262,6 +263,16 @@ function buildPlayer() {
     addBlob(playerMesh, 0.7);
   }
 }
+// overcast gradient sky dome with faint procedural cloud banding near the horizon (no asset, not fogged)
+function buildSky() {
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(380, 32, 18), new THREE.ShaderMaterial({
+    side: THREE.BackSide, fog: false, depthWrite: false, depthTest: false,
+    uniforms: { top: { value: new THREE.Color(0x8ea298) }, bot: { value: new THREE.Color(0xc6cdc3) } },
+    vertexShader: "varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    fragmentShader: "uniform vec3 top; uniform vec3 bot; varying vec3 vDir; void main(){ float t = clamp(vDir.y*0.5+0.5,0.0,1.0); vec3 col = mix(bot, top, smoothstep(0.0,0.7,t)); float c = sin(vDir.x*8.0)*0.5 + sin(vDir.z*6.0+1.3)*0.5 + sin((vDir.x+vDir.z)*11.0)*0.3; c = smoothstep(0.45,1.1,c) * (1.0-t) * 0.55; col = mix(col, vec3(0.87,0.89,0.85), c); gl_FragColor = vec4(col,1.0); }",
+  }));
+  sky.frustumCulled = false; sky.renderOrder = -1; scene.add(sky);
+}
 // one dense layer of alpha-cutout cross-quad billboards (the standard cheap way to do thick vegetation)
 function billboardLayer(texUrl, count, hMin, hMax, opts) {
   opts = opts || {};
@@ -323,7 +334,7 @@ function buildBeacon() {
   const bx = Math.cos(ang) * d, bz = Math.sin(ang) * d;
   S.extraction.beacon.x = bx; S.extraction.beacon.z = bz;
 
-  const g = new THREE.Group(); g.position.set(bx, 0, bz);
+  const g = new THREE.Group(); g.position.set(bx, groundH(bx, bz), bz);
   const pylon = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 4.2, 8),
     new THREE.MeshStandardMaterial({ color: 0x3a4a3a, roughness: 1, emissive: 0x123512, emissiveIntensity: 0.5, flatShading: true }));
   pylon.position.y = 2.1; g.add(pylon);
@@ -335,6 +346,32 @@ function buildBeacon() {
     new THREE.MeshBasicMaterial({ color: 0x7CFC00, transparent: true, opacity: 0.8 }));
   beaconRing.rotation.x = -Math.PI / 2; beaconRing.position.y = 0.3; g.add(beaconRing);
   beaconMesh = g; scene.add(g);
+  buildFacility(bx, bz);
+}
+
+// extraction facility around the beacon: helipad, bunker, comms tower, floodlights, red warning beacons
+function buildFacility(bx, bz) {
+  const concrete = new THREE.MeshStandardMaterial({ color: 0x8a8f8c, roughness: 0.9, metalness: 0.05 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x55595a, roughness: 0.9 });
+  const lamp = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2c0, emissiveIntensity: 2.4 });
+  const red = new THREE.MeshStandardMaterial({ color: 0xff3a2a, emissive: 0xff2a1a, emissiveIntensity: 2.6 });
+  const g = new THREE.Group(); g.position.set(bx, groundH(bx, bz), bz);
+  // orient the complex to face the valley centre
+  g.rotation.y = Math.atan2(-bx, -bz);
+  const pad = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 0.4, 28), concrete); pad.position.y = 0.2; g.add(pad);
+  const padRing = new THREE.Mesh(new THREE.TorusGeometry(7, 0.25, 8, 36), new THREE.MeshStandardMaterial({ color: 0xd6a23a, emissive: 0x5a3f0e, emissiveIntensity: 0.5 }));
+  padRing.rotation.x = -Math.PI / 2; padRing.position.y = 0.45; g.add(padRing);
+  const bld = new THREE.Mesh(new THREE.BoxGeometry(22, 9, 14), concrete); bld.position.set(0, 4.5, -17); g.add(bld);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(24, 1, 16), dark); roof.position.set(0, 9.4, -17); g.add(roof);
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(3, 18, 3), concrete); tower.position.set(13, 9, -21); g.add(tower);
+  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 8, 6), dark); antenna.position.set(13, 22, -21); g.add(antenna);
+  for (const [px, pz] of [[-11, -3], [11, -3], [-11, -29], [11, -29]]) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.32, 12, 6), dark); pole.position.set(px, 6, pz); g.add(pole);
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 10), lamp); l.position.set(px, 12, pz); g.add(l);
+    const pl = new THREE.PointLight(0xfff2c0, 1.2, 55); pl.position.set(px, 12, pz); g.add(pl);
+  }
+  for (const [px, pz] of [[-11, -10], [11, -10]]) { const rb = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), red); rb.position.set(px, 10.3, pz); g.add(rb); }
+  scene.add(g);
 }
 
 /* --------------------------------------------------------------- input ---- */
