@@ -1,35 +1,420 @@
 {
-  "_note": "Field Guide content. Stats are read from species.json; this adds real-world facts + strengths/weaknesses + survival tactics. Keep grounded in known paleontology.",
-  "codex": {
-    "velociraptor": { "era": "Late Cretaceous · Mongolia", "facts": "Really turkey-sized and feathered, not the movie giant. A nimble pack hunter with a retractable sickle claw on each foot.", "strengths": ["Fast and agile", "Coordinated pack tactics", "Leaping pounce"], "weaknesses": ["Small, low individual health", "Reliant on the pack — scatter it and it falters"], "survival": "Never let them surround you. Put your back to a wall or ruin, use chokepoints, and a flare or loud deterrent breaks the pack." },
-    "deinonychus": { "era": "Early Cretaceous · North America", "facts": "The dromaeosaur that actually inspired the films' 'raptors'. Hunted in coordinated packs using a killing claw.", "strengths": ["Flanking pack AI", "Quick bursts and leaps"], "weaknesses": ["Fragile alone", "Loses its nerve when isolated"], "survival": "Keep your flanks covered and break line of sight between members. Reach the safe zone — they won't follow into the lit perimeter." },
-    "troodon": { "era": "Late Cretaceous · North America", "facts": "Small, with a large brain and big eyes — one of the keenest-sensed dinosaurs, capable of low-light hunting.", "strengths": ["Exceptional senses", "Fast and stealthy"], "weaknesses": ["Very fragile", "Easily deterred"], "survival": "It hunts by sense — crouch, stay quiet, and keep your noise low. Don't sprint near cover it could be using." },
-    "atrociraptor": { "era": "Late Cretaceous · Canada", "facts": "A short-snouted, sprinter-built dromaeosaur. Built for explosive speed over short distances.", "strengths": ["High sprint speed", "Pack pressure"], "weaknesses": ["Low health", "Tires after the burst"], "survival": "Don't try to outrun the first burst — break its line and outlast it, then slip to the beacon." },
-    "pyroraptor": { "era": "Late Cretaceous · Europe", "facts": "A feathered raptor; recent finds suggest some dromaeosaurs were comfortable near water.", "strengths": ["Agile", "Hunts in pairs"], "weaknesses": ["Lightweight, low health"], "survival": "Water won't shake it. Use dense cover and ruins to break pursuit." },
-    "dilophosaurus": { "era": "Early Jurassic · North America", "facts": "Twin head crests are real — but the venom-spitting frill is pure fiction. The real animal was a slender predator of fish and small prey.", "strengths": ["Ambush from cover", "Agile"], "weaknesses": ["Lightly built, weak bite"], "survival": "It strikes from cover — scan tree lines and ruins. Bright light or a sudden noise will make it think twice." },
-    "majungasaurus": { "era": "Late Cretaceous · Madagascar", "facts": "A stocky abelisaurid with a short, deep skull and a small head horn. Fossil evidence shows it ate its own kind.", "strengths": ["Strong bite", "Ambush, sturdy build"], "weaknesses": ["Stubby arms", "Poor turning"], "survival": "It can't turn sharply — circle it and cut back. Break the chase and it loses interest." },
-    "cryolophosaurus": { "era": "Early Jurassic · Antarctica", "facts": "Found in Antarctica with a distinctive sideways crest above the eyes — nicknamed 'Elvisaurus'.", "strengths": ["Persistent pursuit", "Good size"], "weaknesses": ["Not a top-tier bite"], "survival": "Keep distance and use terrain — it commits to a straight chase you can break." },
-    "monolophosaurus": { "era": "Middle Jurassic · China", "facts": "Named for the single bony crest running along its snout, likely for display.", "strengths": ["Decent pursuit speed"], "weaknesses": ["Mid-sized, beatable to cover"], "survival": "Weave through trees and ruins; don't let it pin you in the open." },
-    "ceratosaurus": { "era": "Late Jurassic · North America", "facts": "Sported a blade-like nose horn and a deep, flexible tail — it may have been a capable swimmer.", "strengths": ["Strong bite", "Comfortable near water"], "weaknesses": ["Shorter legs, not the fastest"], "survival": "Outrun it in the open and stay out of the water, where it has the edge." },
-    "rugops": { "era": "Late Cretaceous · Africa", "facts": "A lightly-built abelisaurid with weak jaws — most likely a scavenger rather than a big-game killer.", "strengths": ["Persistent scavenger"], "weaknesses": ["Weak bite, not built for live prey"], "survival": "Stand your ground with noise and light — it's easily driven off a kill or a cornered survivor." },
-    "megalosaurus": { "era": "Middle Jurassic · Europe", "facts": "The first dinosaur ever scientifically named (1824). A robust, powerful Jurassic predator.", "strengths": ["Powerful, sturdy"], "weaknesses": ["Heavy — slow to turn"], "survival": "Juke its turns and break line of sight; don't try to outmuscle it." },
-    "allosaurus": { "era": "Late Jurassic · North America", "facts": "An apex Jurassic hunter that attacked with a hatchet-like slashing bite rather than crushing power.", "strengths": ["Fast for its size", "Strong slashing attack"], "weaknesses": ["Relatively weak bite force", "Tires in a long chase"], "survival": "Never trade blows. Keep moving, use cover, and make the beacon — it can't follow inside." },
-    "yangchuanosaurus": { "era": "Late Jurassic · China", "facts": "A large Asian allosauroid — the Jurassic apex of its ecosystem, similar in role to Allosaurus.", "strengths": ["Large and powerful"], "weaknesses": ["Slow turning"], "survival": "Distance and terrain. Cut around obstacles it must lumber around." },
-    "carnotaurus": { "era": "Late Cretaceous · Argentina", "facts": "Bull-horned and built for speed — one of the fastest large predators. Tiny arms and forward-facing eyes for a narrow field of view.", "strengths": ["Top straight-line speed", "Devastating charge"], "weaknesses": ["Narrow vision (poor peripheral)", "Can't corner at speed"], "survival": "Bait the charge, then dodge hard sideways at the last second — it can't turn with you. Use its blind flanks." },
-    "baryonyx": { "era": "Early Cretaceous · Europe", "facts": "A fish-eating spinosaurid with a huge thumb claw and croc-like jaws; fossils contain fish scales.", "strengths": ["Hooked claw", "Dominant near water"], "weaknesses": ["Specialized for fish, less for fast land prey"], "survival": "Stay off the riverbanks — it patrols water's edge. On dry, open ground you have the advantage." },
-    "suchomimus": { "era": "Early Cretaceous · Africa", "facts": "A large spinosaurid with a long crocodilian snout and a low back sail, tied to rivers and lakes.", "strengths": ["Long reach", "Strong near water"], "weaknesses": ["Narrow jaws", "Water-dependent"], "survival": "Avoid the river entirely. It's far less dangerous away from the water." },
-    "spinosaurus": { "era": "Cretaceous · North Africa", "facts": "The largest known predatory dinosaur — semi-aquatic, with a tall sail and a paddle-like tail. Ruled the rivers.", "strengths": ["Enormous, very high health", "Apex in and near water"], "weaknesses": ["Most dangerous at the water — less agile on open land"], "survival": "Never wade or linger by the river. Keep to high, dry ground and it's far easier to evade." },
-    "trex": { "era": "Late Cretaceous · North America", "facts": "The apex predator. The strongest bite of any land animal, superb smell — and it could absolutely see you standing still (the 'movement vision' is a myth).", "strengths": ["Bone-crushing bite", "Massive health", "Keen senses"], "weaknesses": ["Wide turning circle", "Tires over distance"], "survival": "Don't rely on staying still. Use cover and elevation, keep noise down, juke its turns, and run for the safe zone." },
-    "giganotosaurus": { "era": "Late Cretaceous · Argentina", "facts": "Among the largest land predators ever — slightly longer than T. rex, with a slashing bite and possible pack behavior.", "strengths": ["Enormous and fast for its size", "Slashing attack"], "weaknesses": ["Large turning radius", "Limited stamina"], "survival": "Never face it in the open. Weave through ruins and forest to break its line of sight and reach safety." },
-    "parasaurolophus": { "era": "Late Cretaceous · North America", "facts": "A duck-billed hadrosaur whose long hollow crest worked like a resonating horn for herd communication.", "strengths": ["Loud alarm calls", "Fast runner in a herd"], "weaknesses": ["No defenses — always flees"], "survival": "Harmless to you. But its blaring alarm calls draw predators — don't spook a herd while hiding nearby." },
-    "corythosaurus": { "era": "Late Cretaceous · North America", "facts": "A helmet-crested hadrosaur that moved in herds, relying on numbers and vocal alarms.", "strengths": ["Herd early-warning"], "weaknesses": ["Defenseless"], "survival": "Harmless — and useful. A bolting herd is your cue that a predator is near." },
-    "iguanodon": { "era": "Early Cretaceous · Europe", "facts": "A big ornithopod with a sharp conical thumb spike — a genuine defensive weapon. Walked on two legs or four.", "strengths": ["Thumb spike can wound", "Heavy and sturdy"], "weaknesses": ["Slow", "Not aggressive unless cornered"], "survival": "Leave it space. Crowd or corner it and the thumb spike will hurt — otherwise it ignores you." },
-    "gallimimus": { "era": "Late Cretaceous · Mongolia", "facts": "An ostrich-mimic and one of the fastest dinosaurs, with a toothless beak and an omnivorous diet.", "strengths": ["Extreme speed", "Skittish — hard to approach"], "weaknesses": ["Completely defenseless"], "survival": "Harmless. A sudden stampede of them is a reliable predator alarm — move the opposite way." },
-    "dryosaurus": { "era": "Late Jurassic · North America", "facts": "A small, lightly-built, fleet-footed plant-eater that relied on speed and the herd.", "strengths": ["Quick", "Herd alertness"], "weaknesses": ["Defenseless"], "survival": "Harmless. Watch which way the herd flees to read where danger is." },
-    "hypsilophodon": { "era": "Early Cretaceous · Europe", "facts": "A small, agile herbivore — once wrongly imagined as a tree-climber; really a fast ground runner.", "strengths": ["Very agile"], "weaknesses": ["Tiny and defenseless"], "survival": "Harmless. Their nervous scattering signals a nearby threat." },
-    "triceratops": { "era": "Late Cretaceous · North America", "facts": "Three horns and a massive bony frill; among the very last non-bird dinosaurs. Will stand and fight.", "strengths": ["Goring horns", "Charges when threatened", "Very high health"], "weaknesses": ["Slow to turn"], "survival": "Don't corner it or approach near young. Keep your distance and it leaves you be — provoke a charge and it's lethal." },
-    "pachyrhinosaurus": { "era": "Late Cretaceous · North America", "facts": "A ceratopsian with a thick bony pad (boss) over the nose instead of a horn; travelled in big herds.", "strengths": ["Battering boss", "Herd defense"], "weaknesses": ["Slow"], "survival": "Give the herd room. Unprovoked it ignores you; pressured, the boss is a battering ram." },
-    "stegosaurus": { "era": "Late Jurassic · North America", "facts": "Plated back and a spiked tail — the 'thagomizer' — that could impale a predator. Famously tiny-brained.", "strengths": ["Lethal tail spikes", "Tough"], "weaknesses": ["Slow", "Head held low"], "survival": "Never approach from behind — the tail is deadly. Stay to its front or side and keep your distance." },
-    "ankylosaurus": { "era": "Late Cretaceous · North America", "facts": "A living tank: armor-plated, with a bony tail club heavy enough to break a predator's bones.", "strengths": ["Near-impervious armor", "Bone-breaking tail club"], "weaknesses": ["Very slow", "Low to the ground"], "survival": "Harmless if left alone. Never get near or behind the tail club — keep clear and it won't bother you." }
+ "_note": "Field Guide content. Stats are read from species.json; this adds real-world facts + strengths/weaknesses + survival tactics. Keep grounded in known paleontology.",
+ "codex": {
+  "velociraptor": {
+   "era": "Late Cretaceous \u00b7 Mongolia",
+   "facts": "Really turkey-sized and feathered, not the movie giant. A nimble pack hunter with a retractable sickle claw on each foot.",
+   "strengths": [
+    "Fast and agile",
+    "Coordinated pack tactics",
+    "Leaping pounce"
+   ],
+   "weaknesses": [
+    "Small, low individual health",
+    "Reliant on the pack \u2014 scatter it and it falters"
+   ],
+   "survival": "Never let them surround you. Put your back to a wall or ruin, use chokepoints, and a flare or loud deterrent breaks the pack."
+  },
+  "deinonychus": {
+   "era": "Early Cretaceous \u00b7 North America",
+   "facts": "The dromaeosaur that actually inspired the films' 'raptors'. Hunted in coordinated packs using a killing claw.",
+   "strengths": [
+    "Flanking pack AI",
+    "Quick bursts and leaps"
+   ],
+   "weaknesses": [
+    "Fragile alone",
+    "Loses its nerve when isolated"
+   ],
+   "survival": "Keep your flanks covered and break line of sight between members. Reach the safe zone \u2014 they won't follow into the lit perimeter."
+  },
+  "troodon": {
+   "era": "Late Cretaceous \u00b7 North America",
+   "facts": "Small, with a large brain and big eyes \u2014 one of the keenest-sensed dinosaurs, capable of low-light hunting.",
+   "strengths": [
+    "Exceptional senses",
+    "Fast and stealthy"
+   ],
+   "weaknesses": [
+    "Very fragile",
+    "Easily deterred"
+   ],
+   "survival": "It hunts by sense \u2014 crouch, stay quiet, and keep your noise low. Don't sprint near cover it could be using."
+  },
+  "atrociraptor": {
+   "era": "Late Cretaceous \u00b7 Canada",
+   "facts": "A short-snouted, sprinter-built dromaeosaur. Built for explosive speed over short distances.",
+   "strengths": [
+    "High sprint speed",
+    "Pack pressure"
+   ],
+   "weaknesses": [
+    "Low health",
+    "Tires after the burst"
+   ],
+   "survival": "Don't try to outrun the first burst \u2014 break its line and outlast it, then slip to the beacon."
+  },
+  "pyroraptor": {
+   "era": "Late Cretaceous \u00b7 Europe",
+   "facts": "A feathered raptor; recent finds suggest some dromaeosaurs were comfortable near water.",
+   "strengths": [
+    "Agile",
+    "Hunts in pairs"
+   ],
+   "weaknesses": [
+    "Lightweight, low health"
+   ],
+   "survival": "Water won't shake it. Use dense cover and ruins to break pursuit."
+  },
+  "dilophosaurus": {
+   "era": "Early Jurassic \u00b7 North America",
+   "facts": "Twin head crests are real \u2014 but the venom-spitting frill is pure fiction. The real animal was a slender predator of fish and small prey.",
+   "strengths": [
+    "Ambush from cover",
+    "Agile"
+   ],
+   "weaknesses": [
+    "Lightly built, weak bite"
+   ],
+   "survival": "It strikes from cover \u2014 scan tree lines and ruins. Bright light or a sudden noise will make it think twice."
+  },
+  "majungasaurus": {
+   "era": "Late Cretaceous \u00b7 Madagascar",
+   "facts": "A stocky abelisaurid with a short, deep skull and a small head horn. Fossil evidence shows it ate its own kind.",
+   "strengths": [
+    "Strong bite",
+    "Ambush, sturdy build"
+   ],
+   "weaknesses": [
+    "Stubby arms",
+    "Poor turning"
+   ],
+   "survival": "It can't turn sharply \u2014 circle it and cut back. Break the chase and it loses interest."
+  },
+  "cryolophosaurus": {
+   "era": "Early Jurassic \u00b7 Antarctica",
+   "facts": "Found in Antarctica with a distinctive sideways crest above the eyes \u2014 nicknamed 'Elvisaurus'.",
+   "strengths": [
+    "Persistent pursuit",
+    "Good size"
+   ],
+   "weaknesses": [
+    "Not a top-tier bite"
+   ],
+   "survival": "Keep distance and use terrain \u2014 it commits to a straight chase you can break."
+  },
+  "monolophosaurus": {
+   "era": "Middle Jurassic \u00b7 China",
+   "facts": "Named for the single bony crest running along its snout, likely for display.",
+   "strengths": [
+    "Decent pursuit speed"
+   ],
+   "weaknesses": [
+    "Mid-sized, beatable to cover"
+   ],
+   "survival": "Weave through trees and ruins; don't let it pin you in the open."
+  },
+  "ceratosaurus": {
+   "era": "Late Jurassic \u00b7 North America",
+   "facts": "Sported a blade-like nose horn and a deep, flexible tail \u2014 it may have been a capable swimmer.",
+   "strengths": [
+    "Strong bite",
+    "Comfortable near water"
+   ],
+   "weaknesses": [
+    "Shorter legs, not the fastest"
+   ],
+   "survival": "Outrun it in the open and stay out of the water, where it has the edge."
+  },
+  "rugops": {
+   "era": "Late Cretaceous \u00b7 Africa",
+   "facts": "A lightly-built abelisaurid with weak jaws \u2014 most likely a scavenger rather than a big-game killer.",
+   "strengths": [
+    "Persistent scavenger"
+   ],
+   "weaknesses": [
+    "Weak bite, not built for live prey"
+   ],
+   "survival": "Stand your ground with noise and light \u2014 it's easily driven off a kill or a cornered survivor."
+  },
+  "megalosaurus": {
+   "era": "Middle Jurassic \u00b7 Europe",
+   "facts": "The first dinosaur ever scientifically named (1824). A robust, powerful Jurassic predator.",
+   "strengths": [
+    "Powerful, sturdy"
+   ],
+   "weaknesses": [
+    "Heavy \u2014 slow to turn"
+   ],
+   "survival": "Juke its turns and break line of sight; don't try to outmuscle it."
+  },
+  "allosaurus": {
+   "era": "Late Jurassic \u00b7 North America",
+   "facts": "An apex Jurassic hunter that attacked with a hatchet-like slashing bite rather than crushing power.",
+   "strengths": [
+    "Fast for its size",
+    "Strong slashing attack"
+   ],
+   "weaknesses": [
+    "Relatively weak bite force",
+    "Tires in a long chase"
+   ],
+   "survival": "Never trade blows. Keep moving, use cover, and make the beacon \u2014 it can't follow inside."
+  },
+  "yangchuanosaurus": {
+   "era": "Late Jurassic \u00b7 China",
+   "facts": "A large Asian allosauroid \u2014 the Jurassic apex of its ecosystem, similar in role to Allosaurus.",
+   "strengths": [
+    "Large and powerful"
+   ],
+   "weaknesses": [
+    "Slow turning"
+   ],
+   "survival": "Distance and terrain. Cut around obstacles it must lumber around."
+  },
+  "carnotaurus": {
+   "era": "Late Cretaceous \u00b7 Argentina",
+   "facts": "Bull-horned and built for speed \u2014 one of the fastest large predators. Tiny arms and forward-facing eyes for a narrow field of view.",
+   "strengths": [
+    "Top straight-line speed",
+    "Devastating charge"
+   ],
+   "weaknesses": [
+    "Narrow vision (poor peripheral)",
+    "Can't corner at speed"
+   ],
+   "survival": "Bait the charge, then dodge hard sideways at the last second \u2014 it can't turn with you. Use its blind flanks."
+  },
+  "baryonyx": {
+   "era": "Early Cretaceous \u00b7 Europe",
+   "facts": "A fish-eating spinosaurid with a huge thumb claw and croc-like jaws; fossils contain fish scales.",
+   "strengths": [
+    "Hooked claw",
+    "Dominant near water"
+   ],
+   "weaknesses": [
+    "Specialized for fish, less for fast land prey"
+   ],
+   "survival": "Stay off the riverbanks \u2014 it patrols water's edge. On dry, open ground you have the advantage."
+  },
+  "suchomimus": {
+   "era": "Early Cretaceous \u00b7 Africa",
+   "facts": "A large spinosaurid with a long crocodilian snout and a low back sail, tied to rivers and lakes.",
+   "strengths": [
+    "Long reach",
+    "Strong near water"
+   ],
+   "weaknesses": [
+    "Narrow jaws",
+    "Water-dependent"
+   ],
+   "survival": "Avoid the river entirely. It's far less dangerous away from the water."
+  },
+  "spinosaurus": {
+   "era": "Cretaceous \u00b7 North Africa",
+   "facts": "The largest known predatory dinosaur \u2014 semi-aquatic, with a tall sail and a paddle-like tail. Ruled the rivers.",
+   "strengths": [
+    "Enormous, very high health",
+    "Apex in and near water"
+   ],
+   "weaknesses": [
+    "Most dangerous at the water \u2014 less agile on open land"
+   ],
+   "survival": "Never wade or linger by the river. Keep to high, dry ground and it's far easier to evade."
+  },
+  "trex": {
+   "era": "Late Cretaceous \u00b7 North America",
+   "facts": "The apex predator. The strongest bite of any land animal, superb smell \u2014 and it could absolutely see you standing still (the 'movement vision' is a myth).",
+   "strengths": [
+    "Bone-crushing bite",
+    "Massive health",
+    "Keen senses"
+   ],
+   "weaknesses": [
+    "Wide turning circle",
+    "Tires over distance"
+   ],
+   "survival": "Don't rely on staying still. Use cover and elevation, keep noise down, juke its turns, and run for the safe zone."
+  },
+  "giganotosaurus": {
+   "era": "Late Cretaceous \u00b7 Argentina",
+   "facts": "Among the largest land predators ever \u2014 slightly longer than T. rex, with a slashing bite and possible pack behavior.",
+   "strengths": [
+    "Enormous and fast for its size",
+    "Slashing attack"
+   ],
+   "weaknesses": [
+    "Large turning radius",
+    "Limited stamina"
+   ],
+   "survival": "Never face it in the open. Weave through ruins and forest to break its line of sight and reach safety."
+  },
+  "parasaurolophus": {
+   "era": "Late Cretaceous \u00b7 North America",
+   "facts": "A duck-billed hadrosaur whose long hollow crest worked like a resonating horn for herd communication.",
+   "strengths": [
+    "Loud alarm calls",
+    "Fast runner in a herd"
+   ],
+   "weaknesses": [
+    "No defenses \u2014 always flees"
+   ],
+   "survival": "Harmless to you. But its blaring alarm calls draw predators \u2014 don't spook a herd while hiding nearby."
+  },
+  "corythosaurus": {
+   "era": "Late Cretaceous \u00b7 North America",
+   "facts": "A helmet-crested hadrosaur that moved in herds, relying on numbers and vocal alarms.",
+   "strengths": [
+    "Herd early-warning"
+   ],
+   "weaknesses": [
+    "Defenseless"
+   ],
+   "survival": "Harmless \u2014 and useful. A bolting herd is your cue that a predator is near."
+  },
+  "iguanodon": {
+   "era": "Early Cretaceous \u00b7 Europe",
+   "facts": "A big ornithopod with a sharp conical thumb spike \u2014 a genuine defensive weapon. Walked on two legs or four.",
+   "strengths": [
+    "Thumb spike can wound",
+    "Heavy and sturdy"
+   ],
+   "weaknesses": [
+    "Slow",
+    "Not aggressive unless cornered"
+   ],
+   "survival": "Leave it space. Crowd or corner it and the thumb spike will hurt \u2014 otherwise it ignores you."
+  },
+  "gallimimus": {
+   "era": "Late Cretaceous \u00b7 Mongolia",
+   "facts": "An ostrich-mimic and one of the fastest dinosaurs, with a toothless beak and an omnivorous diet.",
+   "strengths": [
+    "Extreme speed",
+    "Skittish \u2014 hard to approach"
+   ],
+   "weaknesses": [
+    "Completely defenseless"
+   ],
+   "survival": "Harmless. A sudden stampede of them is a reliable predator alarm \u2014 move the opposite way."
+  },
+  "dryosaurus": {
+   "era": "Late Jurassic \u00b7 North America",
+   "facts": "A small, lightly-built, fleet-footed plant-eater that relied on speed and the herd.",
+   "strengths": [
+    "Quick",
+    "Herd alertness"
+   ],
+   "weaknesses": [
+    "Defenseless"
+   ],
+   "survival": "Harmless. Watch which way the herd flees to read where danger is."
+  },
+  "hypsilophodon": {
+   "era": "Early Cretaceous \u00b7 Europe",
+   "facts": "A small, agile herbivore \u2014 once wrongly imagined as a tree-climber; really a fast ground runner.",
+   "strengths": [
+    "Very agile"
+   ],
+   "weaknesses": [
+    "Tiny and defenseless"
+   ],
+   "survival": "Harmless. Their nervous scattering signals a nearby threat."
+  },
+  "triceratops": {
+   "era": "Late Cretaceous \u00b7 North America",
+   "facts": "Three horns and a massive bony frill; among the very last non-bird dinosaurs. Will stand and fight.",
+   "strengths": [
+    "Goring horns",
+    "Charges when threatened",
+    "Very high health"
+   ],
+   "weaknesses": [
+    "Slow to turn"
+   ],
+   "survival": "Don't corner it or approach near young. Keep your distance and it leaves you be \u2014 provoke a charge and it's lethal."
+  },
+  "pachyrhinosaurus": {
+   "era": "Late Cretaceous \u00b7 North America",
+   "facts": "A ceratopsian with a thick bony pad (boss) over the nose instead of a horn; travelled in big herds.",
+   "strengths": [
+    "Battering boss",
+    "Herd defense"
+   ],
+   "weaknesses": [
+    "Slow"
+   ],
+   "survival": "Give the herd room. Unprovoked it ignores you; pressured, the boss is a battering ram."
+  },
+  "stegosaurus": {
+   "era": "Late Jurassic \u00b7 North America",
+   "facts": "Plated back and a spiked tail \u2014 the 'thagomizer' \u2014 that could impale a predator. Famously tiny-brained.",
+   "strengths": [
+    "Lethal tail spikes",
+    "Tough"
+   ],
+   "weaknesses": [
+    "Slow",
+    "Head held low"
+   ],
+   "survival": "Never approach from behind \u2014 the tail is deadly. Stay to its front or side and keep your distance."
+  },
+  "ankylosaurus": {
+   "era": "Late Cretaceous \u00b7 North America",
+   "facts": "A living tank: armor-plated, with a bony tail club heavy enough to break a predator's bones.",
+   "strengths": [
+    "Near-impervious armor",
+    "Bone-breaking tail club"
+   ],
+   "weaknesses": [
+    "Very slow",
+    "Low to the ground"
+   ],
+   "survival": "Harmless if left alone. Never get near or behind the tail club \u2014 keep clear and it won't bother you."
+  },
+  "indominus": {
+   "era": "Engineered hybrid \u00b7 Jurassic World",
+   "facts": "Not a natural animal. A genetically-engineered apex built from T-Rex, raptor, cuttlefish and tree-frog DNA \u2014 intelligent, fast, and able to mask its heat signature. It kills for sport, not food.",
+   "strengths": [
+    "Massive health and bite force",
+    "Faster and smarter than a T-Rex",
+    "Counter-camouflage and thermal masking",
+    "Sets ambushes \u2014 remembers where you hid"
+   ],
+   "weaknesses": [
+    "Arrogant \u2014 can be lured and trapped",
+    "Rival apexes (T-Rex, Mosasaurus) will fight it",
+    "Containment paddocks can still hold it"
+   ],
+   "survival": "You cannot out-fight it. Break line of sight, use the towers and structures, and decide the ending fast \u2014 contain it, feed it to the lagoon, or run. Hesitation is death."
+  },
+  "mosasaurus": {
+   "era": "Late Cretaceous \u00b7 open ocean",
+   "facts": "An 17-metre marine reptile that ruled the seas \u2014 closer to a monitor lizard than a fish. Ambushes from below and breaches to take prey off the surface.",
+   "strengths": [
+    "Enormous size and crushing jaws",
+    "Explosive lunge from deep water",
+    "Owns the lagoon and river mouth"
+   ],
+   "weaknesses": [
+    "Bound to water \u2014 helpless on land",
+    "Slow to re-submerge after a breach"
+   ],
+   "survival": "Stay back from deep water and the river's edge. It can only take what comes within reach of the surface \u2014 but anything it grabs is gone."
+  },
+  "pteranodon": {
+   "era": "Late Cretaceous \u00b7 coastal cliffs",
+   "facts": "A large toothless pterosaur with a seven-metre wingspan and a long bony crest. Not a strong flier in still air \u2014 it rides thermals and dives on prey.",
+   "strengths": [
+    "Attacks from the air, hard to track",
+    "Dives and grabs \u2014 can lift a person",
+    "Hunts in wheeling flocks"
+   ],
+   "weaknesses": [
+    "Fragile \u2014 low health",
+    "Clumsy and vulnerable on the ground",
+    "Scattered by flares and loud noise"
+   ],
+   "survival": "Get under cover when the flock wheels overhead. Open ground is their kill zone; tree canopy, towers and roofs break their dive."
   }
+ }
 }
