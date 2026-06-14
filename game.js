@@ -1941,8 +1941,10 @@ try { if (window.speechSynthesis) { window.speechSynthesis.onvoiceschanged = () 
 // fall back to the synthetic voice if a clip is missing or blocked.
 const RADIO_DIR = "./assets/audio/intro/";
 const _radioClips = {};
-function radioClip(name) { if (!_radioClips[name]) { const a = new Audio(RADIO_DIR + name + ".m4a"); a.preload = "auto"; a.volume = 0.95; _radioClips[name] = a; } return _radioClips[name]; }
-function preloadRadio() { ["pilot_mayday","pilot_brace","ranger_enter","ranger_thermal","soto_cleared","soto_alive","soto_samples","pilot_skids","convoy_sector","ranger2_ping","convoy_wrecked","convoy_tracks","boat_approach","boat_stations","boat_tunnel","boat_dock","mono_transit","mono_power","mono_restore","mono_doors"].forEach(radioClip); }
+// NB: the game defines its own `Audio` object below, which shadows the browser Audio constructor —
+// so we must use `window.Audio` here for the HTMLAudioElement, not bare `Audio`.
+function radioClip(name) { if (!_radioClips[name]) { const a = new window.Audio(RADIO_DIR + name + ".m4a"); a.preload = "auto"; a.volume = 0.95; _radioClips[name] = a; } return _radioClips[name]; }
+function preloadRadio() { try { ["pilot_mayday","pilot_brace","ranger_enter","ranger_thermal","soto_cleared","soto_alive","soto_samples","pilot_skids","convoy_sector","ranger2_ping","convoy_wrecked","convoy_tracks","boat_approach","boat_stations","boat_tunnel","boat_dock","mono_transit","mono_power","mono_restore","mono_doors"].forEach(radioClip); } catch (e) {} }
 function stopRadioClips() { for (const k in _radioClips) { try { _radioClips[k].pause(); _radioClips[k].currentTime = 0; } catch (e) {} } }
 function playRadio(e) {   // e = { say, voice, clip }
   if (e && e.clip) {
