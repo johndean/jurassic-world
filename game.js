@@ -184,16 +184,12 @@ function buildWorld() {
   scene.add(new THREE.HemisphereLight(0x9aa6ad, 0x32383a, 0.55));
   scene.add(new THREE.AmbientLight(0x6b7378, 0.35));
 
-  // ground: subtle height noise, pale concrete-grey
-  const seg = 64;
+  // ground: rolling valley floor ringed by mountains, carved by a winding river (shaped by groundH)
+  const seg = 110;
   const gGeo = new THREE.PlaneGeometry(m.size, m.size, seg, seg);
   gGeo.rotateX(-Math.PI / 2);
   const pos = gGeo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), z = pos.getZ(i);
-    const h = Math.sin(x * 0.06) * Math.cos(z * 0.05) * 0.8 + Math.sin(x * 0.15 + z * 0.1) * 0.35;
-    pos.setY(i, h);
-  }
+  for (let i = 0; i < pos.count; i++) pos.setY(i, groundH(pos.getX(i), pos.getZ(i)));
   gGeo.computeVertexNormals();
   const groundTex = _texLoader.load(GROUND_TEX);
   groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
@@ -202,6 +198,11 @@ function buildWorld() {
   groundTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const ground = new THREE.Mesh(gGeo, new THREE.MeshStandardMaterial({ map: groundTex, color: 0x93a487, roughness: 1, metalness: 0 }));
   scene.add(ground);
+
+  // river: one translucent water plane; the terrain occludes it everywhere except the carved channel
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(m.size, m.size),
+    new THREE.MeshStandardMaterial({ color: 0x2f5358, roughness: 0.22, metalness: 0.25, transparent: true, opacity: 0.85 }));
+  water.rotation.x = -Math.PI / 2; water.position.y = -1.1; scene.add(water);
 
   // boundary walls (charcoal slabs) — soft fence of the valley
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x24282a, roughness: 1, flatShading: true });
@@ -212,15 +213,19 @@ function buildWorld() {
 
   buildFoliage();
 
-  // INSTANCED rocks — one draw call
+  // INSTANCED rocks — boulders across the valley, clustered along the river, sitting on the terrain
   const dm = new THREE.Object3D();
-  const NR = BIOME.scatter.rocks;
-  const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0x60666a, roughness: 1, flatShading: true }), NR);
+  const NR = 130;
+  const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0x5b615f, roughness: 1, flatShading: true }), NR);
   for (let i = 0; i < NR; i++) {
-    const x = rand(-half + 4, half - 4), z = rand(-half + 4, half - 4), s = rand(0.6, 2.0);
-    dm.position.set(x, s * 0.4, z); dm.rotation.set(rand(0, 3), rand(0, 6), rand(0, 3)); dm.scale.set(s, s * 0.7, s); dm.updateMatrix();
+    let x, z;
+    if (i % 3 === 0) { x = rand(-half + 10, half - 10); z = 48 + Math.sin(x * 0.02) * 28 + rand(-13, 13); }  // riverside
+    else { x = rand(-half + 4, half - 4); z = rand(-half + 4, half - 4); }
+    const s = rand(0.7, 3.6) * (i % 3 === 0 ? 1.4 : 1);
+    dm.position.set(x, groundH(x, z) + s * 0.25, z); dm.rotation.set(rand(0, 3), rand(0, 6), rand(0, 3)); dm.scale.set(s, s * 0.7, s); dm.updateMatrix();
     rocks.setMatrixAt(i, dm.matrix);
   }
+  rocks.instanceMatrix.needsUpdate = true;
   scene.add(rocks);
 
   buildPlayer();
@@ -404,7 +409,18 @@ function pollGamepad() {
 }
 
 /* ===================================================== ground & helpers === */
-function groundH(x, z) { return Math.sin(x * 0.06) * Math.cos(z * 0.05) * 0.8 + Math.sin(x * 0.15 + z * 0.1) * 0.35; }
+// terrain height: rolling valley floor (>=~0), perimeter mountain ring, and a winding carved river.
+// Everything (ground mesh, foliage, rocks, dinos, player) is placed by this single function.
+function riverCenter(x) { return 48 + Math.sin(x * 0.02) * 28; }   // river centerline z(x)
+function groundH(x, z) {
+  const r = Math.hypot(x, z);
+  let h = 1.8 + Math.sin(x * 0.05) * Math.cos(z * 0.045) * 1.3 + Math.sin(x * 0.13 + z * 0.09) * 0.5;  // rolling hills
+  const e = Math.max(0, (r - 70) / 48);
+  h += e * e * 32 * (0.75 + 0.25 * Math.sin(x * 0.07) * Math.cos(z * 0.06));   // mountains ring the valley
+  const dRiver = Math.abs(z - riverCenter(x));
+  if (dRiver < 11) h -= (1 - dRiver / 11) * 4.0;   // carve the riverbed
+  return h;
+}
 function dist2(ax, az, bx, bz) { const dx = ax - bx, dz = az - bz; return dx * dx + dz * dz; }
 function bearingTo(ax, az, bx, bz) {
   const ang = Math.atan2(bx - ax, -(bz - az)) / DEG; const d = (ang + 360) % 360;
