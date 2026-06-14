@@ -17,6 +17,9 @@
   #vig{position:fixed;inset:0;pointer-events:none;z-index:30;opacity:0;transition:opacity .25s;
     box-shadow:inset 0 0 220px 60px rgba(214,86,47,.0);}
   #flash{position:fixed;inset:0;pointer-events:none;z-index:31;background:#d6562f;opacity:0;}
+  #diveTint{position:fixed;inset:0;pointer-events:none;z-index:30;opacity:0;transition:opacity .4s;
+    background:radial-gradient(ellipse at center,rgba(20,80,120,.25),rgba(8,30,55,.72));}
+  #diveTint.on{opacity:1;}
 
   /* opening crash intro */
   #intro{position:fixed;inset:0;z-index:70;pointer-events:none;overflow:hidden;font-family:ui-monospace,monospace;}
@@ -429,6 +432,7 @@
 <canvas id="c"></canvas>
 <div id="vig"></div>
 <div id="flash"></div>
+<div id="diveTint"></div>
 <div id="dev"></div>
 
 <!-- opening helicopter-crash intro (cinematic overlay) -->
@@ -483,6 +487,7 @@
     <div class="vital"><span id="vHealthL"></span><div class="vital-bar"><i id="vHealth"></i></div><span class="vital-num" id="vHealthN"></span></div>
     <div class="vital"><span id="vStaminaL"></span><div class="vital-bar"><i id="vStamina"></i></div><span class="vital-num" id="vStaminaN"></span></div>
     <div class="vital"><span id="vNoiseL"></span><div class="vital-bar"><i id="vNoise"></i></div><span class="vital-num" id="vNoiseN"></span></div>
+    <div class="vital" id="vOxyRow" style="display:none"><span>OXYGEN</span><div class="vital-bar"><i id="vOxy"></i></div><span class="vital-num" id="vOxyN"></span></div>
   </section>
 
   <section class="exfil" id="exfil">

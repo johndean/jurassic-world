@@ -1483,6 +1483,8 @@ function updatePlayer(dt) {
   P.gait = gait;
   const rmod = P.role ? P.role.mod : EMPTY_MOD;
   speed *= rmod.speed || 1;                                       // role perk: movement (navigator)
+  const inWater = (WATER_Y - groundH(P.x, P.z)) > 1.1 && !P.onTower && !P.onProp;   // deep water → swim drag
+  if (inWater) speed *= 0.55;
   const targetNoise = (cfg.noise[gait] ?? 0) * (rmod.noise || 1); // role perk: stealth/noise (research)
   P.noise = lerp(P.noise, S.extraction.called ? Math.max(targetNoise, 0.6) : targetNoise, 0.15);
 
@@ -1510,6 +1512,19 @@ function updatePlayer(dt) {
   }
   // vertical traversal (jump / auto-vault / mantle) — additive; does nothing while grounded & not jumping
   updateTraversal(dt, wx, wz, moving);
+  // water: deep channel → swim (no jump/mantle); hold crouch to dive (oxygen drains); the current
+  // pushes you downstream so a crossing is a real "do I risk it?" decision, not free movement.
+  const depth = WATER_Y - groundH(P.x, P.z);
+  P.swim = inWater;
+  if (P.swim) {
+    P.air = 0; P.vy = 0; P.onProp = null;
+    P.dive = crouch && depth > 2.0;
+    const sl = riverSlope(P.x), cl = Math.hypot(1, sl), cur = 1.5 * dt;   // gentle downstream drift along the channel
+    P.x += (1 / cl) * cur; P.z += (sl / cl) * cur;
+    P.stamina = Math.max(0, P.stamina - 4 * dt);
+    if (P.dive) { P.oxygen = Math.max(0, (P.oxygen == null ? 100 : P.oxygen) - 14 * dt); if (P.oxygen <= 0) { P.hp = Math.max(0, P.hp - 9 * dt); flash(); if (P.hp <= 0 && P.alive) { P.alive = false; S.killedBy = null; endRun(false); } } }
+    else P.oxygen = Math.min(100, (P.oxygen == null ? 100 : P.oxygen) + 24 * dt);
+  } else { P.dive = false; P.oxygen = Math.min(100, (P.oxygen == null ? 100 : P.oxygen) + 30 * dt); }
   // collide with trees (height-aware: a jump/mantle that clears the canopy base won't be wall-stopped)
   const feetY = (P.onProp ? P.propTopY : playerFloorY(P.x, P.z)) + (P.air || 0);
   for (let i = 0; i < trees.length; i++) {
@@ -1541,8 +1556,9 @@ function updatePlayer(dt) {
   const crouchDrop = P.gait === "crouch" ? 0.4 : 0;
   const idleBob = P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.02 : 0;
   const runBounce = P.gait === "run" ? Math.abs(Math.sin(S.t * 11)) * 0.05 : 0;   // light foot-strike bob
-  const standY = (P.onProp ? P.propTopY : playerFloorY(P.x, P.z)) + (P.air || 0);
-  P.eyeY = standY;                                                                 // camera follows jumps/climbs
+  let standY = (P.onProp ? P.propTopY : playerFloorY(P.x, P.z)) + (P.air || 0);
+  if (P.swim) standY = WATER_Y - (P.dive ? Math.min(3, depth - 0.6) : 0.25) + Math.sin(S.t * 2) * 0.04;   // float / submerge
+  P.eyeY = standY;                                                                 // camera follows jumps/climbs/swim
   playerMesh.position.set(P.x, standY + 0.9 - crouchDrop + idleBob + runBounce, P.z);
   playerMesh.rotation.y = P.yaw;
   playerMesh.rotation.x = (P.gait === "run" ? 0.16 : 0) + (P.gait === "crouch" ? 0.22 : 0) + (P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.012 : 0);
@@ -2016,8 +2032,8 @@ function steer(a, dt, P) {
   a.x += a.vx * dt; a.z += a.vz * dt;
   const lim = BIOME.map.size / 2 - 3; a.x = clamp(a.x, -lim, lim); a.z = clamp(a.z, -lim, lim);
   if (Math.hypot(a.vx, a.vz) > 0.2) a.yaw = lerp2angle(a.yaw, Math.atan2(a.vx, a.vz));
-  // place + animate
-  a.mesh.position.set(a.x, groundH(a.x, a.z), a.z);
+  // place + animate (fliers cruise/dive, aquatic species float in the channel)
+  a.mesh.position.set(a.x, dinoY(a), a.z);
   a.mesh.rotation.y = a.yaw;
   a.anim = Math.max(0, a.anim - dt);
   if (a.roar > 0) a.roar = Math.max(0, a.roar - dt);
@@ -2086,6 +2102,16 @@ function updateDinos(dt, P) {
 }
 function killDino(a) { a.alive = false; scene.remove(a.mesh); }
 function dinoBodyR(a) { return clamp((a.sp.size && a.sp.size.lengthM || 4) * 0.1, 0.4, 2.0); }   // body radius for collision push-out
+const isAquatic = sp => sp.archetype === "water";   // semi-/fully-aquatic: floats & swims in the channel
+const isFlier = sp => sp.role === "flier";          // wheels overhead, dives to strike
+// Per-archetype vertical placement: fliers cruise at altitude (dive when hunting), aquatic species
+// float at the surface over deep water, everyone else stands on the terrain.
+function dinoY(a) {
+  const g = groundH(a.x, a.z);
+  if (isFlier(a.sp)) { const tgt = (a.state === "Chase" || a.state === "Attack") ? 2.4 : 9; a.fly = lerp(a.fly == null ? 9 : a.fly, tgt, 0.04); return g + a.fly + Math.sin(S.t * 2 + a.x) * 0.25; }
+  if (isAquatic(a.sp) && WATER_Y - g > 1.0) return WATER_Y - 0.4 + Math.sin(S.t * 1.6 + a.z) * 0.08;   // swimming at the surface
+  return g;
+}
 
 /* ================================================== spawn director ======= */
 let spawnTimer = 0;
@@ -3183,7 +3209,7 @@ function startRun() {
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
-  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole, onTower: null, zip: null, air: 0, vy: 0, onProp: null, eyeY: null });
+  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole, onTower: null, zip: null, air: 0, vy: 0, onProp: null, eyeY: null, swim: false, dive: false, oxygen: 100 });
   if (Net.on) {   // co-op: spawn beside each other like a squad — a small cluster, same facing, no overlap
     const a = (Net.id || 1) * 2.39996;   // golden-angle spread → distinct, non-overlapping spots
     S.player.x = Math.cos(a) * 3.0; S.player.z = Math.sin(a) * 3.0; S.player.yaw = 0;
@@ -3365,6 +3391,10 @@ function updateHUD() {
   setBar("vHealth", "vHealthN", P.hp, hpColor(P.hp));
   setBar("vStamina", "vStaminaN", P.stamina, "var(--hud-stam)");
   setBar("vNoise", "vNoiseN", P.noise * 100, P.noise > 0.7 ? "var(--hud-alert)" : "var(--hud-accent)");
+  // oxygen — only shown while in water (diving drains it; drowning at zero)
+  const oxRow = $("vOxyRow");
+  if (oxRow) { const inW = !!P.swim; oxRow.style.display = inW ? "" : "none"; if (inW) setBar("vOxy", "vOxyN", P.oxygen == null ? 100 : P.oxygen, (P.oxygen || 0) < 30 ? "var(--hud-alert)" : "var(--hud-water)"); }
+  const dt2 = $("diveTint"); if (dt2) dt2.classList.toggle("on", !!P.dive);   // underwater tint while submerged
 
   // extraction window
   const ex = $("exfil"), btn = $("exfilBtn");
