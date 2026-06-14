@@ -368,7 +368,30 @@ Shorter entries so the audit omits nothing the mandate names. Format compressed 
 
 ---
 
-## §2 — Prioritized Implementation Roadmap
+## IMPLEMENTATION STATUS — all six roadmap passes shipped ✅
+
+The roadmap below has now been **fully implemented and deployed** (commits `4b983ef`→`c833be0`):
+
+1. ✅ **Tactical Awareness** — SAFE ZONE ring drawn on the map (legend defect fixed); dino-intel
+   layer (last-seen ghosts, threat-radius + territory rings, state labels, toggleable layers, complete
+   legends); persistent HUD beacon distance + mission %; mobile parity (compass/threat/contact/legend
+   no longer hidden).
+2. ✅ **Solid World** — queryable collider registry; player + dinos pushed out of rocks, ruins, and
+   mission buildings (zero-ghosting), conservative radii, height-aware.
+3. ✅ **Traversal** — jump (gravity arc), auto-vault over low obstacles, mantle-climb onto ledges,
+   slope stamina; Space / gamepad-Y / touch JUMP; free-walk untouched.
+4. ✅ **Water** — swim + dive (oxygen, current, drowning) in the deep channel; aquatic species float
+   & swim, fliers cruise and dive to strike.
+5. ✅ **Living Ecosystem** — predator-vs-predator hierarchy, feed-at-kill, rest, home territories, herd
+   migration; wired the three unused fields (`social`, `packRoles`, `noiseDrawWeight`).
+6. ✅ **Vehicle instrumentation + environmental storytelling** — cockpit instrument clusters (boat /
+   monorail / jeep); readable site evidence (blood, dropped gear, spent brass, claw-gashes).
+
+> Note: these are mechanically complete and syntax-verified live, but were authored without an
+> in-engine visual pass. Conservative tuning values (collider radii, jump/climb feel, swim speed,
+> instrument-panel placement/orientation) may want a play-test polish pass.
+
+## §2 — Prioritized Implementation Roadmap *(now complete — see status above)*
 
 Ordered by impact-to-effort. Each pass is independently shippable, conservative/additive, and
 preserves free-walk. Owner picks the order; this is the recommended sequence.
