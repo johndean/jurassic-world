@@ -1052,12 +1052,25 @@ function buildBuilding(g, kind) {                         // generic structure: 
   if (kind === "campsite") { for (const c of [[2.6, 1], [-2.6, -1.4]]) { const tent = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.4, 4), _mm(0x4a5236, 0.95)); tent.position.set(c[0], 0.7, c[1]); tent.rotation.y = 0.5; g.add(tent); } const fire = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 6), new THREE.MeshStandardMaterial({ color: 0xff7e2a, emissive: 0xff5a1e, emissiveIntensity: 1.2 })); fire.position.set(0, 0.25, 2.8); g.add(fire); g.add(Object.assign(new THREE.PointLight(0xff7e2a, 1.0, 10), { position: new THREE.Vector3(0, 0.7, 2.8) })); }
   for (const c of [[w * 0.5 + 0.7, 1], [-w * 0.5 - 0.7, -1]]) g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), wood), { position: new THREE.Vector3(c[0], 0.45, c[1]) }));
 }
+// Environmental storytelling: scatter readable evidence of what happened here — blood smears,
+// dropped gear, spent shells, raked claw-gashes — so a site tells its story without exposition.
+function buildSiteStory(g) {
+  const blood = new THREE.MeshStandardMaterial({ color: 0x4a0e08, roughness: 0.9 });
+  const dark = _mm(0x2a2620, 0.85), khaki = _mm(0x6b6347, 0.9), metal = _mm(0x9a8e5a, 0.4, 0.7);
+  for (let i = 0; i < 2; i++) { const bl = new THREE.Mesh(new THREE.CircleGeometry(rand(0.5, 1.1), 12), blood); bl.rotation.x = -Math.PI / 2; bl.position.set(rand(-3.5, 3.5), 0.04, rand(-3.5, 3.5)); bl.scale.z = rand(0.6, 1.5); g.add(bl); }   // blood smears
+  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), dark); helmet.position.set(rand(-3, 3), 0.18, rand(-3, 3)); helmet.rotation.z = rand(-0.5, 0.5); g.add(helmet);   // dropped helmet
+  const pack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.3), khaki); pack.position.set(rand(-3, 3), 0.2, rand(-3, 3)); pack.rotation.y = rand(0, 6); g.add(pack);   // abandoned backpack
+  const crate = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 0.5), khaki); crate.position.set(rand(-3.5, 3.5), 0.25, rand(-3.5, 3.5)); crate.rotation.set(0.4, rand(0, 6), 0.2); g.add(crate);   // toppled supply crate
+  for (let i = 0; i < 6; i++) { const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.1, 6), metal); sh.rotation.set(Math.PI / 2, rand(0, 6), 0); sh.position.set(rand(-2, 2), 0.05, rand(-2, 2)); g.add(sh); }   // spent brass — a last stand
+  for (let i = 0; i < 3; i++) { const cl = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.02, 0.07), blood); cl.position.set(rand(-2.5, 2.5) + i * 0.18, 0.045, rand(-2, 2)); cl.rotation.y = 0.5; g.add(cl); }   // raked claw gashes
+}
 function buildSiteProp(type, x, z) {
   const g = new THREE.Group(); g.position.set(x, groundH(x, z), z); scene.add(g); missionSites.push(g);
   if (type === "outpost") buildCollapsedTower(g);
   else if (type === "generator") buildGenerator(g);
   else if (type === "cave") buildCave(g);
   else buildBuilding(g, type);   // command / facility / campsite / safehouse / supply
+  if (type !== "generator") buildSiteStory(g);   // human sites carry evidence of the attack that happened here
   // make the set-piece solid (into the per-run list so it clears with the mission). Conservative radii
   // keep the objective console reachable — proximity (< r) still triggers from just outside the wall.
   addCollidersFromObject(g, { min: 0.9, minH: 1.0, scale: 0.72, into: missionColliders });
@@ -2242,6 +2255,24 @@ function rotorBlurTexture() {
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; _rotorTex = t; return t;
 }
 
+// Shared cockpit instrument cluster — an angled dark console with lit dial gauges, a glowing data
+// screen and a row of toggle switches, so vehicle interiors read as real operational equipment.
+// Gauge face points toward local -X (toward a crew member looking forward over the console).
+function buildInstrumentCluster(scale) {
+  const g = new THREE.Group();
+  const panel = new THREE.MeshStandardMaterial({ color: 0x1c201d, roughness: 0.7, metalness: 0.4 });
+  const glow = c => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 1.5, roughness: 0.4 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.3, 0.95), panel); base.rotation.z = 0.5; g.add(base);
+  for (let i = 0; i < 3; i++) {   // round dial gauges with needles
+    const col = i === 0 ? 0x6fae6b : i === 1 ? 0xc9a23a : 0x5b9fd6;
+    const dial = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.02, 16), glow(col)); dial.rotation.z = Math.PI / 2 - 0.5; dial.position.set(-0.08, 0.08, -0.3 + i * 0.22); g.add(dial);
+    const ndl = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.06, 0.008), new THREE.MeshStandardMaterial({ color: 0xffffff })); ndl.position.set(-0.085, 0.085, -0.3 + i * 0.22); ndl.rotation.x = (i - 1) * 0.7; g.add(ndl);
+  }
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.16), new THREE.MeshStandardMaterial({ color: 0x0a2a2e, emissive: 0x1d6b76, emissiveIntensity: 1.0 })); screen.rotation.y = -Math.PI / 2; screen.rotation.x = 0.5; screen.position.set(-0.09, 0.06, 0.3); g.add(screen);
+  for (let i = 0; i < 5; i++) { const sw = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.02), glow(i % 2 ? 0xd6562f : 0x6fae6b)); sw.position.set(-0.13, -0.04, -0.32 + i * 0.06); g.add(sw); }
+  g.scale.setScalar(scale || 1); return g;
+}
+
 function buildHeli() {
   const g = new THREE.Group();
   let topY = 3.4, len = 12, tailRotor = null, rotorX = 0, rotorZ = 0;
@@ -2691,6 +2722,7 @@ function buildJeep() {                                    // ranger Land Rover D
   const hood = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.72, 1.95), bodyMat); hood.position.set(1.55, 1.30, 0); j.add(hood);
   const cab = new THREE.Mesh(new THREE.BoxGeometry(2.9, 1.5, 1.95), bodyMat); cab.position.set(-0.55, 1.55, 0); j.add(cab);
   const ws = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.82, 1.82), glassMat); ws.position.set(0.93, 2.12, 0); ws.rotation.z = 0.1; j.add(ws);   // near-vertical windshield
+  { const ic = buildInstrumentCluster(0.85); ic.position.set(0.62, 1.55, 0.0); j.add(ic); }   // dashboard instrument cluster under the windshield
   for (const sz of [0.99, -0.99]) { const sg = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.66, 0.04), glassMat); sg.position.set(-0.7, 2.16, sz); j.add(sg); }   // flat upright side glass
   const roof = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.16, 2.0), roofMat); roof.position.set(-0.6, 2.6, 0); j.add(roof);
   // safari roof rack
@@ -2832,6 +2864,7 @@ function buildBoat() {                                    // detailed armored ri
   const houseRoof = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 2.25), trimMat); houseRoof.position.set(-1.7, 2.42, 0); b.add(houseRoof);
   const wf = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 1.8), glassMat); wf.position.set(-0.72, 1.9, 0); b.add(wf);
   for (const s of [1, -1]) { const ws = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.55, 0.05), glassMat); ws.position.set(-1.7, 1.92, s * 1.02); b.add(ws); }
+  { const ic = buildInstrumentCluster(1); ic.position.set(-1.0, 1.44, 0); b.add(ic); }   // helm console under the wrap windows
   // armored bow ramp (raised; drops at the dock)
   const ramp = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.5, 2.1), hullMat); ramp.position.set(2.9, 1.05, 0); ramp.rotation.z = 0.12; b.add(ramp);
   // pintle .50-cal gun mount on the bow deck
@@ -2947,6 +2980,7 @@ function buildMonorail() {                                // interior-open tram 
   const front = new THREE.Mesh(new THREE.BoxGeometry(0.08, H - 0.7, W - 0.2), glassMat); front.position.set(L / 2, 1.0 + (H - 0.7) / 2, 0); c.add(front);
   const noseTop = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.4, W), bodyMat); noseTop.position.set(L / 2, 0.76 + H - 0.18, 0); c.add(noseTop);
   const noseBot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.4, W), bodyMat); noseBot.position.set(L / 2, 0.98, 0); c.add(noseBot);
+  { const ic = buildInstrumentCluster(0.95); ic.position.set(L / 2 - 0.55, 1.06, 0); c.add(ic); }   // driver console at the nose
   const strip = new THREE.Mesh(new THREE.BoxGeometry(L - 0.4, 0.06, 0.1), new THREE.MeshStandardMaterial({ color: 0xdfe7c8, emissive: 0xdfe7c8, emissiveIntensity: 0.8 })); strip.position.set(0, 0.76 + H - 0.1, 0); c.add(strip);
   const cab = new THREE.PointLight(0xcfe0d6, 0.9, 9); cab.position.set(0, 2.3, 0); c.add(cab);
   const under = new THREE.Mesh(new THREE.BoxGeometry(L - 0.4, 0.4, 1.0), trimMat); under.position.set(0, 0.5, 0); c.add(under);
