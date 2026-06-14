@@ -7,6 +7,7 @@ import { UnrealBloomPass } from "./vendor/postprocessing/UnrealBloomPass.js";
 import { ShaderPass } from "./vendor/postprocessing/ShaderPass.js";
 import { OutputPass } from "./vendor/postprocessing/OutputPass.js";
 import { mergeGeometries } from "./vendor/BufferGeometryUtils.js";
+import { clone as skeletonClone } from "./vendor/SkeletonUtils.js";
 import { STR } from "./strings.js";
 
 /* ============================================================================
@@ -657,6 +658,7 @@ function spawnDino(speciesId, x, z) {
   const g = buildDinoMesh(sp); g.position.set(x, groundH(x, z), z); scene.add(g);
   return {
     id: speciesId + "_" + (Math.random() * 1e6 | 0), sp, mesh: g,
+    mixer: g.userData.mixer || null, walkAction: g.userData.walkAction || null,
     x, z, yaw: rand(0, 6.28), vx: 0, vz: 0, hp: sp.combat.health,
     state: baseStateFor(sp),
     bb: { lastSeenX: 0, lastSeenZ: 0, hasTarget: false, threat: 0, role: "harry", scared: 0, homeX: x, homeZ: z, hue: 0 },
@@ -674,7 +676,7 @@ function reskinDinos(modelPath) {
     g.position.set(a.x, groundH(a.x, a.z), a.z);
     g.rotation.y = a.yaw;
     scene.add(g);
-    a.mesh = g;
+    a.mesh = g; a.mixer = g.userData.mixer || null; a.walkAction = g.userData.walkAction || null;
   }
 }
 // fit a .glb object into a group: scaled to targetH, centered in x/z, feet at y=0, yaw-corrected.
@@ -704,9 +706,19 @@ function fitModel(model, targetH, yawOffset) {
   g.add(model);
   return g;
 }
-// real .glb dino instance, scaled to the species' grey-box stand height
+// real .glb dino instance, scaled to the species' grey-box stand height. Rigged+animated models
+// (e.g. hero bipeds with a baked walk clip) are cloned with SkeletonUtils (clone(true) breaks
+// skinned skeletons) and get their own AnimationMixer, surfaced on g.userData for the agent to drive.
 function buildModelMesh(sp, tmpl) {
-  const g = fitModel(tmpl.clone(true), sp.greybox.standH || sp.size.eyeHeightM || 3, sp.modelYaw || 0);
+  const anims = MODEL_ANIMS[sp.modelPath] || [];
+  let skinned = false; tmpl.traverse(o => { if (o.isSkinnedMesh) skinned = true; });
+  const inst = (skinned ? skeletonClone(tmpl) : tmpl.clone(true));
+  const g = fitModel(inst, sp.greybox.standH || sp.size.eyeHeightM || 3, sp.modelYaw || 0);
+  if (skinned && anims.length) {
+    const mixer = new THREE.AnimationMixer(inst);
+    const action = mixer.clipAction(anims[0]); action.play();
+    g.userData.mixer = mixer; g.userData.walkAction = action;
+  }
   const blob = new THREE.Mesh(new THREE.CircleGeometry((sp.greybox.bodyL || 1) * 0.9, 14), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.3, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; blob.position.y = 0.03; g.add(blob);
   return g;
@@ -877,20 +889,26 @@ function steer(a, dt, P) {
   a.mesh.rotation.y = a.yaw;
   a.anim = Math.max(0, a.anim - dt);
   const moveAmt = Math.min(1, Math.hypot(a.vx, a.vz) / sp.move.run);
-  const legs = a.mesh.userData.legs;
-  if (legs) { const sw = Math.sin(S.t * (run ? 16 : 8) + a.x) * 0.5 * moveAmt; legs[0].rotation.x = sw; legs[1].rotation.x = -sw; }
-  else {   // real .glb model has NO skeleton (no leg/head bones to articulate): fake a clearly visible
-           // lumbering gait by bouncing + pitching + waddling the whole body while it moves.
-    const spd = Math.hypot(a.vx, a.vz);
-    const mv = Math.min(1, spd / (sp.move.walk || 2));   // ~1 once at walking speed
-    const ph = S.t * (run ? 11 : 7) + a.x;
-    const body = a.mesh.children[0];
-    if (mv > 0.05) {
-      a.mesh.position.y += Math.abs(Math.sin(ph)) * (sp.greybox.standH || 2) * 0.07 * mv;   // stride bounce
-      if (body) { body.rotation.x = Math.sin(ph) * 0.13 * mv; body.rotation.z = Math.cos(ph * 0.5) * 0.10 * mv; }
-    } else if (body) { body.rotation.x *= 0.9; body.rotation.z *= 0.9; }
+  if (a.mixer) {   // rigged model: play the baked walk clip, cadence scaled by speed (frozen when idle)
+    const norm = Math.min(1, Math.hypot(a.vx, a.vz) / (sp.move.run || 8));
+    a.walkAction.timeScale = norm < 0.04 ? 0 : (0.5 + 1.7 * norm);
+    a.mixer.update(dt);
+  } else {
+    const legs = a.mesh.userData.legs;
+    if (legs) { const sw = Math.sin(S.t * (run ? 16 : 8) + a.x) * 0.5 * moveAmt; legs[0].rotation.x = sw; legs[1].rotation.x = -sw; }
+    else {   // static .glb model has NO skeleton: fake a clearly visible lumbering gait by bouncing +
+             // pitching + waddling the whole body while it moves.
+      const spd = Math.hypot(a.vx, a.vz);
+      const mv = Math.min(1, spd / (sp.move.walk || 2));   // ~1 once at walking speed
+      const ph = S.t * (run ? 11 : 7) + a.x;
+      const body = a.mesh.children[0];
+      if (mv > 0.05) {
+        a.mesh.position.y += Math.abs(Math.sin(ph)) * (sp.greybox.standH || 2) * 0.07 * mv;   // stride bounce
+        if (body) { body.rotation.x = Math.sin(ph) * 0.13 * mv; body.rotation.z = Math.cos(ph * 0.5) * 0.10 * mv; }
+      } else if (body) { body.rotation.x *= 0.9; body.rotation.z *= 0.9; }
+    }
+    if (a.mesh.userData.jaw) a.mesh.userData.jaw.rotation.x = a.anim > 0 ? 0.5 : 0;
   }
-  if (a.mesh.userData.jaw) a.mesh.userData.jaw.rotation.x = a.anim > 0 ? 0.5 : 0;
 }
 
 function updateDinos(dt, P) {
