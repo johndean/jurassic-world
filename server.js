@@ -108,13 +108,13 @@ function wsMessage(socket, text) {
   if (m.t === "join") {
     const code = String(m.room || "ALPHA").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "ALPHA";
     let room = rooms.get(code);
-    if (!room) room = (rooms.set(code, { clients: new Set(), hostId: null, seed: (m.seed | 0) || 1 }), rooms.get(code));
+    if (!room) room = (rooms.set(code, { clients: new Set(), hostId: null, seed: (m.seed | 0) || 1, mission: "" }), rooms.get(code));
     if (room.clients.size >= 16) { wsSend(socket, { t: "full" }); return; }
     socket._mp = { id: nextId++, room: code, name: String(m.name || "PLAYER").slice(0, 16), role: String(m.role || "navigator").slice(0, 16) };
-    if (room.hostId == null) { room.hostId = socket._mp.id; if (m.seed) room.seed = m.seed | 0; }
+    if (room.hostId == null) { room.hostId = socket._mp.id; if (m.seed) room.seed = m.seed | 0; if (m.mission) room.mission = String(m.mission).slice(0, 24); }   // host seeds world + mission
     room.clients.add(socket);
     wsSend(socket, {
-      t: "welcome", id: socket._mp.id, host: room.hostId === socket._mp.id, hostId: room.hostId, seed: room.seed, room: code,
+      t: "welcome", id: socket._mp.id, host: room.hostId === socket._mp.id, hostId: room.hostId, seed: room.seed, mission: room.mission, room: code,
       peers: [...room.clients].filter(c => c !== socket && c._mp).map(c => ({ id: c._mp.id, name: c._mp.name, role: c._mp.role })),
     });
     roomBroadcast(room, socket, { t: "peer-join", id: socket._mp.id, name: socket._mp.name, role: socket._mp.role });

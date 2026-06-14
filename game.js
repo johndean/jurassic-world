@@ -1865,6 +1865,11 @@ function clearEvac() { if (evac) { scene.remove(evac.heli.group); evac = null; }
  * Skippable; auto-skips on later runs in the same session (you've seen it). */
 let intro = null, wreckMesh = null, introSeen = false, introProp = null, introExtra = [];
 function clearIntroProp() { if (introProp) { scene.remove(introProp); introProp = null; } for (const e of introExtra) scene.remove(e); introExtra = []; }   // parked intro vehicle + props (jeep/boat/dock) left in-world
+function coopSpread(bx, bz) {   // fan co-op players out from a shared hand-off point so they don't stack on each other
+  if (!Net.on) return { x: bx, z: bz };
+  const a = (Net.id || 1) * 2.39996;   // golden-angle offset, matches the startRun cluster
+  return { x: bx + Math.cos(a) * 3.2, z: bz + Math.sin(a) * 3.2 };
+}
 const introCine = () => intro !== null;                  // input locked while the intro plays
 const INTRO_CAM_END = 21;                                // after the crash the normal (wreck) camera takes over
 // ── per-mission insertion intros (data-driven; see design/MISSION_INTROS.md) ──
@@ -2090,7 +2095,7 @@ function updateIntroCrash(dt) {
       intro.crashed = true; flash(); Audio.crash(); Audio.rotor(false); big.style.opacity = "0";
       if (intro.heli) scene.remove(intro.heli.group);
       wreckMesh = buildWreck(intro.wx, intro.wz);
-      S.player.x = 0; S.player.z = 0; placeAtWreck();
+      const c = coopSpread(0, 0); S.player.x = c.x; S.player.z = c.z; placeAtWreck();
       $("introBlack").style.opacity = "1"; intro.camActive = false; intro.shake = 0;
     }
   } else if (T < 27) {                    // 6 · awakening at the wreck
@@ -2306,7 +2311,7 @@ function updateIntroCameraJeep() {
 }
 function endIntroJeep() {                                 // step out beside the jeep, on foot into Sector 9
   const j = intro.jeep; const P = S.player;
-  P.x = j ? j.position.x - 2.4 : 0; P.z = j ? j.position.z + 1.2 : 0; P.yaw = 0;   // face forward, into the trees
+  const c = coopSpread(j ? j.position.x - 2.4 : 0, j ? j.position.z + 1.2 : 0); P.x = c.x; P.z = c.z; P.yaw = 0;   // face forward, into the trees
   cam.yaw = 0; cam.pitch = -0.05; camera.up.set(0, 1, 0);
   if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
   finishIntroCommon("INVESTIGATION · follow the tracks — reach the objective marker");
@@ -2334,7 +2339,7 @@ function seatTroopers(group, seats, faceYaw, scale) {     // place the squad ins
   for (let i = 0; i < n; i++) { const s = seats[i], t = makeTrooper(cols[i % cols.length]); t.position.set(s[0], s[1], s[2]); t.rotation.y = faceYaw; t.scale.setScalar(scale || 0.82); group.add(t); }
 }
 function endIntroAtOrigin(msg) {                          // continuous hand-off: stand the player at the LZ facing forward
-  const P = S.player; P.x = 0; P.z = 0; P.yaw = 0;
+  const P = S.player; const c = coopSpread(0, 0); P.x = c.x; P.z = c.z; P.yaw = 0;
   cam.yaw = 0; cam.pitch = -0.05; camera.up.set(0, 1, 0);
   if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
   finishIntroCommon(msg);
@@ -2453,7 +2458,7 @@ function endIntroBoat() {
   introProp = null;
   if (intro && intro._prevFog !== undefined) scene.fog = intro._prevFog;
   const dx = intro.dockX, sz = intro.dock ? intro.dock.userData.standZ : riverCenter(dx) + 19;
-  const P = S.player; P.x = dx; P.z = sz; P.yaw = -Math.PI / 2;   // step off onto the dock, facing the valley/objective
+  const P = S.player; const c = coopSpread(dx, sz); P.x = c.x; P.z = c.z; P.yaw = -Math.PI / 2;   // step off onto the dock, facing the valley/objective
   cam.yaw = -Math.PI / 2; cam.pitch = -0.05; camera.up.set(0, 1, 0);
   if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
   finishIntroCommon("POWER RESTORATION · restart the stations — reach the objective marker");
@@ -2575,14 +2580,21 @@ function steerXZ() {   // unified steering intent (touch stick / gamepad already
   if (keys.has("KeyD") || keys.has("ArrowRight")) ix += 1;
   return { x: clamp(ix, -1, 1), z: clamp(iz, -1, 1) };
 }
-function beginCanopy(tx, tz) {   // hand off from the pre-jump cinematic into the controllable canopy
+// Descent profiles — the airship offers a real choice; HALO is always a parachute.
+const DESCENT = {
+  chute: { off: 42, alt: 102, fwdN: 8.5, fwdD: 14, fwdF: 3.5, vN: 6, vD: 11, vF: 2.2, steer: 1.25, wind: 1.2, chute: true },
+  rope: { off: 9, alt: 72, fwdN: 2, fwdD: 3, fwdF: 1.2, vN: 13, vD: 17, vF: 6.5, steer: 0.5, wind: 0.25, chute: false },   // fast, near-vertical fast-rope
+  wing: { off: 62, alt: 118, fwdN: 20, fwdD: 27, fwdF: 10, vN: 6.5, vD: 10, vF: 3.5, steer: 1.7, wind: 1.0, chute: false }, // fast, shallow wingsuit glide
+};
+function beginCanopy(tx, tz) {   // hand off from the pre-jump cinematic into the controllable descent
   if (introProp) { scene.remove(introProp); introProp = null; }
   intro.bay = null; intro.deck = null;
+  const D = DESCENT[intro.descent] || DESCENT.chute;
   intro.tx = tx; intro.tz = tz;
-  intro.cx = tx - 42; intro.cz = tz - 42; intro.cy = 102;                 // start high & off-target so you must steer
+  intro.cx = tx - D.off; intro.cz = tz - D.off; intro.cy = D.alt;          // start high & off-target so you must steer
   intro.heading = Math.atan2(tx - intro.cx, tz - intro.cz);
-  intro.vdesc = 7; intro.ct = 0; intro.phase = "canopy"; intro.shake = 0.015; intro._canopyLine = false;
-  intro.chute = buildParachute(); scene.add(intro.chute);
+  intro.vdesc = D.vN; intro.ct = 0; intro.phase = "canopy"; intro.shake = 0.015; intro._canopyLine = false;
+  if (D.chute) { intro.chute = buildParachute(); scene.add(intro.chute); }   // wingsuit/fast-rope have no canopy
   const ring = new THREE.Mesh(new THREE.RingGeometry(5.4, 6.0, 40), new THREE.MeshBasicMaterial({ color: 0x8fb8c4, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
   ring.rotation.x = -Math.PI / 2; ring.position.set(tx, groundH(tx, tz) + 0.15, tz); scene.add(ring); intro.ring = ring;
   Audio.squelch();
@@ -2594,24 +2606,47 @@ function updateCanopyPhase(dt) {
     intro._canopyLine = true; const e = intro.kind === "airship" ? LINE_AIRSHIP_DOWN : LINE_HALO_CANOPY;
     const r = $("introRadio"); r.innerHTML = e.h; r.style.opacity = "1"; Audio.squelch(); playRadio(e);
   }
-  const s = steerXZ();
-  intro.heading += s.x * dt * 1.25;                       // steer left / right
+  const D = DESCENT[intro.descent] || DESCENT.chute, s = steerXZ();
+  intro.heading += s.x * dt * D.steer;                    // steer left / right
   const flare = s.z > 0.2, dive = s.z < -0.2;
-  const fwd = flare ? 3.5 : dive ? 14 : 8.5;
-  intro.vdesc = flare ? 2.2 : dive ? 11 : 6;
-  intro.cx += (Math.sin(intro.heading) * fwd + 1.2) * dt;  // forward + gentle wind drift (+x)
+  const fwd = flare ? D.fwdF : dive ? D.fwdD : D.fwdN;
+  intro.vdesc = flare ? D.vF : dive ? D.vD : D.vN;
+  intro.cx += (Math.sin(intro.heading) * fwd + D.wind) * dt;   // forward + gentle wind drift
   intro.cz += (Math.cos(intro.heading) * fwd) * dt;
   intro.cy -= intro.vdesc * dt;
   const half = BIOME.map.size / 2 - 6; intro.cx = clamp(intro.cx, -half, half); intro.cz = clamp(intro.cz, -half, half);
   const gy = groundH(intro.cx, intro.cz), py = Math.max(gy + 0.9, intro.cy);
-  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(intro.cx, py, intro.cz); playerMesh.rotation.y = intro.heading; }
+  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(intro.cx, py, intro.cz); playerMesh.rotation.y = intro.heading; playerMesh.rotation.x = intro.descent === "wing" ? 0.5 : 0; }
   if (intro.chute) { intro.chute.position.set(intro.cx, py + 2.5, intro.cz); intro.chute.rotation.y = intro.heading; intro.chute.rotation.z = -s.x * 0.32; }
   const near = intro.cy - gy;
   if (near < 20) { big.textContent = "FLARE — PULL BACK ▼"; big.style.opacity = "1"; }
   else if (intro.ct < 5.5) { big.textContent = isTouch ? "STEER WITH THE STICK · HOLD DOWN TO FLARE" : "STEER  A / D  ·  HOLD  S  TO FLARE"; big.style.opacity = "1"; }
   else big.style.opacity = "0";
-  if (intro.cy <= gy + 0.95 || intro.ct > 55) landCanopy(intro.vdesc > 6.0 && !flare);
+  if (intro.cy <= gy + 0.95 || intro.ct > 55) { if (playerMesh) playerMesh.rotation.x = 0; landCanopy(intro.vdesc > 7 && !flare && intro.descent !== "rope"); }
 }
+// ---- free-walk the pre-jump vehicle (transport bay / airship deck) ----
+function platformWalk(dt, plat, b, exit) {   // move the player on the platform; returns true at the exit edge
+  const s = steerXZ(), spd = 3.4;
+  let dx, dz; if (exit === "x") { dx = -s.z; dz = s.x; } else { dz = -s.z; dx = s.x; }   // stick-up → toward the exit
+  intro.px = clamp(intro.px + dx * spd * dt, b.xmin, b.xmax);
+  intro.pz = clamp(intro.pz + dz * spd * dt, b.zmin, b.zmax);
+  if (Math.hypot(dx, dz) > 0.05) intro.pyaw = Math.atan2(dx, dz);
+  const wx = plat.position.x + intro.px, wy = plat.position.y + 0.9, wz = plat.position.z + intro.pz;
+  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(wx, wy, wz); playerMesh.rotation.y = intro.pyaw; }
+  intro._pwx = wx; intro._pwy = wy; intro._pwz = wz;
+  return exit === "x" ? intro.px >= b.xmax - 0.15 : intro.pz >= b.zmax - 0.15;
+}
+function platformCam(exit) {
+  const wx = intro._pwx, wy = intro._pwy, wz = intro._pwz; if (wx == null) return;
+  if (exit === "x") { camera.position.lerp(tmp.set(wx - 4.8, wy + 2.1, wz + 0.2), 0.12); camera.lookAt(wx + 4, wy + 0.7, wz); }
+  else { camera.position.lerp(tmp.set(wx + 0.2, wy + 2.2, wz - 4.8), 0.12); camera.lookAt(wx, wy + 0.7, wz + 5); }
+}
+function placeOnPlatform(plat) {   // static stand during the opening cinematic, before walk control
+  const wx = plat.position.x + intro.px, wy = plat.position.y + 0.9, wz = plat.position.z + intro.pz;
+  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(wx, wy, wz); playerMesh.rotation.y = intro.pyaw; }
+  intro._pwx = wx; intro._pwy = wy; intro._pwz = wz;
+}
+const jumpPressed = () => keys.has("KeyE") || keys.has("Space") || input.action;
 function updateCanopyCamera() {
   const a = intro.heading, gy = groundH(intro.cx, intro.cz), py = Math.max(gy + 0.9, intro.cy);
   camera.position.lerp(tmp.set(intro.cx - Math.sin(a) * 10.5, py + 5.2, intro.cz - Math.cos(a) * 10.5), 0.09);
@@ -2622,7 +2657,7 @@ function landCanopy(hard) {
   if (intro.chute) scene.remove(intro.chute);
   if (intro.ring) scene.remove(intro.ring);
   const air = intro.kind === "airship";
-  const P = S.player; P.x = intro.cx; P.z = intro.cz; P.yaw = intro.heading;
+  const P = S.player; const c = coopSpread(intro.cx, intro.cz); P.x = c.x; P.z = c.z; P.yaw = intro.heading;
   cam.yaw = intro.heading; cam.pitch = -0.05; camera.up.set(0, 1, 0);
   if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
   if (hard) { P.stamina = Math.max(15, P.stamina - 30); flash(); }
@@ -2634,9 +2669,9 @@ function startIntroHalo() {
   const bay = buildTransportBay(); bay.position.set(0, 100, 0);
   seatTroopers(bay, [[-3.6, 0.1, 1.3], [-3.6, 0.1, -1.3], [-1.6, 0.1, 1.3]], Math.PI / 2, 0.85);   // paratroopers along the wall
   scene.add(bay); introProp = bay;
-  intro = { kind: "halo", t: 0, phase: "bay", bay, line: -1, shake: 0.05, camActive: true };
+  intro = { kind: "halo", t: 0, phase: "bay", bay, line: -1, shake: 0.05, camActive: true, descent: "chute", px: -2.5, pz: 0, pyaw: Math.PI / 2 };
   introOpen("Jurassic Survival · Rescue · Ranger Outpost Echo");
-  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(bay.position.x + 3.6, bay.position.y + 0.9, bay.position.z); playerMesh.rotation.y = Math.PI / 2; }   // you, at the ramp
+  placeOnPlatform(bay);   // you, standing in the bay
 }
 function updateIntroHalo(dt) {
   if (!intro) return;
@@ -2644,45 +2679,64 @@ function updateIntroHalo(dt) {
   intro.t += dt; const T = intro.t, tint = $("introTint"), cap = $("introCap"), big = $("introBig");
   radioStep(INTRO_RADIO_HALO);
   tint.style.background = "#1c2630"; tint.style.opacity = (0.34 + (Math.sin(T * 13) > 0.95 ? 0.42 : 0)).toFixed(2);   // storm + lightning flashes
-  if (T < 7) { intro.phase = "bay"; cap.style.opacity = T > 5 ? "0" : "1"; }
-  else if (T < 9.6) {   // green light → jump
-    intro.phase = "ready";
-    if (intro.bay && intro.bay.userData.jumpLight) { const j = intro.bay.userData.jumpLight.material; j.color.setHex(0x6fae6b); j.emissive.setHex(0x6fae6b); }
-    const n = Math.ceil(9.5 - T); big.textContent = n > 0 ? String(n) : "JUMP"; big.style.opacity = "1";
-    if (keys.has("KeyE") || keys.has("Space") || input.action || T >= 9.5) { big.style.opacity = "0"; beginCanopy(70, -70); }
+  if (T < 6) { intro.phase = "bay"; cap.style.opacity = T > 4.5 ? "0" : "1"; placeOnPlatform(intro.bay); big.style.opacity = "0"; }
+  else {                                  // green light — walk the bay to the open ramp, then step off
+    intro.phase = "walk";
+    if (intro.bay.userData.jumpLight) { const j = intro.bay.userData.jumpLight.material; j.color.setHex(0x6fae6b); j.emissive.setHex(0x6fae6b); }
+    const atRamp = platformWalk(dt, intro.bay, { xmin: -4.7, xmax: 5.0, zmin: -1.3, zmax: 1.3 }, "x");
+    big.textContent = atRamp ? "▼ STEP OFF — JUMP" : (isTouch ? "MOVE TO THE OPEN RAMP" : "WALK TO THE RAMP · W A S D"); big.style.opacity = "1";
+    if (intro.px >= 4.9 || (atRamp && jumpPressed()) || T >= 24) { big.style.opacity = "0"; intro.descent = "chute"; beginCanopy(70, -70); }
   }
 }
 function updateIntroCameraHalo() {
   if (intro.phase === "canopy") return updateCanopyCamera();
+  if (intro.phase === "walk") return platformCam("x");
   const b = intro.bay; if (!b) return;
   camera.position.lerp(tmp.set(b.position.x - 3.6, b.position.y + 1.7, b.position.z + 0.3), 0.08);
   camera.lookAt(b.position.x + 5, b.position.y + 1.0, b.position.z);
   if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
 }
-/* Evac airship — EXTINCTION PROTOCOL */
+/* Evac airship — EXTINCTION PROTOCOL (walk the deck, pick a descent pad, step off) */
+function addDescentPads(deck) {
+  const defs = [[-3.5, "rope", 0x5b9fd6, "FAST-ROPE"], [0, "chute", 0x6fae6b, "PARACHUTE"], [3.5, "wing", 0xc9772f, "WINGSUIT"]];
+  const pads = [];
+  for (const [px, kind, col, label] of defs) {
+    const pad = new THREE.Mesh(new THREE.CircleGeometry(1.15, 24), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.5, transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
+    pad.rotation.x = -Math.PI / 2; pad.position.set(px, 0.24, 2.8); deck.add(pad);
+    const tag = makeNameTag(label); tag.scale.set(2.0, 0.5, 1); tag.position.set(px, 1.5, 2.8); deck.add(tag);
+    pads.push({ px, kind, pad });
+  }
+  deck.userData.pads = pads;
+}
 function startIntroAirship() {
   const deck = buildAirshipDeck(); deck.position.set(0, 92, 0);
-  seatTroopers(deck, [[-4.5, 0.2, 1.4], [4.5, 0.2, -1.6], [-2, 0.2, 1.0]], Math.PI / 2, 0.85);
+  seatTroopers(deck, [[-4.5, 0.2, -1.6], [4.5, 0.2, -1.6], [-2, 0.2, -2.4]], 0, 0.85);
+  addDescentPads(deck);
   scene.add(deck); introProp = deck;
-  intro = { kind: "airship", t: 0, phase: "deck", deck, line: -1, shake: 0.06, camActive: true };
+  intro = { kind: "airship", t: 0, phase: "deck", deck, line: -1, shake: 0.06, camActive: true, descent: "chute", px: 0, pz: -2.6, pyaw: 0 };
   introOpen("Jurassic Survival · Extinction Protocol · Final evacuation");
-  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(deck.position.x, deck.position.y + 0.9, deck.position.z + 2.6); playerMesh.rotation.y = 0; }   // you, at the rail
+  placeOnPlatform(deck);   // you, on the flight deck
 }
 function updateIntroAirship(dt) {
   if (!intro) return;
   if (intro.phase === "canopy") return updateCanopyPhase(dt);
   intro.t += dt; const T = intro.t, tint = $("introTint"), cap = $("introCap"), big = $("introBig");
   radioStep(INTRO_RADIO_AIRSHIP);
-  tint.style.background = T < 7 ? "#3a1c10" : "#5a1810"; tint.style.opacity = (0.3 + (T > 7 ? Math.abs(Math.sin(T * 8)) * 0.18 : 0)).toFixed(2);   // fiery glow → alarm pulse
-  if (T < 7) { intro.phase = "deck"; cap.style.opacity = T > 5 ? "0" : "1"; }
-  else if (T < 9.6) {
-    intro.phase = "alarm";
-    const n = Math.ceil(9.5 - T); big.textContent = n > 0 ? "BREACH" : "JUMP"; big.style.opacity = "1";
-    if (keys.has("KeyE") || keys.has("Space") || input.action || T >= 9.5) { big.style.opacity = "0"; beginCanopy(0, -86); }
+  tint.style.background = T < 6 ? "#3a1c10" : "#5a1810"; tint.style.opacity = (0.3 + (T > 6 ? Math.abs(Math.sin(T * 8)) * 0.18 : 0)).toFixed(2);   // fiery glow → breach alarm
+  if (T < 6) { intro.phase = "deck"; cap.style.opacity = T > 4.5 ? "0" : "1"; placeOnPlatform(intro.deck); big.style.opacity = "0"; }
+  else {                                  // breach — walk to a descent pad and step off the edge
+    intro.phase = "walk";
+    const atEdge = platformWalk(dt, intro.deck, { xmin: -6.3, xmax: 6.3, zmin: -3.0, zmax: 3.4 }, "z");
+    intro.descent = intro.px < -1.8 ? "rope" : intro.px > 1.8 ? "wing" : "chute";   // pad under you sets the descent
+    const label = intro.descent === "rope" ? "FAST-ROPE" : intro.descent === "wing" ? "WINGSUIT" : "PARACHUTE";
+    if (intro.deck.userData.pads) for (const p of intro.deck.userData.pads) p.pad.material.emissiveIntensity = p.kind === intro.descent ? 1.4 : 0.4;
+    big.textContent = atEdge ? `▼ STEP OFF — ${label}` : (isTouch ? "PICK A PAD · STEP OFF THE EDGE" : "WALK TO A PAD (ROPE/CHUTE/WING) · STEP OFF"); big.style.opacity = "1";
+    if (intro.pz >= 3.3 || (atEdge && jumpPressed()) || T >= 24) { big.style.opacity = "0"; beginCanopy(0, -86); }
   }
 }
 function updateIntroCameraAirship() {
   if (intro.phase === "canopy") return updateCanopyCamera();
+  if (intro.phase === "walk") return platformCam("z");
   const d = intro.deck; if (!d) return;
   camera.position.lerp(tmp.set(d.position.x, d.position.y + 2.3, d.position.z - 3.2), 0.06);
   camera.lookAt(d.position.x, d.position.y + 1.3, d.position.z + 9);
@@ -2702,14 +2756,14 @@ function skipIntro() {
     if (intro.bay) scene.remove(intro.bay); if (intro.deck) scene.remove(intro.deck);
     if (intro.chute) scene.remove(intro.chute); if (intro.ring) scene.remove(intro.ring); introProp = null;
     const air = intro.kind === "airship", tx = intro.tx != null ? intro.tx : (air ? 0 : 70), tz = intro.tz != null ? intro.tz : (air ? -86 : -70);
-    const P = S.player; P.x = tx; P.z = tz; P.yaw = 0; cam.yaw = 0; cam.pitch = -0.05; camera.up.set(0, 1, 0);
+    const P = S.player; const c = coopSpread(tx, tz); P.x = c.x; P.z = c.z; P.yaw = 0; cam.yaw = 0; cam.pitch = -0.05; camera.up.set(0, 1, 0);
     if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = 0; }
     finishIntroCommon(air ? "EXTINCTION PROTOCOL · reach the Command Center" : "RESCUE · reach Outpost Echo & find Maya");
     return;
   }
   if (intro.kind === "research") { Audio.rotor(false); endIntroResearch(); return; }
   if (!wreckMesh) wreckMesh = buildWreck(intro.wx, intro.wz);
-  S.player.x = 0; S.player.z = 0; placeAtWreck();
+  const c = coopSpread(0, 0); S.player.x = c.x; S.player.z = c.z; placeAtWreck();
   Audio.rotor(false); endIntro();
 }
 
@@ -3198,15 +3252,26 @@ function initLobby() {
     const me = `<span class="mp-peer${Net.isHost ? " host" : ""}">${(Net.name || "YOU").toUpperCase()} · YOU</span>`;
     peersEl.innerHTML = me + [...Net.peers.values()].map(p => `<span class="mp-peer">${(p.name || "P").toUpperCase()}</span>`).join("");
   };
-  Net.onEvent("welcome", () => { status.innerHTML = `Co-op room <span class="code">${Net.room}</span> · ${Net.isHost ? "hosting" : "joined"} · share the code, then BEGIN`; roomI.value = Net.room; show(true); renderPeers(); });
+  Net.onEvent("welcome", () => {
+    // adopt the room's mission so the whole squad runs the same world, objectives & intro (host-authoritative)
+    if (Net.mission && MISSIONS[Net.mission] && Net.mission !== selectedMission.id) {
+      selectedMission = MISSIONS[Net.mission];
+      const ms = $("missionSelect"); if (ms) ms.querySelectorAll(".mission-card").forEach(c => c.classList.toggle("sel", c.dataset.k === Net.mission));
+      const b = $("sBlurb"); if (b) b.textContent = selectedMission.blurb;
+      tabsDone.mission = true; refreshStart();
+    }
+    const mn = selectedMission ? ` · mission: ${selectedMission.name}` : "";
+    status.innerHTML = `Co-op room <span class="code">${Net.room}</span> · ${Net.isHost ? "hosting" : "joined"}${Net.isHost ? "" : mn} · share the code, then BEGIN`;
+    roomI.value = Net.room; show(true); renderPeers();
+  });
   Net.onEvent("peers", renderPeers);
   Net.onEvent("state", netUpsertState);
   Net.onEvent("leave", removeRemote);
   Net.onEvent("full", () => { status.textContent = "That room is full (16 max)"; });
   Net.onEvent("error", () => { status.textContent = "Connection error — playing solo"; });
   Net.onEvent("close", () => { status.textContent = "Playing solo — or host / join a co-op room"; show(false); clearRemotes(); });
-  $("mpHost").addEventListener("click", () => { Audio.init(); const c = code4(); roomI.value = c; status.textContent = "Connecting…"; Net.connect(c, myName(), selectedRole.id, (Math.random() * 1e9) >>> 0); });
-  $("mpJoin").addEventListener("click", () => { Audio.init(); const c = (roomI.value.trim() || "").toUpperCase(); if (!c) { status.textContent = "Enter a room code to join"; return; } status.textContent = "Connecting…"; Net.connect(c, myName(), selectedRole.id, 0); });
+  $("mpHost").addEventListener("click", () => { Audio.init(); const c = code4(); roomI.value = c; status.textContent = "Connecting…"; Net.connect(c, myName(), selectedRole.id, (Math.random() * 1e9) >>> 0, selectedMission.id); });
+  $("mpJoin").addEventListener("click", () => { Audio.init(); const c = (roomI.value.trim() || "").toUpperCase(); if (!c) { status.textContent = "Enter a room code to join"; return; } status.textContent = "Connecting…"; Net.connect(c, myName(), selectedRole.id, 0, selectedMission.id); });
   $("mpLeave").addEventListener("click", () => { Net.disconnect(); status.textContent = "Playing solo — or host / join a co-op room"; show(false); clearRemotes(); });
 }
 

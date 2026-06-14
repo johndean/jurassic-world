@@ -250,8 +250,10 @@ All seven insertion intros are implemented on the kind-dispatched engine, each w
 The HALO drop & airship deployment share one **player-steered canopy** (steer with the stick / A-D, hold
 S to flare, land where you choose — real control, soft/hard landing, never a death).
 
-Deeper interactivity flagged for a later pass: free-walk-the-vehicle bays/decks (currently cinematic),
-the in-cabin equipment/tablet/lever hold-beats, and the airship's fast-rope / wingsuit descent variants.
+Free-walk pre-jump (transport bay / airship deck) and the airship's fast-rope / wingsuit / parachute
+descent choice (walk onto a pad, step off) are now implemented. Co-op rooms are mission-authoritative
+(host's mission propagates to joiners) and intros fan players out at the hand-off so they don't stack.
+Still flagged for later: the in-cabin equipment/tablet/lever hold-beats, and full host-authoritative dino sync.
 
 ## Build Plan (phased — additive)
 
