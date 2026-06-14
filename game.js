@@ -83,9 +83,16 @@ function loadModel(path) {
     undefined,
     () => res(null)));            // missing/failed model -> null -> grey-box fallback
 }
+// Load creatures FIRST (player + every species) so dinos are textured ASAP; each species
+// re-skins its already-spawned grey-box instances the instant it lands. The big foliage-tree
+// .glb files (~30 MB) load last so they never gate the creature skins behind them.
 async function preloadModels() {
-  const paths = [...new Set([PLAYER_MODEL, FOLIAGE.tree, FOLIAGE.fern, ...Object.values(SPECIES).map(s => s.modelPath)].filter(Boolean))];
-  await Promise.all(paths.map(async p => { MODELS[p] = await loadModel(p); }));
+  const creatures = [...new Set([PLAYER_MODEL, ...Object.values(SPECIES).map(s => s.modelPath)].filter(Boolean))];
+  await Promise.all(creatures.map(async p => { MODELS[p] = await loadModel(p); reskinDinos(p); }));
+  if (!playerMixer) buildPlayer();
+  const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.fern].filter(Boolean))];
+  await Promise.all(foliage.map(async p => { MODELS[p] = await loadModel(p); }));
+  buildFoliage();
 }
 
 // ---- core state object (the "room snapshot")
@@ -132,8 +139,9 @@ async function boot() {
   buildStaticHUD();
   showStart();
   requestAnimationFrame(frame);
-  // stream models in the background so the menu/start button appear instantly; swap player in when ready
-  preloadModels().then(() => { if (!playerMixer) buildPlayer(); buildFoliage(); });
+  // stream models in the background so the menu/start button appears instantly;
+  // creatures load first (re-skinning as they arrive), player + foliage build inside preloadModels
+  preloadModels();
 }
 
 // subtle vignette (edge darkening) for cinematic framing
@@ -553,6 +561,20 @@ function spawnDino(speciesId, x, z) {
     cd: 0, decideIn: rand(0, 0.25), lod: "full", anim: 0, alive: true,
   };
 }
+// When a species' .glb finishes streaming, swap any already-spawned grey-box instances
+// of that species for the real textured model in place (keeps position/heading/AI state).
+function reskinDinos(modelPath) {
+  if (!MODELS[modelPath]) return;
+  for (const a of dinos) {
+    if (!a.alive || a.sp.modelPath !== modelPath || !a.mesh.userData.greybox) continue;
+    scene.remove(a.mesh);
+    const g = buildDinoMesh(a.sp);
+    g.position.set(a.x, groundH(a.x, a.z), a.z);
+    g.rotation.y = a.yaw;
+    scene.add(g);
+    a.mesh = g;
+  }
+}
 // fit a .glb object into a group: scaled to targetH, centered in x/z, feet at y=0, yaw-corrected.
 // NOTE: caller passes the object to use. Clone static meshes before passing (dinos, multi-instance);
 // pass a rigged/skinned model directly (single instance) — .clone(true) breaks skinned skeletons.
@@ -611,6 +633,7 @@ function buildDinoMesh(sp) {
   if (gb.crest) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.5, 1.0), new THREE.MeshStandardMaterial({ color: 0xb98a4a, flatShading: true })); c.position.set(0, scale * 0.95, gb.bodyL * 0.7); c.rotation.x = 0.5; g.add(c); }
   const blob = new THREE.Mesh(new THREE.CircleGeometry(gb.bodyL * 0.9, 14), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.3, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; blob.position.y = 0.03; g.add(blob);
+  g.userData.greybox = true;   // flag so we can upgrade to the textured model once it streams in
   return g;
 }
 
