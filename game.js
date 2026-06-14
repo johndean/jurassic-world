@@ -393,9 +393,7 @@ function loadModel(path) {
     undefined,
     () => res(null)));            // missing/failed model -> null -> grey-box fallback
 }
-// Heavy finale-only apex models (~10-14 MB of textures each): they appear only in the EXTINCTION
-// boss + the Field Guide, so they load LAST and never gate the player avatar or common creatures.
-const HEAVY_MODELS = new Set(["./assets/models/indominus.glb", "./assets/models/mosasaurus.glb", "./assets/models/pteranodon.glb"]);
+// All .glb are WebP+1024 texture-compressed to ~1-2 MB (gltf-transform), so no model gates the rest.
 const _loadingModels = {};   // path -> in-flight Promise, so preload + the guide never double-fetch the same .glb
 function loadModelOnce(path) {
   if (!path) return Promise.resolve(null);
@@ -412,7 +410,7 @@ async function loadWave(paths, conc = 5) {
 }
 // Tiered, non-blocking model streaming (best practice):
 //   T0 helicopter (first thing seen in the crash intro) · T1 player+specialists (gate play on these only)
-//   T2 common creatures · environment (foliage, ruins) · T3 heavy finale apexes — all background, grey-box until landed.
+//   T2 all creatures · environment (foliage, ruins) — all background, grey-box until landed.
 async function preloadModels() {
   if (HELI_MODEL) loadModelOnce(HELI_MODEL);
   const tier1 = [...new Set([PLAYER_MODEL, ...ROLES.map(r => r.model)].filter(Boolean))];
@@ -420,12 +418,11 @@ async function preloadModels() {
   if (!playerMixer) buildPlayer();
   (async () => {                                           // everything else streams in the background, prioritised
     const all = [...new Set(Object.values(SPECIES).map(s => s.modelPath).filter(Boolean))].filter(p => !tier1.includes(p));
-    await loadWave(all.filter(p => !HEAVY_MODELS.has(p)), 5);   // common creatures reskin as they land
+    await loadWave(all, 5);                                // creatures reskin as they land (all now ~1-2 MB)
     const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.fern].filter(Boolean))];
     await loadWave(foliage, 2); buildFoliage();
     const ruins = [...new Set([RUINS.gate.url, RUINS.centre.url].filter(Boolean))];
     await loadWave(ruins, 2); buildRuinModels();
-    await loadWave(all.filter(p => HEAVY_MODELS.has(p)), 2);    // heavy apexes last — finale/guide only
   })();
 }
 
