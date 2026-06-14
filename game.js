@@ -6,6 +6,7 @@ import { RenderPass } from "./vendor/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "./vendor/postprocessing/UnrealBloomPass.js";
 import { ShaderPass } from "./vendor/postprocessing/ShaderPass.js";
 import { OutputPass } from "./vendor/postprocessing/OutputPass.js";
+import { mergeGeometries } from "./vendor/BufferGeometryUtils.js";
 import { STR } from "./strings.js";
 
 /* ============================================================================
@@ -61,6 +62,11 @@ const MODEL_ANIMS = {};            // modelPath/url -> AnimationClip[] (for rigg
 const PLAYER_MODEL = "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/f4ba47e8-eace-41a6-910a-d21d61f5bfb0.glb";
 const GROUND_TEX = "https://d8j0ntlcm91z4.cloudfront.net/user_3F4NGeiRVgVtbKFFkoeC4vFwa2f/hf_20260614_002025_be16d317-be18-49b8-95e3-b3ad06fb8dc2.png";
 const _texLoader = new THREE.TextureLoader();
+// alpha-cutout billboard textures (transparent PNGs) for dense instanced jungle foliage
+const BILLBOARDS = {
+  bush: "https://d8j0ntlcm91z4.cloudfront.net/user_3F4NGeiRVgVtbKFFkoeC4vFwa2f/hf_20260614_004601_9bbfa90f-b025-45fd-8a5e-c2b5601b0e93.png",
+  grass: "https://d8j0ntlcm91z4.cloudfront.net/user_3F4NGeiRVgVtbKFFkoeC4vFwa2f/hf_20260614_004607_4167c467-a11a-4419-9fda-2cf0f04ac6dd.png",
+};
 // foliage models (CDN .glb) used to replace grey-box trees; filled with URLs once generated
 const FOLIAGE = {
   tree: "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/f98ce7d6-e340-4108-948d-c8933ac8088d.glb",
@@ -144,8 +150,8 @@ function initRenderer() {
   renderer.toneMappingExposure = 1.2;
   scene = new THREE.Scene();
   const m = BIOME.map;
-  scene.background = new THREE.Color(m.skyColor);
-  scene.fog = new THREE.FogExp2(new THREE.Color(m.fogColor), 0.016); // exponential = thick atmospheric valley haze
+  scene.background = new THREE.Color(0xa6b6a4);   // greener overcast sky
+  scene.fog = new THREE.FogExp2(new THREE.Color(0x93a791), 0.009); // lighter green haze so the dense foliage reads
   // image-based lighting: procedural neutral studio env so PBR materials get real ambient + reflections
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
@@ -194,7 +200,7 @@ function buildWorld() {
   groundTex.repeat.set(36, 36);
   groundTex.colorSpace = THREE.SRGBColorSpace;
   groundTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const ground = new THREE.Mesh(gGeo, new THREE.MeshStandardMaterial({ map: groundTex, color: 0xb4b9ad, roughness: 1, metalness: 0 }));
+  const ground = new THREE.Mesh(gGeo, new THREE.MeshStandardMaterial({ map: groundTex, color: 0x93a487, roughness: 1, metalness: 0 }));
   scene.add(ground);
 
   // boundary walls (charcoal slabs) — soft fence of the valley
@@ -251,43 +257,50 @@ function buildPlayer() {
     addBlob(playerMesh, 0.7);
   }
 }
-// scatter foliage: cloned real .glb trees/ferns when loaded, else grey-box slabs. Re-callable to swap.
+// one dense layer of alpha-cutout cross-quad billboards (the standard cheap way to do thick vegetation)
+function billboardLayer(texUrl, count, hMin, hMax, opts) {
+  opts = opts || {};
+  const half = BIOME.map.size / 2;
+  const tex = _texLoader.load(texUrl); tex.colorSpace = THREE.SRGBColorSpace;
+  const a = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
+  const b = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0); b.rotateY(Math.PI / 2);
+  const geo = mergeGeometries([a, b]);   // X-shaped cross-quad = volume from any angle
+  const mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1, metalness: 0, color: opts.color || 0xffffff });
+  const mesh = new THREE.InstancedMesh(geo, mat, count);
+  const dm = new THREE.Object3D();
+  for (let i = 0; i < count; i++) {
+    let x, z, ok = 0;
+    do {
+      if (opts.edge) { const ang = rand(0, 6.28), rr = rand(half * 0.62, half - 4); x = Math.cos(ang) * rr; z = Math.sin(ang) * rr; }
+      else { x = rand(-half + 4, half - 4); z = rand(-half + 4, half - 4); }
+    } while (Math.hypot(x, z) < (opts.minR || 8) && ++ok < 6);
+    const h = rand(hMin, hMax), w = h * rand(0.7, 1.05);
+    dm.position.set(x, groundH(x, z), z); dm.scale.set(w, h, w); dm.rotation.set(0, rand(0, 6.28), 0); dm.updateMatrix();
+    mesh.setMatrixAt(i, dm.matrix);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  return mesh;
+}
+// dense instanced jungle: ground grass + understory bushes + tall canopy + a perimeter jungle wall,
+// plus a few solid 3D trees for foreground variety. Billboards stream their textures async.
 function buildFoliage() {
   const m = BIOME.map, half = m.size / 2;
   if (foliageGroup) scene.remove(foliageGroup);
   foliageGroup = new THREE.Group();
   trees = [];
   reseed(1337);
-  if (MODELS[FOLIAGE.tree]) {
-    for (let i = 0; i < 60; i++) {
-      let x, z, ok = 0;
-      do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); ok++; } while (Math.hypot(x, z) < 12 && ok < 8);
-      const t = fitModel(MODELS[FOLIAGE.tree].clone(true), rand(9, 15), rand(0, 6.28));
-      t.position.set(x, groundH(x, z), z); foliageGroup.add(t);
-      trees.push({ x, z, r: 1.3 });
-    }
-    if (MODELS[FOLIAGE.fern]) for (let i = 0; i < 50; i++) {
-      const x = rand(-half + 4, half - 4), z = rand(-half + 4, half - 4);
-      const f = fitModel(MODELS[FOLIAGE.fern].clone(true), rand(1.3, 2.6), rand(0, 6.28));
-      f.position.set(x, groundH(x, z), z); foliageGroup.add(f);
-    }
-  } else {
-    const dm = new THREE.Object3D();
-    const NT = BIOME.scatter.trees;
-    const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.7, 1, 6), new THREE.MeshStandardMaterial({ color: 0x33383a, roughness: 1, flatShading: true }), NT);
-    const canopies = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x2a2f31, roughness: 1, flatShading: true }), NT);
-    for (let i = 0; i < NT; i++) {
-      let x, z, ok = 0;
-      do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); ok++; } while (Math.hypot(x, z) < 10 && ok < 8);
-      const h = rand(4, 9), r = rand(0.7, 1.3);
-      dm.position.set(x, h / 2, z); dm.rotation.set(0, rand(0, 6.28), 0); dm.scale.set(r, h, r); dm.updateMatrix();
-      trunks.setMatrixAt(i, dm.matrix);
-      const cw = rand(2.2, 4.2);
-      dm.position.set(x, h - 0.5, z); dm.rotation.set(rand(-.2, .2), rand(0, 6.28), rand(-.2, .2)); dm.scale.set(cw, rand(1.4, 2.6), cw); dm.updateMatrix();
-      canopies.setMatrixAt(i, dm.matrix);
-      trees.push({ x, z, r: r * 0.9 });
-    }
-    foliageGroup.add(trunks, canopies);
+  if (BILLBOARDS.grass) foliageGroup.add(billboardLayer(BILLBOARDS.grass, 2400, 0.5, 1.5, { minR: 6 }));
+  if (BILLBOARDS.bush) {
+    foliageGroup.add(billboardLayer(BILLBOARDS.bush, 1000, 1.6, 4.5, { minR: 8 }));                    // understory
+    foliageGroup.add(billboardLayer(BILLBOARDS.bush, 380, 7, 14, { minR: 14, color: 0xc2d2c2 }));      // tall canopy
+    foliageGroup.add(billboardLayer(BILLBOARDS.bush, 600, 10, 20, { edge: true, minR: 10, color: 0xb6c8b6 })); // perimeter jungle wall
+  }
+  if (MODELS[FOLIAGE.tree]) for (let i = 0; i < 30; i++) {   // solid 3D trees for close-up variety
+    let x, z, ok = 0;
+    do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); } while (Math.hypot(x, z) < 12 && ++ok < 8);
+    const t = fitModel(MODELS[FOLIAGE.tree].clone(true), rand(9, 15), rand(0, 6.28));
+    t.position.set(x, groundH(x, z), z); foliageGroup.add(t);
+    trees.push({ x, z, r: 1.3 });
   }
   scene.add(foliageGroup);
 }
