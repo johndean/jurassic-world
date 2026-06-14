@@ -149,6 +149,14 @@ function initMissionSelect() {
     const b = $("sBlurb"); if (b) b.textContent = selectedMission.blurb;
   }));
 }
+function initTabs() {   // homepage: Select Mission | Select Specialist | Name & Co-op (Field Guide + START always visible)
+  const tabs = $("startTabs"); if (!tabs) return;
+  tabs.querySelectorAll(".tab").forEach(tb => tb.addEventListener("click", () => {
+    const k = tb.dataset.tab;
+    tabs.querySelectorAll(".tab").forEach(x => x.classList.toggle("sel", x === tb));
+    document.querySelectorAll(".tabpanel").forEach(p => p.classList.toggle("on", p.dataset.panel === k));
+  }));
+}
 
 /* ===== campaign missions (multi-phase, data-driven; run on the generic engine below) ===== */
 Object.assign(MISSIONS, {
@@ -393,6 +401,7 @@ async function boot() {
   buildStaticHUD();
   showStart();
   initMissionSelect();
+  initTabs();
   initCharSelect();
   initLobby();
   requestAnimationFrame(frame);
@@ -841,8 +850,8 @@ function nearTowerBase(P) {
 }
 function climbTower(t) {
   const P = S.player; P.onTower = t; P.zip = null;
-  P.x = t.x; P.z = t.z + t.half - 0.7; P.gait = "idle";   // step onto the deck by the ladder
-  toast("ON WATCHTOWER · safe vantage — glass (B) & tranq · press E to zip down");
+  P.x = t.x; P.z = t.z; P.gait = "idle";   // step onto the centre of the deck
+  toast("ON WATCHTOWER · glass (B) & tranq · press E or walk off the front (ladder side) to zip down");
 }
 function startZip(t) {
   const P = S.player;
@@ -916,6 +925,8 @@ function initInput() {
     if (e.code === "Digit5") selectTool(4);
     if (e.code === "Digit6") selectTool(5);
     if (e.code === "KeyB") toggleBinoc();   // binoculars (zoom + species ID)
+    if (binoc && (e.code === "Equal" || e.code === "NumpadAdd")) binocZoom(1);
+    if (binoc && (e.code === "Minus" || e.code === "NumpadSubtract")) binocZoom(-1);
     if (e.code === "KeyH" || e.code === "Slash") toggleKeyHelp();          // controls reference (desktop)
     if (intro && (e.code === "Escape" || e.code === "Enter" || e.code === "Space")) { skipIntro(); return; }
     if (e.code === "Escape" && mapOpen) toggleMap();
@@ -941,6 +952,9 @@ function initInput() {
   document.querySelectorAll("#tools .tool").forEach(el => el.addEventListener("click", () => { const i = +el.dataset.i; if (i === selTool) useTool(); else selectTool(i); }));
   const bu = $("btnUse"); if (bu) bu.addEventListener("pointerdown", e => { e.preventDefault(); useTool(); });
   const bn = $("btnBinoc"); if (bn) bn.addEventListener("pointerdown", e => { e.preventDefault(); toggleBinoc(); });
+  const bi = $("bnIn"); if (bi) bi.addEventListener("pointerdown", e => { e.preventDefault(); binocZoom(1); });
+  const bo = $("bnOut"); if (bo) bo.addEventListener("pointerdown", e => { e.preventDefault(); binocZoom(-1); });
+  addEventListener("wheel", e => { if (binoc) { binocZoom(e.deltaY < 0 ? 1 : -1); e.preventDefault(); } }, { passive: false });
   const bm = $("btnMap"); if (bm) bm.addEventListener("pointerdown", e => { e.preventDefault(); toggleMap(); });
   const mc = $("mapClose"); if (mc) mc.addEventListener("click", e => { e.preventDefault(); if (mapOpen) toggleMap(); });
   const mo = $("mapOverlay"); if (mo) mo.addEventListener("pointerdown", e => { if (e.target === mo && mapOpen) toggleMap(); });   // tap backdrop to close
@@ -1080,9 +1094,11 @@ function updatePlayer(dt) {
   }
   const lim = BIOME.map.size / 2 - 3;
   P.x = clamp(P.x, -lim, lim); P.z = clamp(P.z, -lim, lim);
-  if (P.onTower) {   // stay on the platform (railed) — interact (E / CALL) to zip down
+  if (P.onTower) {   // railed on 3 sides; step off the FRONT (ladder side, +Z) to ride the zip down (or press E)
     const t = P.onTower, b = t.half - 0.45;
-    P.x = clamp(P.x, t.x - b, t.x + b); P.z = clamp(P.z, t.z - b, t.z + b);
+    P.x = clamp(P.x, t.x - b, t.x + b);
+    if (P.z > t.z + b) startZip(t);
+    else P.z = Math.max(P.z, t.z - b);
   } else if (!P.zip) {   // watchtowers: step onto the ladder to auto-climb; otherwise you can't walk through the structure
     for (const t of TOWERS) {
       if (dist2(P.x, P.z, t.x, t.z + t.half) < 2.4 * 2.4) { climbTower(t); break; }   // at the ladder → go up
@@ -1351,10 +1367,13 @@ function useTool() {
     else toast("MELEE · nothing in reach");
   }
   else if (t.id === "tranq") {                                  // fire a sedative dart at whatever you're aiming at
-    const a = aimTarget(72, false);
-    if (!a) { toast("TRANQ · no target in sights"); return; }
     t.charges--; t.cd = t.cdMax; Audio.hit();
-    fxTracer(P.x, groundH(P.x, P.z) + 1.3, P.z, a.x, groundH(a.x, a.z) + (a.sp.greybox.standH || 2) * 0.6, a.z);
+    const a = aimTarget(72, false);
+    const oy = groundH(P.x, P.z) + 1.3;
+    const tx = a ? a.x : P.x + Math.sin(cam.yaw) * 45, tz = a ? a.z : P.z + Math.cos(cam.yaw) * 45;
+    const ty = a ? groundH(a.x, a.z) + (a.sp.greybox.standH || 2) * 0.6 : oy;
+    fxDart(P.x, oy, P.z, tx, ty, tz);                           // visible dart projectile + trail (always fires)
+    if (!a) { toast("TRANQ · missed — line up the target in the centre"); return; }
     if (a.sedated) { toast(a.sp.displayName + " · already sedated"); return; }
     a.sedation = (a.sedation || 0) + 1;
     const need = sedThreshold(a.sp);
@@ -1375,6 +1394,20 @@ function useTool() {
     if (selectedMission.id === "dna" && dnaSamples >= DNA_GOAL && dnaSamples - 1 < DNA_GOAL) { Audio.win(); toast(`DNA SECURED (${DNA_GOAL}/${DNA_GOAL}) — reach the beacon & extract`); }
     else toast(`DNA SAMPLE · ${a.sp.displayName}  (${dnaSamples}${selectedMission.id === "dna" ? "/" + DNA_GOAL : ""})`);
   }
+}
+function fxDart(x1, y1, z1, x2, y2, z2) {   // visible tranq dart: muzzle flash → flying dart → impact spark
+  const from = new THREE.Vector3(x1, y1, z1), to = new THREE.Vector3(x2, y2, z2), dir = to.clone().sub(from).normalize();
+  fxTracer(x1, y1, z1, x2, y2, z2);                                  // faint trail
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff0c0 }));
+  flash.position.copy(from); addFx(flash, 0.12, tt => { flash.scale.setScalar(1 + tt * 6); flash.material.opacity = 1 - tt / 0.12; flash.material.transparent = true; });
+  const dart = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 6), new THREE.MeshBasicMaterial({ color: 0xbfe2ea })); dart.add(body);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.18, 6), new THREE.MeshBasicMaterial({ color: 0xe0772f })); tip.position.y = 0.34; dart.add(tip);
+  dart.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir); dart.position.copy(from);
+  const dur = Math.min(0.35, from.distanceTo(to) / 90);
+  addFx(dart, dur + 0.26, tt => { dart.position.lerpVectors(from, to, Math.min(1, tt / dur)); dart.visible = tt < dur; });
+  const spark = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 6), new THREE.MeshBasicMaterial({ color: 0x8fb8c4, transparent: true, opacity: 0 }));   // impact spark at arrival
+  spark.position.copy(to); addFx(spark, dur + 0.25, tt => { if (tt < dur) return; const k = (tt - dur) / 0.25; spark.material.opacity = 0.8 * (1 - k); spark.scale.setScalar(1 + k * 3); });
 }
 function fxTracer(x1, y1, z1, x2, y2, z2) {   // brief dart/round tracer line
   const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x1, y1, z1), new THREE.Vector3(x2, y2, z2)]);
@@ -2190,10 +2223,17 @@ function updateToolHUD() {
   });
   const dh = $("dnaHud"); if (dh) dh.textContent = `⚗ DNA ${dnaSamples}  ·  ID ${identified.size}/${Object.keys(SPECIES).length}`;
 }
+let binocFov = BINOC_FOV;
+function binocZoom(dir) {   // +1 zoom in, -1 zoom out (scroll / +- keys / on-screen buttons / pinch)
+  if (!binoc || !camera) return;
+  binocFov = clamp(binocFov - dir * 4, 10, 42);
+  camera.fov = binocFov; camera.updateProjectionMatrix();
+}
 function toggleBinoc() {
   if (S.phase !== "playing" && !binoc) return;   // only glass during play (always allow lowering)
   binoc = !binoc;
-  if (camera) { camera.fov = binoc ? BINOC_FOV : DEFAULT_FOV; camera.updateProjectionMatrix(); }
+  if (binoc) binocFov = BINOC_FOV;
+  if (camera) { camera.fov = binoc ? binocFov : DEFAULT_FOV; camera.updateProjectionMatrix(); }
   const ov = $("binoc"); if (ov) ov.classList.toggle("on", binoc);
   const bb = $("btnBinoc"); if (bb) bb.classList.toggle("on", binoc);
   if (!binoc) { const h = $("scan"); if (h) h.innerHTML = ""; const t = $("binocTgt"); if (t) t.textContent = ""; }
@@ -2217,6 +2257,7 @@ function updateScan() {   // binoculars: project in-view dinos to screen, label 
   }
   host.innerHTML = html;
   const t = $("binocTgt"); if (t) t.textContent = center ? `▶ ${center.sp.displayName.toUpperCase()} · ${center.sp.diet === "carnivore" ? "PREDATOR" : "HERBIVORE"}` : "SCANNING…";
+  const zl = $("binocZoom"); if (zl) zl.textContent = "×" + (DEFAULT_FOV / binocFov).toFixed(1);
 }
 function clearField() {
   for (const tr of traps) scene.remove(tr.mesh); traps.length = 0;

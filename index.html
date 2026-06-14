@@ -244,7 +244,20 @@
     .dd-name{font-size:22px;} }
   /* character / role select */
   .cs-label{color:#8a978f;font-size:11px;letter-spacing:.22em;margin:4px 0 10px;text-transform:uppercase;}
-  .mission-select{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:680px;margin:0 auto 18px;}
+  /* homepage tabs */
+  .tabs{display:flex;gap:6px;justify-content:center;margin:14px auto 0;max-width:560px;}
+  .tab{flex:1 1 0;font:11px ui-monospace,monospace;letter-spacing:.12em;font-weight:700;color:#9aa69d;
+    background:rgba(10,14,13,.5);border:1px solid var(--hud-line);border-bottom:none;border-radius:7px 7px 0 0;
+    padding:11px 8px;cursor:pointer;transition:.14s;-webkit-tap-highlight-color:transparent;}
+  .tab:hover{color:#d7e0da;}
+  .tab.sel{color:#fff;background:rgba(224,119,47,.16);border-color:#e0772f;}
+  .tabwrap{width:min(720px,92vw);min-height:230px;margin:0 auto;padding:18px 16px;
+    border:1px solid var(--hud-line);border-radius:0 0 9px 9px;background:rgba(8,11,10,.45);
+    display:flex;align-items:center;justify-content:center;}
+  .tabpanel{display:none;width:100%;}
+  .tabpanel.on{display:block;}
+  .start-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:16px;}
+  .mission-select{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:680px;margin:0 auto 14px;}
   .mission-card{flex:1 1 280px;max-width:320px;text-align:left;background:rgba(10,14,13,.55);border:1px solid var(--hud-line);
     border-radius:7px;padding:12px 14px;cursor:pointer;transition:.14s;-webkit-tap-highlight-color:transparent;}
   .mission-card:hover,.mission-card.sel{border-color:#e0772f;background:rgba(224,119,47,.12);}
@@ -350,6 +363,11 @@
   #binoc .bn-info{position:absolute;left:0;right:0;bottom:13%;text-align:center;font:13px ui-monospace,monospace;
     letter-spacing:.14em;color:#bfe2ea;text-shadow:0 1px 6px #000;}
   #binoc .bn-info small{display:block;font-size:9px;letter-spacing:.2em;color:rgba(143,184,196,.7);margin-top:3px;}
+  #binoc .bn-zoom{position:absolute;right:5%;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:auto;}
+  #binoc .bn-zoom button{width:42px;height:42px;font:20px ui-monospace,monospace;color:#bfe2ea;background:rgba(10,14,13,.6);
+    border:1px solid rgba(143,184,196,.6);border-radius:8px;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+  #binoc .bn-zoom button:active{background:rgba(143,184,196,.35);}
+  #binoc #binocZoom{font:12px ui-monospace,monospace;letter-spacing:.1em;color:#bfe2ea;text-shadow:0 1px 4px #000;}
   /* desktop keyboard reference slideout */
   #keyHelpBtn{position:fixed;top:14px;right:14px;z-index:47;display:none;font:11px ui-monospace,monospace;letter-spacing:.12em;
     color:#d7e0da;background:rgba(10,14,13,.66);border:1px solid var(--hud-line);padding:8px 12px;border-radius:6px;cursor:pointer;transition:.15s;}
@@ -512,7 +530,8 @@
 <div id="binoc">
   <div class="bn-mask"></div>
   <div class="bn-ret"></div>
-  <div class="bn-info"><span id="binocTgt"></span><small>BINOCULARS · B to lower</small></div>
+  <div class="bn-zoom"><button id="bnIn">＋</button><span id="binocZoom">×2.8</span><button id="bnOut">－</button></div>
+  <div class="bn-info"><span id="binocTgt"></span><small>BINOCULARS · scroll / ＋－ zoom · B to lower</small></div>
 </div>
 
 <div id="touch">
@@ -563,27 +582,40 @@
 <div class="screen" id="startScreen">
   <h1 id="sTitle"></h1>
   <div class="accent" id="sSub"></div>
-  <p id="sBlurb"></p>
-  <div class="how" id="sHow"></div>
-  <div class="cs-label">Select mission</div>
-  <div class="mission-select" id="missionSelect"></div>
-  <div class="cs-label">Select your specialist</div>
-  <div class="char-select" id="charSelect"></div>
-  <div class="mp" id="mpPanel">
-    <div class="mp-row">
-      <input id="mpName" maxlength="16" placeholder="YOUR NAME" autocomplete="off" autocapitalize="characters" spellcheck="false">
-      <input id="mpRoom" maxlength="8" placeholder="ROOM CODE" autocomplete="off" autocapitalize="characters" spellcheck="false">
-    </div>
-    <div class="mp-row">
-      <button class="mp-btn" id="mpHost">HOST CO-OP</button>
-      <button class="mp-btn" id="mpJoin">JOIN</button>
-      <button class="mp-btn alt" id="mpLeave" style="display:none">LEAVE</button>
-    </div>
-    <div class="mp-status" id="mpStatus">Playing solo — or host / join a co-op room</div>
-    <div class="mp-peers" id="mpPeers"></div>
+  <div class="tabs" id="startTabs">
+    <button class="tab sel" data-tab="mission">SELECT MISSION</button>
+    <button class="tab" data-tab="role">SELECT SPECIALIST</button>
+    <button class="tab" data-tab="coop">NAME &amp; CO-OP</button>
   </div>
-  <button class="bigbtn" id="startBtn"></button>
-  <button class="bigbtn ghost" id="guideBtn">📖 FIELD GUIDE</button>
+  <div class="tabwrap">
+    <div class="tabpanel on" data-panel="mission">
+      <div class="mission-select" id="missionSelect"></div>
+      <p id="sBlurb"></p>
+    </div>
+    <div class="tabpanel" data-panel="role">
+      <div class="char-select" id="charSelect"></div>
+    </div>
+    <div class="tabpanel" data-panel="coop">
+      <div class="mp" id="mpPanel">
+        <div class="mp-row">
+          <input id="mpName" maxlength="16" placeholder="YOUR NAME" autocomplete="off" autocapitalize="characters" spellcheck="false">
+          <input id="mpRoom" maxlength="8" placeholder="ROOM CODE" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        </div>
+        <div class="mp-row">
+          <button class="mp-btn" id="mpHost">HOST CO-OP</button>
+          <button class="mp-btn" id="mpJoin">JOIN</button>
+          <button class="mp-btn alt" id="mpLeave" style="display:none">LEAVE</button>
+        </div>
+        <div class="mp-status" id="mpStatus">Playing solo — or host / join a co-op room</div>
+        <div class="mp-peers" id="mpPeers"></div>
+      </div>
+    </div>
+  </div>
+  <div class="how" id="sHow"></div>
+  <div class="start-row">
+    <button class="bigbtn" id="startBtn"></button>
+    <button class="bigbtn ghost" id="guideBtn">📖 FIELD GUIDE</button>
+  </div>
 </div>
 
 <div id="codex">
