@@ -292,8 +292,10 @@
   #btnCrouch{right:104px;bottom:170px;}
   #btnCall{right:18px;bottom:144px;border-color:rgba(224,119,47,.7);}
   #btnUse{right:104px;bottom:260px;border-color:rgba(143,184,196,.7);}
-  /* defense toolset bar */
-  #tools{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:46;display:flex;gap:8px;}
+  #btnBinoc{right:18px;bottom:316px;border-color:rgba(143,184,196,.7);font-size:20px;}
+  #btnBinoc.on{background:rgba(143,184,196,.45);border-color:#bfe2ea;}
+  /* defense + field-science toolset bar */
+  #tools{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:46;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:min(96vw,560px);}
   .tool{position:relative;width:76px;padding:8px 6px 6px;background:rgba(10,14,13,.62);border:1px solid var(--hud-line);
     border-radius:9px;color:#d7e0da;font:inherit;cursor:pointer;text-align:center;overflow:hidden;pointer-events:auto;-webkit-tap-highlight-color:transparent;}
   .tool.sel{border-color:#e0772f;box-shadow:0 0 0 1px #e0772f;background:rgba(224,119,47,.15);}
@@ -303,7 +305,29 @@
   .t-nm{display:block;font-size:8px;letter-spacing:.1em;margin-top:3px;color:#c2ccc4;}
   .t-ch{display:block;font-size:9px;font-weight:700;color:#9fe08a;margin-top:1px;min-height:11px;}
   .t-cd{position:absolute;left:0;bottom:0;width:100%;height:0;background:rgba(0,0,0,.55);pointer-events:none;}
-  @media (max-width:560px){ #tools{bottom:10px;left:14px;transform:none;} .tool{width:62px;} }
+  @media (max-width:560px){ #tools{bottom:10px;left:50%;transform:translateX(-50%);max-width:96vw;} .tool{width:56px;} .t-nm{font-size:7px;} }
+  /* DNA / identification readout */
+  #dnaHud{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:46;font:11px ui-monospace,monospace;
+    letter-spacing:.12em;color:#9fe08a;background:rgba(10,14,13,.55);border:1px solid var(--hud-line);padding:4px 12px;border-radius:12px;pointer-events:none;}
+  /* binoculars overlay + species scan tags */
+  #scan{position:fixed;inset:0;z-index:44;pointer-events:none;}
+  .scan-tag{position:absolute;transform:translate(-50%,-100%);text-align:center;white-space:nowrap;pointer-events:none;
+    font:10px ui-monospace,monospace;text-shadow:0 1px 4px #000;line-height:1.25;}
+  .scan-tag b{display:block;font-size:11px;letter-spacing:.04em;}
+  .scan-tag span{font-size:8px;letter-spacing:.08em;color:#c2ccc4;}
+  .scan-tag.pred b{color:#e8907a;} .scan-tag.herb b{color:#9fe08a;}
+  .scan-tag::after{content:"";position:absolute;left:50%;top:100%;width:1px;height:10px;background:rgba(215,224,218,.5);}
+  #binoc{position:fixed;inset:0;z-index:45;pointer-events:none;display:none;}
+  #binoc.on{display:block;}
+  #binoc .bn-mask{position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,transparent 0,transparent 30%,rgba(0,0,0,.55) 31%,rgba(0,0,0,.92) 46%);}
+  #binoc .bn-ret{position:absolute;left:50%;top:50%;width:170px;height:170px;transform:translate(-50%,-50%);
+    border:1px solid rgba(191,226,234,.5);border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.4) inset;}
+  #binoc .bn-ret::before,#binoc .bn-ret::after{content:"";position:absolute;background:rgba(191,226,234,.55);}
+  #binoc .bn-ret::before{left:50%;top:20%;bottom:20%;width:1px;transform:translateX(-50%);}
+  #binoc .bn-ret::after{top:50%;left:20%;right:20%;height:1px;transform:translateY(-50%);}
+  #binoc .bn-info{position:absolute;left:0;right:0;bottom:13%;text-align:center;font:13px ui-monospace,monospace;
+    letter-spacing:.14em;color:#bfe2ea;text-shadow:0 1px 6px #000;}
+  #binoc .bn-info small{display:block;font-size:9px;letter-spacing:.2em;color:rgba(143,184,196,.7);margin-top:3px;}
   /* desktop keyboard reference slideout */
   #keyHelpBtn{position:fixed;top:14px;right:14px;z-index:47;display:none;font:11px ui-monospace,monospace;letter-spacing:.12em;
     color:#d7e0da;background:rgba(10,14,13,.66);border:1px solid var(--hud-line);padding:8px 12px;border-radius:6px;cursor:pointer;transition:.15s;}
@@ -441,6 +465,18 @@
   <button class="tool" data-i="0"><b>1</b><span class="t-ic">✸</span><span class="t-nm">FLARE</span><span class="t-ch"></span><i class="t-cd"></i></button>
   <button class="tool" data-i="1"><b>2</b><span class="t-ic">◓</span><span class="t-nm">DECOY</span><span class="t-ch"></span><i class="t-cd"></i></button>
   <button class="tool" data-i="2"><b>3</b><span class="t-ic">✕</span><span class="t-nm">MELEE</span><span class="t-ch"></span><i class="t-cd"></i></button>
+  <button class="tool" data-i="3"><b>4</b><span class="t-ic">➶</span><span class="t-nm">TRANQ</span><span class="t-ch"></span><i class="t-cd"></i></button>
+  <button class="tool" data-i="4"><b>5</b><span class="t-ic">⊓</span><span class="t-nm">TRAP</span><span class="t-ch"></span><i class="t-cd"></i></button>
+  <button class="tool" data-i="5"><b>6</b><span class="t-ic">⚗</span><span class="t-nm">SAMPLE</span><span class="t-ch"></span><i class="t-cd"></i></button>
+</div>
+<div id="dnaHud"></div>
+
+<!-- binoculars: zoom + species identification -->
+<div id="scan"></div>
+<div id="binoc">
+  <div class="bn-mask"></div>
+  <div class="bn-ret"></div>
+  <div class="bn-info"><span id="binocTgt"></span><small>BINOCULARS · B to lower</small></div>
 </div>
 
 <div id="touch">
@@ -456,6 +492,7 @@
   <button class="tbtn" id="btnCrouch">CROUCH</button>
   <button class="tbtn" id="btnCall">CALL</button>
   <button class="tbtn use" id="btnUse">USE</button>
+  <button class="tbtn" id="btnBinoc">👁</button>
 </div>
 
 <!-- desktop keyboard reference (slideout) -->
@@ -470,8 +507,13 @@
     <div class="kh-row"><span class="keys"><kbd>Shift</kbd></span><span>Sprint</span></div>
     <div class="kh-row"><span class="keys"><kbd>Ctrl</kbd></span><span>Crouch (quieter)</span></div>
     <div class="kh-sec">DEFENSE TOOLS</div>
-    <div class="kh-row"><span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><span>Select Flare / Decoy / Melee</span></div>
+    <div class="kh-row"><span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><span>Flare / Decoy / Melee</span></div>
     <div class="kh-row"><span class="keys"><kbd>F</kbd></span><span>Use selected tool</span></div>
+    <div class="kh-sec">FIELD SCIENCE (DNA)</div>
+    <div class="kh-row"><span class="keys"><kbd>B</kbd></span><span>Binoculars — zoom &amp; identify species</span></div>
+    <div class="kh-row"><span class="keys"><kbd>4</kbd></span><span>Tranq gun — aim &amp; <kbd>F</kbd> to dart (sedate)</span></div>
+    <div class="kh-row"><span class="keys"><kbd>5</kbd></span><span>Snare trap — <kbd>F</kbd> to set, lure a dino in</span></div>
+    <div class="kh-row"><span class="keys"><kbd>6</kbd></span><span>Syringe — near a downed dino, <kbd>F</kbd> draws DNA</span></div>
     <div class="kh-sec">EXTRACTION</div>
     <div class="kh-row"><span class="keys"><kbd>E</kbd></span><span>Call extraction (at beacon)</span></div>
     <div class="kh-row"><span class="keys"><kbd>M</kbd></span><span>Toggle tactical map</span></div>

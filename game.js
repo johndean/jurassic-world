@@ -598,6 +598,10 @@ function initInput() {
     if (e.code === "Digit1") selectTool(0);
     if (e.code === "Digit2") selectTool(1);
     if (e.code === "Digit3") selectTool(2);
+    if (e.code === "Digit4") selectTool(3);
+    if (e.code === "Digit5") selectTool(4);
+    if (e.code === "Digit6") selectTool(5);
+    if (e.code === "KeyB") toggleBinoc();   // binoculars (zoom + species ID)
     if (e.code === "KeyH" || e.code === "Slash") toggleKeyHelp();          // controls reference (desktop)
     if (intro && (e.code === "Escape" || e.code === "Enter" || e.code === "Space")) { skipIntro(); return; }
     if (e.code === "Escape" && mapOpen) toggleMap();
@@ -622,6 +626,7 @@ function initInput() {
   // defense tool bar: tap a tool to select it; tap the selected one (or the USE button) to activate
   document.querySelectorAll("#tools .tool").forEach(el => el.addEventListener("click", () => { const i = +el.dataset.i; if (i === selTool) useTool(); else selectTool(i); }));
   const bu = $("btnUse"); if (bu) bu.addEventListener("pointerdown", e => { e.preventDefault(); useTool(); });
+  const bn = $("btnBinoc"); if (bn) bn.addEventListener("pointerdown", e => { e.preventDefault(); toggleBinoc(); });
 
   // keyboard reference slideout — desktop only (touch users have on-screen labels + the joystick affordance)
   if (!isTouch) { const kb = $("keyHelpBtn"); if (kb) { kb.style.display = "block"; kb.addEventListener("click", toggleKeyHelp); } }
@@ -793,6 +798,7 @@ function spawnDino(speciesId, x, z) {
     state: baseStateFor(sp),
     bb: { lastSeenX: 0, lastSeenZ: 0, hasTarget: false, threat: 0, role: "harry", scared: 0, homeX: x, homeZ: z, hue: 0 },
     cd: 0, decideIn: rand(0, 0.25), lod: "full", anim: 0, alive: true, gaitPhase: rand(0, 6.28), roar: 0, roarCd: rand(2, 6),
+    sedation: 0, sedated: false, downT: 0, trapped: false, trappedT: 0, drawn: false,   // field-science (tranq/trap/sample)
   };
 }
 // When a species' .glb finishes streaming, swap any already-spawned grey-box instances
@@ -960,9 +966,34 @@ const TOOLS = [
   { id: "flare", name: "FLARE", icon: "✸", charges: 3, max: 3, cd: 0, cdMax: 7 },
   { id: "decoy", name: "DECOY", icon: "◓", charges: 6, max: 6, cd: 0, cdMax: 3 },
   { id: "melee", name: "MELEE", icon: "✕", charges: Infinity, max: Infinity, cd: 0, cdMax: 1.1 },
+  { id: "tranq", name: "TRANQ", icon: "➶", charges: 8, max: 8, cd: 0, cdMax: 1.1 },   // dart gun — sedate a dino
+  { id: "trap", name: "TRAP", icon: "⊓", charges: 3, max: 3, cd: 0, cdMax: 1.0 },     // snare trap — immobilise
+  { id: "sample", name: "SAMPLE", icon: "⚗", charges: Infinity, max: Infinity, cd: 0, cdMax: 1.4 },  // syringe — draw DNA
 ];
 let selTool = 0;
 function selectTool(i) { if (i >= 0 && i < TOOLS.length) selTool = i; }
+/* ---- field-science kit (DNA collection): tranq → sedate, trap → snare, syringe → draw blood ---- */
+const traps = [];                 // { mesh, x, z, r, armed }
+let dnaSamples = 0;               // collected blood/DNA samples this run
+const dnaSpecies = new Set();     // species sampled this run
+const identified = new Set();     // species identified through the binoculars
+let binoc = false;                // binoculars (zoom + species ID) toggle
+const DEFAULT_FOV = 64, BINOC_FOV = 23;
+function sedThreshold(sp) {        // darts to drop a dino — bigger / predators resist more
+  return clamp(1 + (sp.size.massKg || 200) / 650 + (sp.diet === "carnivore" ? 1.5 : 0), 2, 9);
+}
+function aimTarget(maxD, needDown) {   // dino nearest the screen-centre within range + front cone (tranq/sample aiming)
+  const P = S.player; let best = null, bestScore = 0.55;
+  for (const a of dinos) {
+    if (!a.alive) continue;
+    if (needDown && !(a.sedated || a.trapped)) continue;
+    const rx = a.x - P.x, rz = a.z - P.z, d = Math.hypot(rx, rz) || 1;
+    if (d > maxD) continue;
+    const fwd = (rx * Math.sin(cam.yaw) + rz * Math.cos(cam.yaw)) / d;   // alignment with look direction
+    if (fwd > bestScore) { bestScore = fwd; best = a; }
+  }
+  return best;
+}
 function scareDinos(x, z, r, secs) {
   let n = 0;
   for (const a of dinos) {
@@ -988,15 +1019,70 @@ function useTool() {
     if (hit) { hit.hp -= 22; hit.bb.scared = Math.max(hit.bb.scared, 1.8); hit.bb.lastSeenX = P.x; hit.bb.lastSeenZ = P.z; hit.state = "Retreat"; hit.anim = 0.3; Audio.hit(); flash(); fxReact(hit, hit.hp <= 0 ? "✕" : "!", "#e8907a"); if (hit.hp <= 0) killDino(hit); toast("STRUCK · " + hit.sp.displayName); }
     else toast("MELEE · nothing in reach");
   }
+  else if (t.id === "tranq") {                                  // fire a sedative dart at whatever you're aiming at
+    const a = aimTarget(72, false);
+    if (!a) { toast("TRANQ · no target in sights"); return; }
+    t.charges--; t.cd = t.cdMax; Audio.hit();
+    fxTracer(P.x, groundH(P.x, P.z) + 1.3, P.z, a.x, groundH(a.x, a.z) + (a.sp.greybox.standH || 2) * 0.6, a.z);
+    if (a.sedated) { toast(a.sp.displayName + " · already sedated"); return; }
+    a.sedation = (a.sedation || 0) + 1;
+    const need = sedThreshold(a.sp);
+    if (a.sedation >= need) { a.sedated = true; a.downT = 24; a.state = "Down"; a.bb.scared = 0; fxReact(a, "Zz", "#8fb8c4"); toast(a.sp.displayName + " SEDATED — draw a sample"); }
+    else { fxReact(a, "✦", "#8fb8c4"); a.bb.scared = Math.max(a.bb.scared, 1.0); toast(`TRANQ · ${a.sp.displayName} ${Math.round(a.sedation / need * 100)}%`); }
+  }
+  else if (t.id === "trap") {                                   // drop a snare trap a few metres ahead
+    t.charges--; t.cd = t.cdMax;
+    const tx = P.x + Math.sin(P.yaw) * 4, tz = P.z + Math.cos(P.yaw) * 4;
+    traps.push(buildTrap(tx, tz)); Audio.step("run"); toast("TRAP set — lure a dino onto it");
+  }
+  else if (t.id === "sample") {                                 // draw blood/DNA from a sedated or trapped dino
+    const a = aimTarget(4.2, true);
+    if (!a) { toast("SAMPLE · get close to a SEDATED or TRAPPED dino"); return; }
+    if (a.drawn) { toast(a.sp.displayName + " · already sampled"); return; }
+    t.cd = t.cdMax; a.drawn = true; dnaSamples++; dnaSpecies.add(a.sp.id); identified.add(a.sp.id);
+    Audio.beacon(false); fxReact(a, "✚", "#9fe08a"); flash();
+    toast(`DNA SAMPLE · ${a.sp.displayName}  (${dnaSamples})`);
+  }
+}
+function fxTracer(x1, y1, z1, x2, y2, z2) {   // brief dart/round tracer line
+  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x1, y1, z1), new THREE.Vector3(x2, y2, z2)]);
+  const m = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xbfe2ea, transparent: true, opacity: 0.9 }));
+  addFx(m, 0.18, tt => { m.material.opacity = 0.9 * (1 - tt / 0.18); });
+}
+function buildTrap(x, z) {
+  const g = new THREE.Group(); g.position.set(x, groundH(x, z) + 0.05, z);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.12, 6, 18), new THREE.MeshStandardMaterial({ color: 0x6b6f4a, roughness: 1, metalness: 0.3 }));
+  ring.rotation.x = -Math.PI / 2; g.add(ring);
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.4, 4), new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: 0.6, roughness: 0.4 })); tooth.position.set(Math.cos(a) * 1.0, 0.2, Math.sin(a) * 1.0); g.add(tooth); }
+  scene.add(g);
+  return { mesh: g, x, z, r: 1.6, armed: true };
 }
 function updateTools(dt) {
   if (decoy.t > 0) { decoy.t = Math.max(0, decoy.t - dt); if (decoyMesh) { const s = 1 + Math.sin(S.t * 6) * 0.12; decoyMesh.userData.ring.scale.set(s, s, s); decoyMesh.children.forEach(c => { if (c.material) c.material.opacity = (c.isMesh ? (c.geometry.type === "RingGeometry" ? 0.85 : 0.45) : 1) * Math.min(1, decoy.t); }); } }
   else if (decoyMesh) decoyMesh.visible = false;
   for (const t of TOOLS) if (t.cd > 0) t.cd = Math.max(0, t.cd - dt);
 }
+function updateField(dt) {   // tranq sedation + snare traps lifecycle (DNA collection kit)
+  // armed traps snap shut on the first dino to step in
+  for (const tr of traps) {
+    if (!tr.armed) continue;
+    for (const a of dinos) {
+      if (!a.alive || a.trapped || a.sedated) continue;
+      if (dist2(a.x, a.z, tr.x, tr.z) < tr.r * tr.r) { a.trapped = true; a.trappedT = 18; a.state = "Down"; a.bb.scared = 0; tr.armed = false; Audio.hit(); fxReact(a, "✗", "#c9a23a"); break; }
+    }
+  }
+  for (const a of dinos) {
+    if (!a.alive) continue;
+    if (a.sedated) { a.downT -= dt; if (a.downT <= 0) { a.sedated = false; a.sedation = 0; } }
+    else if (a.sedation > 0) a.sedation = Math.max(0, a.sedation - dt * 0.12);   // partial dose wears off
+    if (a.trapped) { a.trappedT -= dt; if (a.trappedT <= 0) a.trapped = false; }
+  }
+}
+const isDown = a => a.sedated || a.trapped;   // immobilised (free to sample); still free-roam for the player
 
 function decide(a, P) {
   const sp = a.sp, bb = a.bb;
+  if (isDown(a)) { a.state = "Down"; return; }   // sedated / trapped → no AI
   const per = (a.lod === "full") ? perceive(a, P) : { seen: false, heard: false, d: 999 };
   const aggr = sp.behavior.aggression + (S.extraction.called ? (BIOME.spawnDirector.escalation.trexAggroBonus * (isApex(sp) ? 1 : 0.4)) : 0);
 
@@ -1058,6 +1144,13 @@ function updatePackRoles() {
 // execute the chosen state via steering → vx,vz
 function steer(a, dt, P) {
   const sp = a.sp, bb = a.bb;
+  if (isDown(a)) {   // sedated / trapped → frozen in place; sedated dinos slump onto their side
+    a.vx = a.vz = 0; a.mesh.position.set(a.x, groundH(a.x, a.z), a.z); a.mesh.rotation.y = a.yaw;
+    const body = a.mesh.children[0];
+    if (body) body.rotation.z = lerp(body.rotation.z, a.sedated ? 1.35 : 0, Math.min(1, dt * 3));
+    if (a.mesh.userData.jaw) a.mesh.userData.jaw.rotation.x = 0;
+    return;
+  }
   if (bb.scared > 0) bb.scared = Math.max(0, bb.scared - dt);   // flare/melee fear wears off (Flee/Graze re-set it as needed)
   let tx = a.x, tz = a.z, run = false, sepW = 1;
   switch (a.state) {
@@ -1546,7 +1639,7 @@ function skipIntro() {
 function startRun() {
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = [];
-  clearRemotes(); clearEvac(); clearFx(); clearWreck();
+  clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
@@ -1754,6 +1847,40 @@ function updateToolHUD() {
     const ch = el.querySelector(".t-ch"); if (ch) ch.textContent = t.max === Infinity ? "∞" : "×" + t.charges;
     const cd = el.querySelector(".t-cd"); if (cd) cd.style.height = (t.cd > 0 ? (t.cd / t.cdMax * 100) : 0).toFixed(0) + "%";
   });
+  const dh = $("dnaHud"); if (dh) dh.textContent = `⚗ DNA ${dnaSamples}  ·  ID ${identified.size}/${Object.keys(SPECIES).length}`;
+}
+function toggleBinoc() {
+  if (S.phase !== "playing" && !binoc) return;   // only glass during play (always allow lowering)
+  binoc = !binoc;
+  if (camera) { camera.fov = binoc ? BINOC_FOV : DEFAULT_FOV; camera.updateProjectionMatrix(); }
+  const ov = $("binoc"); if (ov) ov.classList.toggle("on", binoc);
+  const bb = $("btnBinoc"); if (bb) bb.classList.toggle("on", binoc);
+  if (!binoc) { const h = $("scan"); if (h) h.innerHTML = ""; const t = $("binocTgt"); if (t) t.textContent = ""; }
+}
+function updateScan() {   // binoculars: project in-view dinos to screen, label species + log identification
+  const host = $("scan"); if (!host) return;
+  if (!binoc || S.phase !== "playing") { if (host.childElementCount) host.innerHTML = ""; const t = $("binocTgt"); if (t) t.textContent = ""; return; }
+  const P = S.player; let html = "", center = null, cScore = 0.55;
+  for (const a of dinos) {
+    if (!a.alive) continue;
+    const d = Math.hypot(a.x - P.x, a.z - P.z); if (d > 175) continue;
+    const wy = groundH(a.x, a.z) + (a.sp.greybox.standH || 2) + 0.7;
+    const v = tmp.set(a.x, wy, a.z).project(camera);
+    if (v.z > 1 || v.x < -1 || v.x > 1 || v.y < -1 || v.y > 1) continue;   // behind / off-screen
+    identified.add(a.sp.id);
+    const sx = (v.x * 0.5 + 0.5) * 100, sy = (-v.y * 0.5 + 0.5) * 100, carn = a.sp.diet === "carnivore";
+    const tag = isDown(a) ? (a.sedated ? "SEDATED" : "TRAPPED") : (carn ? "PREDATOR" : "HERBIVORE");
+    html += `<div class="scan-tag ${carn ? "pred" : "herb"}" style="left:${sx.toFixed(1)}%;top:${sy.toFixed(1)}%"><b>${a.sp.displayName}</b><span>${tag} · ${Math.round(d)}m</span></div>`;
+    const al = ((a.x - P.x) * Math.sin(cam.yaw) + (a.z - P.z) * Math.cos(cam.yaw)) / (d || 1);
+    if (al > cScore) { cScore = al; center = a; }
+  }
+  host.innerHTML = html;
+  const t = $("binocTgt"); if (t) t.textContent = center ? `▶ ${center.sp.displayName.toUpperCase()} · ${center.sp.diet === "carnivore" ? "PREDATOR" : "HERBIVORE"}` : "SCANNING…";
+}
+function clearField() {
+  for (const tr of traps) scene.remove(tr.mesh); traps.length = 0;
+  dnaSamples = 0; dnaSpecies.clear();
+  if (binoc) toggleBinoc();   // restore FOV
 }
 
 // Build the tactical map as an SVG string (viewBox 0..100). Shared by the corner minimap (big=false)
@@ -1849,6 +1976,7 @@ function frame(now) {
   if (S.phase === "intro") updateIntro(Math.min(0.05, dtMs / 1000));   // cinematic runs on real time, capped
   tickMs = performance.now() - t0;
   updateCamera();
+  if (binoc) updateScan();   // live species labels track smoothly while glassing
   // HUD ~12 Hz
   hudAcc += dtMs / 1000;
   if (hudAcc > 1 / 12) { hudAcc = 0; if (S.phase !== "menu" && S.phase !== "intro") updateHUD(); }
@@ -1872,6 +2000,7 @@ function simulate(dt) {
   updateExtraction(dt);
   updateEvac(dt);
   updateTools(dt);
+  updateField(dt);
   updateFx(dt);
   if (wreckMesh) updateWreck(dt);
   Audio.tickHeartbeat(dt, S.player.fear);

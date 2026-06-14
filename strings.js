@@ -5,8 +5,8 @@ export const STR = {
   subtitle: "ISLAND ALPHA",
   start: "BEGIN EXTRACTION RUN",
   resume: "RESUME",
-  howto_desktop: "WASD move · Shift sprint · Ctrl crouch · Mouse look · E call extraction · 1/2/3 pick tool · F use · M map",
-  howto_touch: "Left: move · Right: look · SPRINT / CROUCH / CALL · tap a TOOL then USE",
+  howto_desktop: "WASD move · Shift sprint · Ctrl crouch · Mouse look · 1–6 pick tool · F use · B binoculars · E call evac · M map · H controls",
+  howto_touch: "Left: move · Right: look · SPRINT / CROUCH / CALL · tap a TOOL then USE · 👁 binoculars",
   howto_gamepad: "Left stick move · Right stick look · A sprint · B crouch · X call extraction",
 
   objMission: "MISSION OBJECTIVE",
