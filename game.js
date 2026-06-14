@@ -2244,6 +2244,15 @@ function mapSVG(big) {
   s += `<circle cx="${bx.toFixed(1)}" cy="${bz.toFixed(1)}" r="1.1" class="mm-exfil"/>`;
   // ranger watchtowers — safe vantage points
   for (const t of TOWERS) { const [tx, tz] = toMM(t.x, t.z); s += `<polygon points="${tx.toFixed(1)},${(tz - 2).toFixed(1)} ${(tx - 1.7).toFixed(1)},${(tz + 1.4).toFixed(1)} ${(tx + 1.7).toFixed(1)},${(tz + 1.4).toFixed(1)}" fill="none" stroke="#8fb8c4" stroke-width="0.6"/>`; }
+  // active mission objective — diamond + pulse + dashed guide line from the player
+  const _cm = activeCampaign();
+  if (_cm && MC) { const ph = _cm.phases[MC.idx]; if (ph && (ph.t === "reach" || ph.t === "interact")) {
+    const [ox, oz] = phaseSite(ph), [omx, omz] = toMM(ox, oz), [pmx, pmz] = toMM(P.x, P.z), pu = (2.0 + Math.sin(S.t * 4) * 0.7).toFixed(1);
+    s += `<line x1="${pmx.toFixed(1)}" y1="${pmz.toFixed(1)}" x2="${omx.toFixed(1)}" y2="${omz.toFixed(1)}" stroke="#8fb8c4" stroke-width="0.4" stroke-dasharray="1.5 1.5" opacity="0.55"/>`;
+    s += `<circle cx="${omx.toFixed(1)}" cy="${omz.toFixed(1)}" r="${pu}" fill="none" stroke="#8fb8c4" stroke-width="0.7" opacity="0.9"/>`;
+    s += `<polygon points="${omx.toFixed(1)},${(omz - 2).toFixed(1)} ${(omx + 2).toFixed(1)},${omz.toFixed(1)} ${omx.toFixed(1)},${(omz + 2).toFixed(1)} ${(omx - 2).toFixed(1)},${omz.toFixed(1)}" fill="#8fb8c4"${big ? `><title>${phLabel(ph)}</title></polygon` : "/"}>`;
+    if (big) s += `<text x="${omx.toFixed(1)}" y="${(omz - 3).toFixed(1)}" fill="#bfe2ea" font-size="3" text-anchor="middle">OBJECTIVE</text>`;
+  } }
   // incoming evac helicopter — show its live position + a dashed inbound track to the beacon
   if (evac && evac.heli) {
     const [hx, hz] = toMM(evac.heli.group.position.x, evac.heli.group.position.z);
