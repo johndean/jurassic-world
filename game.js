@@ -8,6 +8,7 @@ import { ShaderPass } from "./vendor/postprocessing/ShaderPass.js";
 import { OutputPass } from "./vendor/postprocessing/OutputPass.js";
 import { mergeGeometries } from "./vendor/BufferGeometryUtils.js";
 import { clone as skeletonClone } from "./vendor/SkeletonUtils.js";
+import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 /* ============================================================================
@@ -175,6 +176,7 @@ async function boot() {
   buildStaticHUD();
   showStart();
   initCharSelect();
+  initLobby();
   requestAnimationFrame(frame);
   // stream models in the background so the menu/start button appears instantly;
   // creatures load first (re-skinning as they arrive), player + foliage build inside preloadModels
@@ -1106,7 +1108,9 @@ function updateExtraction(dt) {
 function startRun() {
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = [];
-  reseed((Math.random() * 1e9) >>> 0);
+  clearRemotes();
+  // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
+  reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
   Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole });
   buildPlayer();   // (re)build the chosen specialist as the player avatar
   S.threat = 0; S.t = 0; S._everInRange = false; S._lastBeep = 0;
@@ -1380,6 +1384,87 @@ function simulate(dt) {
   updateThreat(dt, S.player);
   updateExtraction(dt);
   Audio.tickHeartbeat(dt, S.player.fear);
+  if (Net.on) netTick(dt);
+}
+
+/* ============================================== co-op multiplayer ======== *
+ * Player-sync: shared room + shared world seed; each player sees the others as
+ * their chosen specialist avatar. Dinos run locally per client (v2: host sync). */
+const remotePlayers = new Map();   // peerId -> { group, mixer, action, tx, tz, tyaw, gait, hp, alive }
+let netSendAcc = 0;
+
+function roleModelURL(roleId) { const r = ROLES.find(x => x.id === roleId); return (r && MODELS[r.model]) ? r.model : PLAYER_MODEL; }
+function buildCharMesh(roleId) {
+  const url = roleModelURL(roleId), g = new THREE.Group();
+  let mixer = null, action = null;
+  if (MODELS[url]) {
+    let skinned = false; MODELS[url].traverse(o => { if (o.isSkinnedMesh) skinned = true; });
+    const src = skinned ? skeletonClone(MODELS[url]) : MODELS[url].clone(true);
+    const fig = fitModel(src, 1.8, PLAYER_MODEL_YAW); fig.position.y = -0.9; g.add(fig);
+    const clips = MODEL_ANIMS[url];
+    if (clips && clips.length) { mixer = new THREE.AnimationMixer(src); action = mixer.clipAction(clips[0]); action.play(); }
+  } else {
+    g.add(new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.0, 4, 10), new THREE.MeshStandardMaterial({ color: 0x6fae6b, roughness: 0.7, emissive: 0x123512, emissiveIntensity: 0.3 })));
+  }
+  addBlob(g, 0.7); scene.add(g);
+  return { group: g, mixer, action };
+}
+function removeRemote(id) { const r = remotePlayers.get(id); if (r) { scene.remove(r.group); remotePlayers.delete(id); } }
+function clearRemotes() { for (const id of [...remotePlayers.keys()]) removeRemote(id); }
+function netUpsertState(msg) {
+  const p = msg.p; if (!p || S.phase !== "playing") return;   // only render peers once you're in-world
+  let r = remotePlayers.get(msg.id);
+  if (!r) {
+    const role = (Net.peers.get(msg.id) || {}).role || "navigator";
+    r = Object.assign(buildCharMesh(role), { tx: p.x, tz: p.z, tyaw: p.yaw || 0, gait: p.gait || "idle", hp: p.hp ?? 100, alive: p.alive !== false });
+    r.group.position.set(p.x, groundH(p.x, p.z) + 0.9, p.z);
+    remotePlayers.set(msg.id, r);
+  }
+  r.tx = p.x; r.tz = p.z; r.tyaw = p.yaw || 0; r.gait = p.gait || "idle"; r.hp = p.hp ?? 100; r.alive = p.alive !== false;
+}
+function updateRemotes(dt) {
+  const k = Math.min(1, dt * 10);
+  for (const r of remotePlayers.values()) {
+    r.group.visible = r.alive;
+    const gy = groundH(r.tx, r.tz) + 0.9 - (r.gait === "crouch" ? 0.4 : 0);
+    r.group.position.x += (r.tx - r.group.position.x) * k;
+    r.group.position.z += (r.tz - r.group.position.z) * k;
+    r.group.position.y += (gy - r.group.position.y) * k;
+    let dy = r.tyaw - r.group.rotation.y; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+    r.group.rotation.y += dy * k;
+    r.group.rotation.x = r.gait === "run" ? 0.16 : (r.gait === "crouch" ? 0.22 : 0);
+    if (r.action) r.action.timeScale = r.gait === "idle" ? 0 : (GAIT_RATE[r.gait] ?? 1);
+    if (r.mixer) r.mixer.update(dt);
+  }
+}
+function netTick(dt) {
+  netSendAcc += dt;
+  if (netSendAcc >= 0.08) {   // ~12 Hz
+    netSendAcc = 0; const P = S.player;
+    Net.sendState({ x: +P.x.toFixed(2), z: +P.z.toFixed(2), yaw: +P.yaw.toFixed(2), gait: P.gait, hp: Math.round(P.hp), alive: P.alive });
+  }
+  updateRemotes(dt);
+}
+function initLobby() {
+  const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", code4 = () => { let s = ""; for (let i = 0; i < 4; i++) s += A[(Math.random() * A.length) | 0]; return s; };
+  const status = $("mpStatus"), peersEl = $("mpPeers"), nameI = $("mpName"), roomI = $("mpRoom");
+  const myName = () => (nameI.value.trim() || "PLAYER").toUpperCase().slice(0, 16);
+  const show = (hosting) => { $("mpHost").style.display = hosting ? "none" : ""; $("mpJoin").style.display = hosting ? "none" : ""; $("mpLeave").style.display = hosting ? "" : "none"; };
+  const renderPeers = () => {
+    if (!Net.on) { peersEl.innerHTML = ""; return; }
+    const me = `<span class="mp-peer${Net.isHost ? " host" : ""}">${(Net.name || "YOU").toUpperCase()} · YOU</span>`;
+    peersEl.innerHTML = me + [...Net.peers.values()].map(p => `<span class="mp-peer">${(p.name || "P").toUpperCase()}</span>`).join("");
+  };
+  Net.onEvent("welcome", () => { status.innerHTML = `Co-op room <span class="code">${Net.room}</span> · ${Net.isHost ? "hosting" : "joined"} · share the code, then BEGIN`; roomI.value = Net.room; show(true); renderPeers(); });
+  Net.onEvent("peers", renderPeers);
+  Net.onEvent("state", netUpsertState);
+  Net.onEvent("leave", removeRemote);
+  Net.onEvent("full", () => { status.textContent = "That room is full (16 max)"; });
+  Net.onEvent("error", () => { status.textContent = "Connection error — playing solo"; });
+  Net.onEvent("close", () => { status.textContent = "Playing solo — or host / join a co-op room"; show(false); clearRemotes(); });
+  $("mpHost").addEventListener("click", () => { Audio.init(); const c = code4(); roomI.value = c; status.textContent = "Connecting…"; Net.connect(c, myName(), selectedRole.id, (Math.random() * 1e9) >>> 0); });
+  $("mpJoin").addEventListener("click", () => { Audio.init(); const c = (roomI.value.trim() || "").toUpperCase(); if (!c) { status.textContent = "Enter a room code to join"; return; } status.textContent = "Connecting…"; Net.connect(c, myName(), selectedRole.id, 0); });
+  $("mpLeave").addEventListener("click", () => { Net.disconnect(); status.textContent = "Playing solo — or host / join a co-op room"; show(false); clearRemotes(); });
 }
 
 /* ====================================================== screens ========== */

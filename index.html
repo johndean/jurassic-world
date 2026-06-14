@@ -169,6 +169,22 @@
   .cc-role{font-size:10px;letter-spacing:.12em;color:#d7e0da;padding:6px 7px 2px;font-weight:700;}
   .cc-perk{font-size:8.5px;color:#8a978f;padding:0 7px 8px;line-height:1.4;}
   @media (max-width:560px){ .char-card{width:92px;} .char-card img{height:112px;} }
+  /* multiplayer lobby */
+  .mp{max-width:420px;margin:0 auto 18px;display:flex;flex-direction:column;gap:8px;}
+  .mp-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+  .mp input{flex:1;min-width:120px;font:inherit;font-size:13px;letter-spacing:.12em;text-transform:uppercase;
+    background:rgba(10,14,13,.6);border:1px solid var(--hud-line);color:#d7e0da;padding:11px 12px;border-radius:5px;outline:none;}
+  .mp input:focus{border-color:#e0772f;}
+  .mp-btn{font:inherit;font-size:12px;letter-spacing:.12em;font-weight:700;color:#d7e0da;background:rgba(10,14,13,.6);
+    border:1px solid var(--hud-line);padding:11px 16px;border-radius:5px;cursor:pointer;transition:.15s;-webkit-tap-highlight-color:transparent;}
+  .mp-btn:hover,.mp-btn:active{border-color:#e0772f;color:#fff;}
+  .mp-btn.alt{border-color:var(--hud-alert);color:#e8a08c;}
+  .mp-status{font-size:11px;color:#8a978f;letter-spacing:.06em;text-align:center;line-height:1.5;}
+  .mp-status .code{color:#e0772f;font-weight:700;letter-spacing:.22em;}
+  .mp-peers{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;}
+  .mp-peer{font-size:10px;letter-spacing:.08em;color:#6fae6b;background:rgba(111,174,107,.12);
+    border:1px solid rgba(111,174,107,.4);padding:3px 8px;border-radius:10px;}
+  .mp-peer.host::after{content:" ★";color:#c9a23a;}
   #endTitle.win{color:#8fd07a;}
   #endTitle.lose{color:#d6562f;}
 
@@ -296,6 +312,19 @@
   <div class="how" id="sHow"></div>
   <div class="cs-label">Select your specialist</div>
   <div class="char-select" id="charSelect"></div>
+  <div class="mp" id="mpPanel">
+    <div class="mp-row">
+      <input id="mpName" maxlength="16" placeholder="YOUR NAME" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <input id="mpRoom" maxlength="8" placeholder="ROOM CODE" autocomplete="off" autocapitalize="characters" spellcheck="false">
+    </div>
+    <div class="mp-row">
+      <button class="mp-btn" id="mpHost">HOST CO-OP</button>
+      <button class="mp-btn" id="mpJoin">JOIN</button>
+      <button class="mp-btn alt" id="mpLeave" style="display:none">LEAVE</button>
+    </div>
+    <div class="mp-status" id="mpStatus">Playing solo — or host / join a co-op room</div>
+    <div class="mp-peers" id="mpPeers"></div>
+  </div>
   <button class="bigbtn" id="startBtn"></button>
 </div>
 
