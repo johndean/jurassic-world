@@ -59,7 +59,9 @@ function baseStateFor(sp) { return archOf(sp).baseState || (isPrey(sp) ? "Graze"
 const MODELS = {};                 // modelPath/url -> prepared THREE.Object3D template, or null if unavailable
 const MODEL_ANIMS = {};            // modelPath/url -> AnimationClip[] (for rigged/animated models)
 // Served from the Higgsfield CDN (CORS *), so big .glb files stay out of the git repo.
-const PLAYER_MODEL = "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/f4ba47e8-eace-41a6-910a-d21d61f5bfb0.glb";
+// Models are WebP+quantized-compressed (gltf-transform), ~1-2 MB each, served from the repo
+// (was ~10-16 MB each off the Higgsfield CDN — 12x smaller, so dinos texture in near-instantly).
+const PLAYER_MODEL = "./assets/models/player.glb";
 const GROUND_TEX = "https://d8j0ntlcm91z4.cloudfront.net/user_3F4NGeiRVgVtbKFFkoeC4vFwa2f/hf_20260614_002025_be16d317-be18-49b8-95e3-b3ad06fb8dc2.png";
 const _texLoader = new THREE.TextureLoader();
 // alpha-cutout billboard textures (transparent PNGs) for dense instanced jungle foliage
@@ -69,8 +71,8 @@ const BILLBOARDS = {
 };
 // foliage models (CDN .glb) used to replace grey-box trees; filled with URLs once generated
 const FOLIAGE = {
-  tree: "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/f98ce7d6-e340-4108-948d-c8933ac8088d.glb",
-  fern: "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/4281d7db-f9ea-4fcd-a061-e06a05b8c306.glb",
+  tree: "./assets/models/tree.glb",
+  fern: "./assets/models/fern.glb",
 };
 const PLAYER_MODEL_YAW = 0;        // facing correction; flip to Math.PI if the player faces the camera
 let playerMixer = null, playerAction = null;

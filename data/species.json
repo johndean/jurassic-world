@@ -7,20 +7,51 @@
       "diet": "herbivore",
       "role": "grazer",
       "archetype": "herd-grazer",
-      "size": { "lengthM": 9.5, "massKg": 2500, "eyeHeightM": 2.6 },
-      "move": { "walk": 2.2, "run": 9.5, "turnRate": 160 },
-      "senses": { "sightRangeM": 45, "sightFovDeg": 230, "hearingRangeM": 40 },
-      "combat": { "damage": 0, "attackRangeM": 0, "attackCooldownS": 0, "health": 220 },
+      "size": {
+        "lengthM": 9.5,
+        "massKg": 2500,
+        "eyeHeightM": 2.6
+      },
+      "move": {
+        "walk": 2.2,
+        "run": 9.5,
+        "turnRate": 160
+      },
+      "senses": {
+        "sightRangeM": 45,
+        "sightFovDeg": 230,
+        "hearingRangeM": 40
+      },
+      "combat": {
+        "damage": 0,
+        "attackRangeM": 0,
+        "attackCooldownS": 0,
+        "health": 220
+      },
       "behavior": {
-        "aggression": 0.0,
+        "aggression": 0,
         "territoryRadiusM": 60,
         "social": "herd",
-        "fleeHealthPct": 1.0,
+        "fleeHealthPct": 1,
         "fleeFromPredatorM": 38
       },
-      "modelPath": "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/87687792-4551-4b9c-be7f-129901751f1c.glb",
-      "animSet": ["idle", "walk", "run", "graze", "stagger", "die"],
-      "greybox": { "color": "#7d837c", "bodyL": 2.6, "bodyW": 1.0, "bodyH": 1.1, "standH": 3.0, "crest": true }
+      "modelPath": "./assets/models/parasaurolophus.glb",
+      "animSet": [
+        "idle",
+        "walk",
+        "run",
+        "graze",
+        "stagger",
+        "die"
+      ],
+      "greybox": {
+        "color": "#7d837c",
+        "bodyL": 2.6,
+        "bodyW": 1,
+        "bodyH": 1.1,
+        "standH": 3,
+        "crest": true
+      }
     },
     {
       "id": "deinonychus",
@@ -28,20 +59,55 @@
       "diet": "carnivore",
       "role": "pack",
       "archetype": "pack-hunter",
-      "size": { "lengthM": 3.4, "massKg": 73, "eyeHeightM": 1.0 },
-      "move": { "walk": 2.6, "run": 12.5, "turnRate": 320 },
-      "senses": { "sightRangeM": 55, "sightFovDeg": 150, "hearingRangeM": 50 },
-      "combat": { "damage": 9, "attackRangeM": 2.0, "attackCooldownS": 1.1, "health": 60 },
+      "size": {
+        "lengthM": 3.4,
+        "massKg": 73,
+        "eyeHeightM": 1
+      },
+      "move": {
+        "walk": 2.6,
+        "run": 12.5,
+        "turnRate": 320
+      },
+      "senses": {
+        "sightRangeM": 55,
+        "sightFovDeg": 150,
+        "hearingRangeM": 50
+      },
+      "combat": {
+        "damage": 9,
+        "attackRangeM": 2,
+        "attackCooldownS": 1.1,
+        "health": 60
+      },
       "behavior": {
         "aggression": 0.7,
         "territoryRadiusM": 120,
         "social": "pack",
-        "packRoles": ["lead", "flank", "harry"],
+        "packRoles": [
+          "lead",
+          "flank",
+          "harry"
+        ],
         "fleeHealthPct": 0.25
       },
-      "modelPath": "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/301dfce6-3bf3-4fec-9763-0c61cf375e42.glb",
-      "animSet": ["idle", "walk", "run", "attack", "stagger", "die"],
-      "greybox": { "color": "#3a3d3c", "bodyL": 1.1, "bodyW": 0.45, "bodyH": 0.55, "standH": 1.4, "crest": false }
+      "modelPath": "./assets/models/deinonychus.glb",
+      "animSet": [
+        "idle",
+        "walk",
+        "run",
+        "attack",
+        "stagger",
+        "die"
+      ],
+      "greybox": {
+        "color": "#3a3d3c",
+        "bodyL": 1.1,
+        "bodyW": 0.45,
+        "bodyH": 0.55,
+        "standH": 1.4,
+        "crest": false
+      }
     },
     {
       "id": "trex",
@@ -49,20 +115,52 @@
       "diet": "carnivore",
       "role": "apex",
       "archetype": "apex",
-      "size": { "lengthM": 12.5, "massKg": 8000, "eyeHeightM": 4.0 },
-      "move": { "walk": 2.8, "run": 10.5, "turnRate": 110 },
-      "senses": { "sightRangeM": 70, "sightFovDeg": 130, "hearingRangeM": 110 },
-      "combat": { "damage": 55, "attackRangeM": 4.5, "attackCooldownS": 1.8, "health": 600 },
+      "size": {
+        "lengthM": 12.5,
+        "massKg": 8000,
+        "eyeHeightM": 4
+      },
+      "move": {
+        "walk": 2.8,
+        "run": 10.5,
+        "turnRate": 110
+      },
+      "senses": {
+        "sightRangeM": 70,
+        "sightFovDeg": 130,
+        "hearingRangeM": 110
+      },
+      "combat": {
+        "damage": 55,
+        "attackRangeM": 4.5,
+        "attackCooldownS": 1.8,
+        "health": 600
+      },
       "behavior": {
         "aggression": 0.55,
         "territoryRadiusM": 220,
         "social": "solitary",
-        "fleeHealthPct": 0.0,
-        "noiseDrawWeight": 1.0
+        "fleeHealthPct": 0,
+        "noiseDrawWeight": 1
       },
-      "modelPath": "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/581e00fc-e7a7-4c29-8d7c-fa60dd771350.glb",
-      "animSet": ["idle", "walk", "run", "attack", "roar", "stagger", "die"],
-      "greybox": { "color": "#2b2d2e", "bodyL": 3.4, "bodyW": 1.2, "bodyH": 1.7, "standH": 4.6, "crest": false }
+      "modelPath": "./assets/models/trex.glb",
+      "animSet": [
+        "idle",
+        "walk",
+        "run",
+        "attack",
+        "roar",
+        "stagger",
+        "die"
+      ],
+      "greybox": {
+        "color": "#2b2d2e",
+        "bodyL": 3.4,
+        "bodyW": 1.2,
+        "bodyH": 1.7,
+        "standH": 4.6,
+        "crest": false
+      }
     },
     {
       "id": "velociraptor",
@@ -70,14 +168,55 @@
       "diet": "carnivore",
       "role": "pack",
       "archetype": "pack-hunter",
-      "size": { "lengthM": 2.0, "massKg": 15, "eyeHeightM": 0.7 },
-      "move": { "walk": 2.8, "run": 10.5, "turnRate": 340 },
-      "senses": { "sightRangeM": 60, "sightFovDeg": 150, "hearingRangeM": 55 },
-      "combat": { "damage": 7, "attackRangeM": 1.8, "attackCooldownS": 1.0, "health": 45 },
-      "behavior": { "aggression": 0.75, "territoryRadiusM": 120, "social": "pack", "packRoles": ["lead", "flank", "harry"], "fleeHealthPct": 0.2 },
-      "modelPath": "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/be748a90-5b5a-4584-890f-41120bc4ec03.glb",
-      "animSet": ["idle", "walk", "run", "attack", "stagger", "die"],
-      "greybox": { "color": "#43463f", "bodyL": 0.9, "bodyW": 0.4, "bodyH": 0.45, "standH": 1.0, "crest": false }
+      "size": {
+        "lengthM": 2,
+        "massKg": 15,
+        "eyeHeightM": 0.7
+      },
+      "move": {
+        "walk": 2.8,
+        "run": 10.5,
+        "turnRate": 340
+      },
+      "senses": {
+        "sightRangeM": 60,
+        "sightFovDeg": 150,
+        "hearingRangeM": 55
+      },
+      "combat": {
+        "damage": 7,
+        "attackRangeM": 1.8,
+        "attackCooldownS": 1,
+        "health": 45
+      },
+      "behavior": {
+        "aggression": 0.75,
+        "territoryRadiusM": 120,
+        "social": "pack",
+        "packRoles": [
+          "lead",
+          "flank",
+          "harry"
+        ],
+        "fleeHealthPct": 0.2
+      },
+      "modelPath": "./assets/models/velociraptor.glb",
+      "animSet": [
+        "idle",
+        "walk",
+        "run",
+        "attack",
+        "stagger",
+        "die"
+      ],
+      "greybox": {
+        "color": "#43463f",
+        "bodyL": 0.9,
+        "bodyW": 0.4,
+        "bodyH": 0.45,
+        "standH": 1,
+        "crest": false
+      }
     },
     {
       "id": "carnotaurus",
@@ -85,14 +224,50 @@
       "diet": "carnivore",
       "role": "pursuit",
       "archetype": "pursuit",
-      "size": { "lengthM": 8.0, "massKg": 1500, "eyeHeightM": 2.8 },
-      "move": { "walk": 2.8, "run": 13.5, "turnRate": 150 },
-      "senses": { "sightRangeM": 65, "sightFovDeg": 140, "hearingRangeM": 70 },
-      "combat": { "damage": 35, "attackRangeM": 3.2, "attackCooldownS": 1.4, "health": 320 },
-      "behavior": { "aggression": 0.6, "territoryRadiusM": 160, "social": "solitary", "fleeHealthPct": 0.1 },
-      "modelPath": "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/d2767309-a612-4d52-ad40-23247815dbfa.glb",
-      "animSet": ["idle", "walk", "run", "attack", "stagger", "die"],
-      "greybox": { "color": "#3a3d36", "bodyL": 2.6, "bodyW": 1.0, "bodyH": 1.3, "standH": 3.0, "crest": false }
+      "size": {
+        "lengthM": 8,
+        "massKg": 1500,
+        "eyeHeightM": 2.8
+      },
+      "move": {
+        "walk": 2.8,
+        "run": 13.5,
+        "turnRate": 150
+      },
+      "senses": {
+        "sightRangeM": 65,
+        "sightFovDeg": 140,
+        "hearingRangeM": 70
+      },
+      "combat": {
+        "damage": 35,
+        "attackRangeM": 3.2,
+        "attackCooldownS": 1.4,
+        "health": 320
+      },
+      "behavior": {
+        "aggression": 0.6,
+        "territoryRadiusM": 160,
+        "social": "solitary",
+        "fleeHealthPct": 0.1
+      },
+      "modelPath": "./assets/models/carnotaurus.glb",
+      "animSet": [
+        "idle",
+        "walk",
+        "run",
+        "attack",
+        "stagger",
+        "die"
+      ],
+      "greybox": {
+        "color": "#3a3d36",
+        "bodyL": 2.6,
+        "bodyW": 1,
+        "bodyH": 1.3,
+        "standH": 3,
+        "crest": false
+      }
     },
     {
       "id": "spinosaurus",
@@ -100,14 +275,52 @@
       "diet": "carnivore",
       "role": "apex",
       "archetype": "water",
-      "size": { "lengthM": 15.0, "massKg": 7000, "eyeHeightM": 4.2 },
-      "move": { "walk": 2.6, "run": 9.5, "turnRate": 95 },
-      "senses": { "sightRangeM": 70, "sightFovDeg": 135, "hearingRangeM": 95 },
-      "combat": { "damage": 50, "attackRangeM": 4.5, "attackCooldownS": 1.7, "health": 560 },
-      "behavior": { "aggression": 0.5, "territoryRadiusM": 200, "social": "solitary", "fleeHealthPct": 0.0, "noiseDrawWeight": 0.9 },
-      "modelPath": "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/ab84eb17-11d2-441d-a6e9-30f31cbb9784.glb",
-      "animSet": ["idle", "walk", "run", "attack", "roar", "stagger", "die"],
-      "greybox": { "color": "#2f3330", "bodyL": 3.5, "bodyW": 1.1, "bodyH": 1.6, "standH": 5.5, "crest": false }
+      "size": {
+        "lengthM": 15,
+        "massKg": 7000,
+        "eyeHeightM": 4.2
+      },
+      "move": {
+        "walk": 2.6,
+        "run": 9.5,
+        "turnRate": 95
+      },
+      "senses": {
+        "sightRangeM": 70,
+        "sightFovDeg": 135,
+        "hearingRangeM": 95
+      },
+      "combat": {
+        "damage": 50,
+        "attackRangeM": 4.5,
+        "attackCooldownS": 1.7,
+        "health": 560
+      },
+      "behavior": {
+        "aggression": 0.5,
+        "territoryRadiusM": 200,
+        "social": "solitary",
+        "fleeHealthPct": 0,
+        "noiseDrawWeight": 0.9
+      },
+      "modelPath": "./assets/models/spinosaurus.glb",
+      "animSet": [
+        "idle",
+        "walk",
+        "run",
+        "attack",
+        "roar",
+        "stagger",
+        "die"
+      ],
+      "greybox": {
+        "color": "#2f3330",
+        "bodyL": 3.5,
+        "bodyW": 1.1,
+        "bodyH": 1.6,
+        "standH": 5.5,
+        "crest": false
+      }
     },
     {
       "id": "triceratops",
@@ -115,14 +328,53 @@
       "diet": "herbivore",
       "role": "grazer",
       "archetype": "herd-grazer-armored",
-      "size": { "lengthM": 9.0, "massKg": 9000, "eyeHeightM": 2.5 },
-      "move": { "walk": 2.0, "run": 8.0, "turnRate": 140 },
-      "senses": { "sightRangeM": 45, "sightFovDeg": 250, "hearingRangeM": 50 },
-      "combat": { "damage": 40, "attackRangeM": 3.0, "attackCooldownS": 1.5, "health": 700 },
-      "behavior": { "aggression": 0.0, "territoryRadiusM": 80, "social": "herd", "fleeHealthPct": 0.4, "fleeFromPredatorM": 30 },
-      "modelPath": "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/b11c0168-5b8d-4cc6-9e35-5b14a8d04a2e.glb",
-      "animSet": ["idle", "walk", "run", "graze", "charge", "stagger", "die"],
-      "greybox": { "color": "#5a5e52", "bodyL": 2.4, "bodyW": 1.2, "bodyH": 1.2, "standH": 3.0, "crest": false, "frill": true }
+      "size": {
+        "lengthM": 9,
+        "massKg": 9000,
+        "eyeHeightM": 2.5
+      },
+      "move": {
+        "walk": 2,
+        "run": 8,
+        "turnRate": 140
+      },
+      "senses": {
+        "sightRangeM": 45,
+        "sightFovDeg": 250,
+        "hearingRangeM": 50
+      },
+      "combat": {
+        "damage": 40,
+        "attackRangeM": 3,
+        "attackCooldownS": 1.5,
+        "health": 700
+      },
+      "behavior": {
+        "aggression": 0,
+        "territoryRadiusM": 80,
+        "social": "herd",
+        "fleeHealthPct": 0.4,
+        "fleeFromPredatorM": 30
+      },
+      "modelPath": "./assets/models/triceratops.glb",
+      "animSet": [
+        "idle",
+        "walk",
+        "run",
+        "graze",
+        "charge",
+        "stagger",
+        "die"
+      ],
+      "greybox": {
+        "color": "#5a5e52",
+        "bodyL": 2.4,
+        "bodyW": 1.2,
+        "bodyH": 1.2,
+        "standH": 3,
+        "crest": false,
+        "frill": true
+      }
     }
   ]
 }
