@@ -85,6 +85,17 @@ finale it currently plays as one more reach/interact/extract chain with bigger n
 
 ---
 
+## STATUS: fixes #1–#4 implemented (this pass)
+- ✅ **#1 generator-draws-predators** — `interact` phases take `draws`/`drawN`; completing a BLACKOUT
+  generator spawns a hunting predator pack toward you (noise spike + roar). 
+- ✅ **#2 survivor/escort generalised** — Maya is now a reusable `SURVIVORS` system; **GHOSTS** gains a
+  surveyor at the cave who follows you out from the signal phase.
+- ✅ **#3 defend wave phase** — new `defend` phase type (hold position N seconds vs. timed waves); EXTINCTION's
+  "hold the line" is now a real 45s assault with a HUD countdown + alert marker.
+- ✅ **#4 sequenced extract waves** — `extract` takes `waves:[...]`; FALLEN OUTPOST is now Carnotaurus **then**
+  T-Rex (next apex inbound once the first is cleared).
+- ⏳ #5 (Indominus finale + endings) and the LOW/MED polish items remain.
+
 ## Severity-ranked fix list (recommended order)
 
 1. **BLACKOUT noise-draws-predators** (HIGH, smallest fix) — add a per-`interact` `draws` spawn: completing

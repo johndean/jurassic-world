@@ -193,10 +193,10 @@ Object.assign(MISSIONS, {
     blurb: "The power grid failed and the fences are offline — predators roam freely. Restart Power Stations Alpha, Bravo and Charlie (every generator draws dinosaurs), return to the Control Center to restart the grid, then escape before the trapped predators reach you.",
     phases: [
       { t: "reach", l: "Reach Power Station Alpha", x: -80, z: 40, r: 7, site: "generator" },
-      { t: "interact", l: "Repair Generator Alpha — the noise draws predators", x: -80, z: 40, r: 7, site: "generator" },
+      { t: "interact", l: "Repair Generator Alpha — the noise draws predators", x: -80, z: 40, r: 7, site: "generator", draws: "deinonychus", drawN: 3 },
       { t: "reach", l: "Reach Power Station Bravo", x: 18, z: -82, r: 7, site: "generator" },
-      { t: "interact", l: "Repair Generator Bravo", x: 18, z: -82, r: 7, site: "generator" },
-      { t: "interact", l: "Restart Generator Charlie", x: 84, z: 10, r: 7, site: "generator" },
+      { t: "interact", l: "Repair Generator Bravo", x: 18, z: -82, r: 7, site: "generator", draws: "velociraptor", drawN: 3 },
+      { t: "interact", l: "Restart Generator Charlie", x: 84, z: 10, r: 7, site: "generator", draws: "deinonychus", drawN: 4 },
       { t: "interact", l: "Return to Control Center — restart the grid", x: 0, z: 0, r: 8, starts: "evac", site: "command" },
       { t: "extract", l: "Escape before the trapped predators reach you", species: "allosaurus" },
     ],
@@ -225,7 +225,7 @@ Object.assign(MISSIONS, {
       { t: "interact", l: "Stabilise Maya — stop the bleeding", x: 70, z: -70, r: 7, site: "outpost" },
       { t: "reach", l: "Escort Maya to the safehouse (raptors pursue)", x: -20, z: -30, r: 7, site: "safehouse" },
       { t: "interact", l: "Activate the emergency extraction beacon", atBeacon: true, r: 7, starts: "evac" },
-      { t: "extract", l: "Hold — Carnotaurus then T-Rex — load Maya & escape", species: "carnotaurus" },
+      { t: "extract", l: "Hold — Carnotaurus then T-Rex — load Maya & escape", waves: ["carnotaurus", "trex"] },
     ],
   },
   extinction: {
@@ -237,7 +237,7 @@ Object.assign(MISSIONS, {
       { t: "interact", l: "Restore communications", x: 0, z: -86, r: 8, site: "command" },
       { t: "reach", l: "Activate sector emergency systems", x: -88, z: -20, r: 7, site: "generator" },
       { t: "interact", l: "Unlock the evacuation routes", x: -88, z: -20, r: 7, site: "generator" },
-      { t: "interact", l: "Defend the Command Center — hold the line", x: 0, z: -86, r: 9, site: "command" },
+      { t: "defend", l: "Defend the Command Center — hold the line", x: 0, z: -86, r: 9, site: "command", dur: 45, species: "velociraptor", n: 3, every: 7 },
       { t: "interact", l: "ACTIVATE EXTINCTION PROTOCOL", atBeacon: true, r: 7, starts: "evac" },
       { t: "extract", l: "Reach the final helicopter — apexes converge", species: "trex" },
     ],
@@ -271,6 +271,7 @@ function applyPhaseMarker() {
   if (!ph) { setObjMarker(null); return; }
   if (ph.t === "interact") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0x8fb8c4, "interact"); }
   else if (ph.t === "reach") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0x8fb8c4); }
+  else if (ph.t === "defend") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0xd6562f); }   // hold-the-line marker (alert)
   else if (ph.t === "extract") setObjMarker(S.extraction.beacon.x, S.extraction.beacon.z, 0xe0772f);
   else setObjMarker(null);
 }
@@ -305,6 +306,11 @@ function missionInteractInRange() {   // the active interact phase if the player
 function finishMissionInteract(ph) {   // called when the player completes the HOLD (see updateAction)
   ph._done = true;
   if (ph.starts === "evac" && !S.extraction.called) { S.extraction.called = true; S.player.noise = 1; spawnTimer = 0; Audio.beacon(true); Audio.roar(); startEvac(); }
+  if (ph.draws) {   // the machine's noise pulls predators in (OPERATION BLACKOUT's core loop)
+    S.player.noise = 1; spawnTimer = 0; Audio.roar();
+    for (let i = 0; i < (ph.drawN || 3); i++) spawnDrawn(ph.draws, S.player);
+    toast("⚠ THE NOISE DRAWS PREDATORS");
+  }
   Audio.beacon(false); flash(); toast("✓ " + phLabel(ph));
 }
 function callReady() {   // would tryCall() succeed right now? (drives the CALL prompt)
@@ -342,14 +348,31 @@ function updateAction(dt) {
 function updateMission(dt) {
   const m = activeCampaign(); if (!m || !MC) return;
   if (objMarker) objMarker.userData.ring.rotation.z += dt * 1.2;
-  if (maya) { maya.following = (m.id === "fallen_outpost" && MC.idx >= 3); updateMaya(dt); }   // Maya stands & follows once stabilised
+  const sc = SURVIVORS[m.id];   // the survivor stands & follows once the escort phase is reached
+  if (survivor) { survivor.following = !!(sc && MC.idx >= sc.escortFrom); updateSurvivor(dt); }
   const ph = m.phases[MC.idx]; if (!ph) return;
   const P = S.player; let done = false;
   if (ph.t === "reach") { const [x, z] = phaseSite(ph); if (dist2(P.x, P.z, x, z) < (ph.r || 7) * (ph.r || 7)) done = true; }
   else if (ph.t === "interact") { if (ph._done) done = true; }
   else if (ph.t === "collect") { if (dnaSamples >= (ph.count || 3)) done = true; }
+  else if (ph.t === "defend") {   // hold the line: survive a timed predator assault at the site
+    const [x, z] = phaseSite(ph);
+    if (!MC.started) { MC.started = true; MC.defendT = ph.dur || 45; MC.spawnAcc = 0; S.player.noise = 1; spawnTimer = 0; Audio.roar(); for (let i = 0; i < (ph.n || 3); i++) spawnDrawn(ph.species || "deinonychus", P); toast("⚠ HOLD THE LINE — " + Math.ceil(MC.defendT) + "s"); }
+    MC.defendT -= dt; MC.spawnAcc += dt;
+    if (MC.spawnAcc >= (ph.every || 8)) { MC.spawnAcc = 0; spawnDrawn(ph.species || "deinonychus", P); }
+    if (MC.defendT <= 0 && dist2(P.x, P.z, x, z) < ((ph.r || 9) + 6) * ((ph.r || 9) + 6)) done = true;   // survived + held the position
+  }
   else if (ph.t === "extract") {
-    if (!MC.started) { MC.started = true; if (!S.extraction.called) { S.extraction.called = true; S.player.noise = 1; spawnTimer = 0; Audio.beacon(true); Audio.roar(); startEvac(); } if (ph.species) spawnAtEdge(ph.species, P); }
+    if (!MC.started) {
+      MC.started = true; if (!S.extraction.called) { S.extraction.called = true; S.player.noise = 1; spawnTimer = 0; Audio.beacon(true); Audio.roar(); startEvac(); }
+      MC.waves = ph.waves || (ph.species ? [ph.species] : []); MC.wi = 0; MC.waveT = 0;
+      if (MC.waves[0]) spawnAtEdge(MC.waves[0], P);
+    }
+    MC.waveT += dt;   // sequenced waves: next apex inbound once this one is cleared (or after a dwell)
+    if (MC.waves && MC.wi < MC.waves.length - 1) {
+      const aliveCur = dinos.filter(d => d.alive && d.sp.id === MC.waves[MC.wi]).length;
+      if ((aliveCur === 0 && MC.waveT > 4) || MC.waveT > 28) { MC.wi++; MC.waveT = 0; spawnAtEdge(MC.waves[MC.wi], P); const nm = SPECIES[MC.waves[MC.wi]]; toast("⚠ " + (nm ? nm.displayName.toUpperCase() : "PREDATOR") + " INBOUND"); }
+    }
     if (S.extraction.won) done = true;
   }
   if (done) {
@@ -873,8 +896,22 @@ function buildTowers() {
 /* ===== mission set-pieces: real structures (+ Maya the survivor) at objective sites ===== *
  * Campaign phases tag a `site` type; these build a believable structure there so an objective
  * is a place you SEE, not a bare beam. Rebuilt per run, cleared on reset. */
-let missionSites = [], maya = null;
-function clearMissionSites() { for (const s of missionSites) scene.remove(s); missionSites = []; maya = null; }
+let missionSites = [], survivor = null;
+// Missions with a survivor to find → (optionally) stabilise → escort. Generalised from Maya.
+const SURVIVORS = {
+  fallen_outpost: { name: "MAYA", site: "outpost", color: 0x9a5a3c, off: [-2.2, 1.6], escortFrom: 3 },
+  ghosts: { name: "SURVEYOR", site: "cave", color: 0x3c6a9a, off: [2.4, 1.8], escortFrom: 5 },
+};
+function clearMissionSites() { for (const s of missionSites) scene.remove(s); missionSites = []; survivor = null; }
+function spawnDrawn(species, P) {   // a predator pulled toward the player by noise — spawns mid-range, already hunting
+  if (!SPECIES[species]) return null;
+  if (dinos.filter(d => d.alive).length >= BIOME.spawnDirector.maxActiveAI + 6) return null;   // hard cap (no runaway)
+  const half = BIOME.map.size / 2 - 6, ang = rand(0, Math.PI * 2), d = rand(40, 60);
+  const x = clamp(P.x + Math.cos(ang) * d, -half, half), z = clamp(P.z + Math.sin(ang) * d, -half, half);
+  const a = spawnDino(species, x, z);
+  a.bb.homeX = P.x; a.bb.homeZ = P.z; a.bb.hasTarget = true; a.bb.lastSeenX = P.x; a.bb.lastSeenZ = P.z;
+  dinos.push(a); return a;
+}
 const _mm = (c, r, m) => new THREE.MeshStandardMaterial({ color: c, roughness: r == null ? 0.9 : r, metalness: m || 0 });
 function buildCollapsedTower(g) {                         // a toppled ranger watchtower + ruined cabin + sandbags
   const wood = _mm(0x6f5a3c, 0.92), wood2 = _mm(0x4a3c28, 0.95), metal = _mm(0x6e736f, 0.6, 0.6);
@@ -888,9 +925,9 @@ function buildCollapsedTower(g) {                         // a toppled ranger wa
   for (let i = 0; i < 7; i++) { const sb = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.5, 4, 6), _mm(0x6b6347, 1)); sb.rotation.z = Math.PI / 2; sb.position.set(-2.4 + i * 0.6, 0.3, 3); g.add(sb); }   // sandbag wall
   const flood = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 2.6, 6), metal); flood.position.set(3.4, 1.3, -2.6); flood.rotation.z = 0.3; g.add(flood);   // toppled floodlight
 }
-function buildMaya(x, z) {                                // injured ranger survivor — slumped until stabilised, then follows
+function buildSurvivor(x, z, col) {                       // a survivor — slumped/waving until reached, then follows
   const g = new THREE.Group(); g.position.set(x, groundH(x, z), z);
-  const cloth = _mm(0x9a5a3c, 0.9), dark = _mm(0x2a2620, 0.8), skin = _mm(0xb98a6a, 0.7);
+  const cloth = _mm(col || 0x9a5a3c, 0.9), dark = _mm(0x2a2620, 0.8), skin = _mm(0xb98a6a, 0.7);
   const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.58, 5, 10), cloth); torso.position.y = 1.0; g.add(torso);
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), skin); head.position.y = 1.52; g.add(head);
   for (const sx of [-1, 1]) { const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.58, 4, 8), dark); leg.position.set(sx * 0.14, 0.4, 0); g.add(leg); const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.5, 4, 8), cloth); arm.position.set(sx * 0.34, 1.04, 0); g.add(arm); }
@@ -930,7 +967,7 @@ function buildBuilding(g, kind) {                         // generic structure: 
 }
 function buildSiteProp(type, x, z) {
   const g = new THREE.Group(); g.position.set(x, groundH(x, z), z); scene.add(g); missionSites.push(g);
-  if (type === "outpost") { buildCollapsedTower(g); maya = buildMaya(x - 2.2, z + 1.6); }
+  if (type === "outpost") buildCollapsedTower(g);
   else if (type === "generator") buildGenerator(g);
   else if (type === "cave") buildCave(g);
   else buildBuilding(g, type);   // command / facility / campsite / safehouse / supply
@@ -944,17 +981,19 @@ function buildMissionSites() {
     const key = ph.x + "," + ph.z; if (seen.has(key)) continue; seen.add(key);
     buildSiteProp(ph.site, ph.x, ph.z);
   }
+  const sc = SURVIVORS[m.id];   // place the survivor at their site
+  if (sc) { const ph = m.phases.find(p => p.site === sc.site); if (ph) survivor = buildSurvivor(ph.x + sc.off[0], ph.z + sc.off[1], sc.color); }
 }
-function updateMaya(dt) {                                 // slumped idle → stands & follows once stabilised
-  if (!maya) return;
-  const m = maya.mesh, P = S.player;
-  if (maya.following) {
-    if (maya.slumped) { maya.slumped = false; m.rotation.x = 0; if (maya.halo) maya.halo.material.color.setHex(0x8fb8c4); if (maya.beam) maya.beam.material.color.setHex(0x8fb8c4); }
-    const dx = P.x - maya.x, dz = P.z - maya.z, d = Math.hypot(dx, dz) || 1;
-    if (d > 2.6) { const step = Math.min(5.2 * dt, d - 2.4); maya.x += dx / d * step; maya.z += dz / d * step; m.rotation.y = Math.atan2(dx, dz); }
-    m.position.set(maya.x, groundH(maya.x, maya.z) + 0.02, maya.z);
+function updateSurvivor(dt) {                             // slumped/waving idle → stands & follows once triggered
+  if (!survivor) return;
+  const m = survivor.mesh, P = S.player;
+  if (survivor.following) {
+    if (survivor.slumped) { survivor.slumped = false; m.rotation.x = 0; if (survivor.halo) survivor.halo.material.color.setHex(0x8fb8c4); if (survivor.beam) survivor.beam.material.color.setHex(0x8fb8c4); }
+    const dx = P.x - survivor.x, dz = P.z - survivor.z, d = Math.hypot(dx, dz) || 1;
+    if (d > 2.6) { const step = Math.min(5.2 * dt, d - 2.4); survivor.x += dx / d * step; survivor.z += dz / d * step; m.rotation.y = Math.atan2(dx, dz); }
+    m.position.set(survivor.x, groundH(survivor.x, survivor.z) + 0.02, survivor.z);
   }
-  if (maya.halo) { maya.halo.rotation.z += dt * 1.5; maya.halo.position.y = 2.3 + Math.sin(S.t * 3) * 0.08; }
+  if (survivor.halo) { survivor.halo.rotation.z += dt * 1.5; survivor.halo.position.y = 2.3 + Math.sin(S.t * 3) * 0.08; }
 }
 function playerFloorY(x, z) {   // player's floor: tower platform / zipline cable / terrain
   const P = S.player;
@@ -2993,7 +3032,8 @@ function updateHUD() {
   if (M.phases && MC) {                                   // campaign mission: phase chain
     const cur = M.phases[MC.idx];
     let sub = cur ? (typeof cur.l === "function" ? cur.l() : cur.l) : "Mission complete — extract";
-    if (cur && (cur.t === "reach" || cur.t === "interact" || cur.t === "extract")) { const [sx, sz] = cur.t === "extract" ? [S.extraction.beacon.x, S.extraction.beacon.z] : phaseSite(cur); sub += " · " + Math.round(Math.sqrt(dist2(P.x, P.z, sx, sz))) + " " + STR.km; }
+    if (cur && (cur.t === "reach" || cur.t === "interact" || cur.t === "defend" || cur.t === "extract")) { const [sx, sz] = cur.t === "extract" ? [S.extraction.beacon.x, S.extraction.beacon.z] : phaseSite(cur); sub += " · " + Math.round(Math.sqrt(dist2(P.x, P.z, sx, sz))) + " " + STR.km; }
+    if (cur && cur.t === "defend" && MC.defendT != null && MC.defendT > 0) sub += " · HOLD " + Math.ceil(MC.defendT) + "s";
     $("objSub").textContent = sub;
     $("objList").innerHTML = M.phases.map((p, i) => { const l = typeof p.l === "function" ? p.l() : p.l; const mk = i < MC.idx ? "◆" : (i === MC.idx ? "▸" : "◇"); return `<li class="${i < MC.idx ? "done" : (i === MC.idx ? "cur" : "")}"><span class="obj-check">${mk}</span>${l}</li>`; }).join("");
   } else {                                                // simple mission: steps
