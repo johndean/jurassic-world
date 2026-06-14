@@ -571,7 +571,7 @@ function buildWorld() {
     const s = rand(0.7, 3.6) * (i % 3 === 0 ? 1.4 : 1);
     dm.position.set(x, groundH(x, z) + s * 0.25, z); dm.rotation.set(rand(0, 3), rand(0, 6), rand(0, 3)); dm.scale.set(s, s * 0.7, s); dm.updateMatrix();
     rocks.setMatrixAt(i, dm.matrix);
-    if (s > 1.35) addCollider(x, z, s * 0.6, { h: s * 0.7 });   // big boulders are solid; small ones stay steppable
+    if (s > 1.35) { const h = s * 0.95, top = groundH(x, z) + h; addCollider(x, z, s * 0.6, { h, top, climb: h >= 1.6 && h <= 4.2 }); }   // big boulders are solid; mid ones are climbable; small stay steppable
   }
   rocks.instanceMatrix.needsUpdate = true;
   scene.add(rocks);
@@ -881,22 +881,26 @@ function addCollidersFromObject(root, opt) {
     _cbox.setFromObject(o); if (_cbox.isEmpty()) return;
     _cbox.getSize(_csz); _cbox.getCenter(_cc);
     if (_csz.y < minH) return;                              // low/flat (floors, slabs, rings) → walk over
+    const top = _cbox.max.y, climb = _csz.y >= 1.6 && _csz.y <= 4.2;
     const rMax = Math.max(_csz.x, _csz.z) * 0.5, rMin = Math.min(_csz.x, _csz.z) * 0.5;
     if (rMax < min) return;                                 // tiny debris
-    if (rMax < rMin * 1.8) { push(_cc.x, _cc.z, rMax * sc, { h: _csz.y }); return; }   // compact → one circle
+    if (rMax < rMin * 1.8) { push(_cc.x, _cc.z, rMax * sc, { h: _csz.y, top, climb }); return; }   // compact → one circle
     const along = _csz.x >= _csz.z, n = Math.min(8, Math.max(2, Math.round(rMax / rMin))), r = rMin * sc, span = rMax - rMin;
-    for (let i = 0; i < n; i++) { const t = (i / (n - 1) - 0.5) * 2 * span; push(along ? _cc.x + t : _cc.x, along ? _cc.z : _cc.z + t, r, { h: _csz.y }); }
+    for (let i = 0; i < n; i++) { const t = (i / (n - 1) - 0.5) * 2 * span; push(along ? _cc.x + t : _cc.x, along ? _cc.z : _cc.z + t, r, { h: _csz.y, top, climb }); }
   });
 }
 // Push an entity (player/dino) out of every overlapping solid proxy. pr = entity body radius.
-function resolveColliders(e, pr) {
+// feetY (optional) makes it height-aware: a proxy you've cleared (feet above its top) stops blocking,
+// so jumping/vaulting over a low obstacle actually works instead of hitting an invisible 2D wall.
+function resolveColliders(e, pr, feetY) {
   let hit = false;
   const near = queryColliders(e.x, e.z);
-  for (let i = 0; i < near.length; i++) hit = _pushOut(e, near[i], pr) || hit;
-  for (let i = 0; i < missionColliders.length; i++) hit = _pushOut(e, missionColliders[i], pr) || hit;
+  for (let i = 0; i < near.length; i++) hit = _pushOut(e, near[i], pr, feetY) || hit;
+  for (let i = 0; i < missionColliders.length; i++) hit = _pushOut(e, missionColliders[i], pr, feetY) || hit;
   return hit;
 }
-function _pushOut(e, c, pr) {
+function _pushOut(e, c, pr, feetY) {
+  if (feetY != null && c.top != null && feetY > c.top + 0.1) return false;   // cleared it (jumped/mantled over)
   const rr = c.r + pr, dx = e.x - c.x, dz = e.z - c.z, d2 = dx * dx + dz * dz;
   if (d2 >= rr * rr) return false;
   if (d2 > 1e-4) { const d = Math.sqrt(d2), p = (rr - d) / d; e.x += dx * p; e.z += dz * p; }
@@ -1282,6 +1286,7 @@ function initInput() {
     if (binoc && (e.code === "Minus" || e.code === "NumpadSubtract")) binocZoom(-1);
     if (e.code === "KeyH" || e.code === "Slash") toggleKeyHelp();          // controls reference (desktop)
     if (intro && (e.code === "Escape" || e.code === "Enter" || e.code === "Space")) { skipIntro(); return; }
+    if (e.code === "Space") tryJump();   // jump / vault / climb (mantle onto a ledge you're facing)
     if (e.code === "Escape" && mapOpen) toggleMap();
     if (e.code === "Escape") $("keyHelp").classList.remove("on");
   });
@@ -1355,11 +1360,13 @@ function setupTouch() {
   const hold = (el, on) => { el.addEventListener("pointerdown", () => on(true)); ["pointerup", "pointercancel", "pointerleave"].forEach(ev => el.addEventListener(ev, () => on(false))); };
   hold($("btnSprint"), v => input.sprint = v);
   hold($("btnCrouch"), v => input.crouch = v);
+  { const bj = $("btnJump"); if (bj) bj.addEventListener("pointerdown", e => { e.preventDefault(); tryJump(); }); }
   { const ba = $("btnCall");   // ACTION button: hold for hold-to-act objectives, tap for press actions (zip/call)
     ba.addEventListener("pointerdown", e => { e.preventDefault(); input.action = true; interact(); });
     ["pointerup", "pointercancel", "pointerleave"].forEach(ev => ba.addEventListener(ev, () => input.action = false)); }
 }
 
+let _padJump = false;
 function pollGamepad() {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   for (const gp of pads) {
@@ -1370,6 +1377,7 @@ function pollGamepad() {
     input.sprint = gp.buttons[0]?.pressed || false;   // A
     input.crouch = gp.buttons[1]?.pressed || false;   // B
     if (gp.buttons[2]?.pressed) tryCall();             // X
+    const yb = gp.buttons[3]?.pressed || false; if (yb && !_padJump) tryJump(); _padJump = yb;   // Y (edge) → jump/climb
     return;
   }
 }
@@ -1395,6 +1403,57 @@ function bearingTo(ax, az, bx, bz) {
   const ang = Math.atan2(bx - ax, -(bz - az)) / DEG; const d = (ang + 360) % 360;
   const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
   return dirs[Math.round(d / 45) % 8];
+}
+
+/* ===================================================== traversal layer === *
+ * Opt-in vertical movement layered ON TOP of free-walk — when grounded and not jumping, the original
+ * horizontal path runs untouched. Jump (gravity arc), auto-vault (hop low obstacles instead of being
+ * wall-stopped), and mantle (climb onto a mid-height rock/ledge for vantage; walk off the edge to
+ * drop). Height-aware collision lets you actually clear what you jump/climb over. */
+const GRAV = 22, JUMP_V = 7.4;            // m/s² · initial jump velocity (apex ≈ 1.25 m)
+function tryJump() {
+  if (S.phase !== "playing") return;
+  const P = S.player;
+  if (P.onTower || P.zip || P.swim || P.onProp || P.air > 0.05 || P.vy > 0) return;   // grounded stance only
+  const c = climbableAhead(P);            // facing a climbable prop → mantle onto it instead of a plain jump
+  if (c) {
+    P.onProp = c; P.propTopY = c.top;
+    const dx = c.x - P.x, dz = c.z - P.z, d = Math.hypot(dx, dz) || 1; P.x += dx / d * 0.6; P.z += dz / d * 0.6;
+    P.air = 0; P.vy = 0; P.stamina = Math.max(0, P.stamina - 14); Audio.step("run"); toast("CLIMB"); return;
+  }
+  if (P.stamina < 8) return;
+  P.vy = JUMP_V; P.air = 0.001; P.stamina -= 8; Audio.step("run");
+}
+function climbableAhead(P) {               // nearest climbable proxy in front of the camera, within reach
+  const fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw); let best = null;
+  const scan = c => { if (!c.climb) return; const dx = c.x - P.x, dz = c.z - P.z, d = Math.hypot(dx, dz) || 1;
+    if (d > c.r + 2.0) return; if ((dx / d) * fx + (dz / d) * fz < 0.4) return; best = c; };
+  for (const c of queryColliders(P.x, P.z)) scan(c); for (const c of missionColliders) scan(c);
+  return best;
+}
+function lowObstacleAhead(P, wx, wz, feetY) {   // a low solid just ahead in the move direction → auto-vault
+  const d2dir = Math.hypot(wx, wz) || 1, fx = wx / d2dir, fz = wz / d2dir; let best = null;
+  const scan = c => { if (c.top == null || c.h == null || c.h > 1.3) return; if (feetY > c.top - 0.1) return;
+    const dx = c.x - P.x, dz = c.z - P.z, d = Math.hypot(dx, dz) || 1;
+    if (d > c.r + 1.4) return; if ((dx / d) * fx + (dz / d) * fz < 0.55) return; best = c; };
+  for (const c of queryColliders(P.x, P.z)) scan(c); for (const c of missionColliders) scan(c);
+  return best;
+}
+function updateTraversal(dt, wx, wz, moving) {
+  const P = S.player;
+  // standing on a prop: hold at its top; the moment you walk past the footprint, step into the air & fall
+  if (P.onProp) {
+    const c = P.onProp, dx = P.x - c.x, dz = P.z - c.z;
+    if (dx * dx + dz * dz > (c.r + 0.4) * (c.r + 0.4)) { P.onProp = null; P.air = Math.max(0, P.propTopY - groundH(P.x, P.z)); P.vy = 0; }
+    else { P.air = 0; P.vy = 0; return; }
+  }
+  // auto-vault: jog into a knee/waist-high obstacle while grounded → assisted hop over it
+  if (moving && P.air <= 0.02 && P.vy <= 0) {
+    const feetY = groundH(P.x, P.z) + P.air;
+    if (lowObstacleAhead(P, wx, wz, feetY)) { P.vy = JUMP_V * 0.8; P.air = 0.001; }
+  }
+  // airborne: integrate gravity over the ground
+  if (P.air > 0 || P.vy !== 0) { P.vy -= GRAV * dt; P.air += P.vy * dt; if (P.air <= 0) { P.air = 0; P.vy = 0; } }
 }
 
 /* ======================================================= player update === */
@@ -1436,17 +1495,23 @@ function updatePlayer(dt) {
   if (P.fear < 0.3 && hitCooldownVisual <= 0 && P.hp > 0) P.hp = Math.min(100, P.hp + cfg.healthRegenPerS * (rmod.heal || 1) * dt);
 
   // move relative to camera yaw
+  let wx = 0, wz = 0;
   if (moving) {
     const sin = Math.sin(cam.yaw), cos = Math.cos(cam.yaw);
-    const wx = (ix * cos - iz * sin), wz = (ix * sin + iz * cos);
-    const nx = P.x + wx * speed * dt, nz = P.z + wz * speed * dt;
-    P.x = nx; P.z = nz;
+    wx = (ix * cos - iz * sin); wz = (ix * sin + iz * cos);
+    // slope: climbing uphill costs extra stamina (real legs do too) — sampled along the move direction
+    const slope = (groundH(P.x + wx * 2, P.z + wz * 2) - groundH(P.x, P.z)) * 0.5;
+    if (slope > 0.04 && !P.onProp) P.stamina = Math.max(0, P.stamina - slope * 9 * dt);
+    P.x += wx * speed * dt; P.z += wz * speed * dt;
     P.yaw = lerp2angle(P.yaw, Math.atan2(wx, wz));
     // footstep audio cadence
     stepPhase += speed * dt;
     if (stepPhase > (gait === "run" ? 1.7 : 2.6)) { stepPhase = 0; Audio.step(gait); }
   }
-  // collide with trees
+  // vertical traversal (jump / auto-vault / mantle) — additive; does nothing while grounded & not jumping
+  updateTraversal(dt, wx, wz, moving);
+  // collide with trees (height-aware: a jump/mantle that clears the canopy base won't be wall-stopped)
+  const feetY = (P.onProp ? P.propTopY : playerFloorY(P.x, P.z)) + (P.air || 0);
   for (let i = 0; i < trees.length; i++) {
     const t = trees[i], rr = (t.r + 0.5);
     if (dist2(P.x, P.z, t.x, t.z) < rr * rr) {
@@ -1454,8 +1519,8 @@ function updatePlayer(dt) {
       P.x = t.x + dx / d * rr; P.z = t.z + dz / d * rr;
     }
   }
-  // collide with solid world props (rocks, ruins, mission buildings) — skip while on a tower/zip
-  if (!P.onTower && !P.zip) resolveColliders(P, 0.45);
+  // collide with solid world props (rocks, ruins, mission buildings) — skip while on a tower/zip/prop
+  if (!P.onTower && !P.zip && !P.onProp) resolveColliders(P, 0.45, feetY);
   const lim = BIOME.map.size / 2 - 3;
   P.x = clamp(P.x, -lim, lim); P.z = clamp(P.z, -lim, lim);
   if (P.onTower) {   // railed on 3 sides; step off the FRONT (ladder side, +Z) to ride the zip down (or press E)
@@ -1476,7 +1541,9 @@ function updatePlayer(dt) {
   const crouchDrop = P.gait === "crouch" ? 0.4 : 0;
   const idleBob = P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.02 : 0;
   const runBounce = P.gait === "run" ? Math.abs(Math.sin(S.t * 11)) * 0.05 : 0;   // light foot-strike bob
-  playerMesh.position.set(P.x, playerFloorY(P.x, P.z) + 0.9 - crouchDrop + idleBob + runBounce, P.z);
+  const standY = (P.onProp ? P.propTopY : playerFloorY(P.x, P.z)) + (P.air || 0);
+  P.eyeY = standY;                                                                 // camera follows jumps/climbs
+  playerMesh.position.set(P.x, standY + 0.9 - crouchDrop + idleBob + runBounce, P.z);
   playerMesh.rotation.y = P.yaw;
   playerMesh.rotation.x = (P.gait === "run" ? 0.16 : 0) + (P.gait === "crouch" ? 0.22 : 0) + (P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.012 : 0);
 
@@ -3116,7 +3183,7 @@ function startRun() {
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
-  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole, onTower: null, zip: null });
+  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole, onTower: null, zip: null, air: 0, vy: 0, onProp: null, eyeY: null });
   if (Net.on) {   // co-op: spawn beside each other like a squad — a small cluster, same facing, no overlap
     const a = (Net.id || 1) * 2.39996;   // golden-angle spread → distinct, non-overlapping spots
     S.player.x = Math.cos(a) * 3.0; S.player.z = Math.sin(a) * 3.0; S.player.yaw = 0;
@@ -3505,7 +3572,7 @@ function updateCamera() {
     if (beaconRing) beaconRing.rotation.z += 0.08;
     return;
   }
-  const tx = P.x, ty = playerFloorY(P.x, P.z) + 1.5, tz = P.z;
+  const tx = P.x, ty = (P.eyeY != null ? P.eyeY : playerFloorY(P.x, P.z)) + 1.5, tz = P.z;
   const cp = Math.cos(cam.pitch), d = cam.dist * cp;
   let cx = tx - Math.sin(cam.yaw) * d, cz = tz - Math.cos(cam.yaw) * d, cy = ty + cam.height + Math.sin(cam.pitch) * cam.dist * -1 + cam.dist * cp * 0.0;
   cy = ty + cam.height - Math.sin(cam.pitch) * cam.dist;
