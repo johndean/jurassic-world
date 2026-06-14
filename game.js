@@ -1831,12 +1831,13 @@ function clearEvac() { if (evac) { scene.remove(evac.heli.group); evac = null; }
  * -> trouble -> MAYDAY -> spin -> crash -> black -> wake at the burning wreck ->
  * mission update -> jungle silence + distant roar -> hand control to the player.
  * Skippable; auto-skips on later runs in the same session (you've seen it). */
-let intro = null, wreckMesh = null, introSeen = false;
+let intro = null, wreckMesh = null, introSeen = false, introProp = null;
+function clearIntroProp() { if (introProp) { scene.remove(introProp); introProp = null; } }   // parked intro vehicle (jeep/boat) left in-world
 const introCine = () => intro !== null;                  // input locked while the intro plays
 const INTRO_CAM_END = 21;                                // after the crash the normal (wreck) camera takes over
 // ── per-mission insertion intros (data-driven; see design/MISSION_INTROS.md) ──
 // default insertion is the helicopter crash ("crash"); a mission id here overrides it.
-const INTRO_KIND = { dna: "research" };                  // future: ghosts:jeep, blackout:boat, last_sample:monorail, fallen_outpost:halo, extinction:airship
+const INTRO_KIND = { dna: "research", ghosts: "jeep" };   // future: blackout:boat, last_sample:monorail, fallen_outpost:halo, extinction:airship
 const introKind = () => (selectedMission && INTRO_KIND[selectedMission.id]) || "crash";
 const INTRO_RADIO = [
   { t: 1.2, h: `<span class="rc">RANGER-6:</span> Entering Alpha airspace. Stay sharp.`, say: "Ranger Six, entering Alpha airspace. Stay sharp." },
@@ -1851,6 +1852,12 @@ const INTRO_RADIO_RESEARCH = [   // DNA SAMPLE COLLECTION — research-heli depl
   { t: 5.5, h: `<span class="rc">DR. SOTO:</span> The program collapsed weeks ago. We need them <b>alive</b> — tranq or trap, do NOT kill them.`, say: "The program collapsed weeks ago. We need them alive. Tranq or trap — do not kill them." },
   { t: 9.5, h: `<span class="rc">DR. SOTO:</span> Climb the watchtowers, glass the valley, bring me ${DNA_GOAL} samples. The beacon's hot for your evac.`, say: "Climb the watchtowers, glass the valley, and bring me three samples. The beacon is hot for your evac." },
   { t: 13.5, h: `<span class="rc">PILOT:</span> Skids down. Good luck — we'll be listening.`, say: "Skids down. Good luck — we'll be listening." },
+];
+const INTRO_RADIO_JEEP = [   // GHOSTS OF SECTOR 9 — ranger jeep-convoy (chatter → unsettling silence)
+  { t: 1.0, h: `<span class="rc">CONVOY LEAD:</span> Sector 9 track ahead. Survey team went dark thirty-one hours ago.`, say: "Sector nine track ahead. Survey team went dark thirty-one hours ago." },
+  { t: 5.0, h: `<span class="rc">RANGER-2:</span> Last ping was the old checkpoint. We're almost on it.`, say: "Last ping was the old checkpoint. We're almost on it." },
+  { t: 8.5, h: `<span class="rc">CONVOY LEAD:</span> …checkpoint's wrecked. Gate's torn clean off. Eyes up, everybody.`, say: "The checkpoint's wrecked. Gate's torn clean off. Eyes up, everybody." },
+  { t: 12.0, h: `<span class="rc">CONVOY LEAD:</span> Tracks lead into the trees — wheels stop here. On foot from now.`, say: "Tracks lead into the trees. Wheels stop here. On foot from now." },
 ];
 function speakRadio(text) {   // actual spoken radio voice via the Web Speech API (no assets/credits)
   try {
@@ -1913,7 +1920,9 @@ function upgradeIntroHeli() {                             // swap the boxy fallb
   buildRiders(heli.group); intro.heli = heli;
 }
 function startIntro() {                                   // dispatch to the active mission's insertion cinematic
-  if (introKind() === "research") return startIntroResearch();
+  const k = introKind();
+  if (k === "research") return startIntroResearch();
+  if (k === "jeep") return startIntroJeep();
   return startIntroCrash();
 }
 function startIntroCrash() {
@@ -1934,6 +1943,7 @@ function startIntroCrash() {
 function updateIntro(dt) {
   if (!intro) return;
   if (intro.kind === "research") return updateIntroResearch(dt);
+  if (intro.kind === "jeep") return updateIntroJeep(dt);
   return updateIntroCrash(dt);
 }
 function updateIntroCrash(dt) {
@@ -1995,6 +2005,7 @@ function updateIntroCrash(dt) {
 function updateIntroCamera() {
   if (!intro) return;
   if (intro.kind === "research") return updateIntroCameraResearch();
+  if (intro.kind === "jeep") return updateIntroCameraJeep();
   return updateIntroCameraCrash();
 }
 function updateIntroCameraCrash() {
@@ -2082,6 +2093,104 @@ function endIntroResearch() {                             // stand the player at
   if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
   finishIntroCommon(`FIELD SCIENCE · climb a tower, glass (B), tranq (4) & sample (6) · ${DNA_GOAL} needed`);
 }
+
+/* ── GHOSTS OF SECTOR 9 · ranger jeep-convoy expedition (ride in, dismount on foot) ── */
+function buildJeep() {                                    // reusable ranger jeep (front = local +x), headlights for the reveal
+  const j = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a5a3c, roughness: 0.84, metalness: 0.16 });   // ranger olive-drab
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0x24271f, roughness: 0.9, metalness: 0.2 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x1b2a2c, roughness: 0.25, metalness: 0.5, transparent: true, opacity: 0.66 });
+  const tyreMat = new THREE.MeshStandardMaterial({ color: 0x14140f, roughness: 1 });
+  const hubMat = new THREE.MeshStandardMaterial({ color: 0x6a6e6a, roughness: 0.5, metalness: 0.6 });
+  const barMat = new THREE.MeshStandardMaterial({ color: 0x3a3d36, roughness: 0.7, metalness: 0.35 });
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(4.9, 0.5, 2.0), trimMat); chassis.position.y = 0.72; j.add(chassis);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(4.7, 1.05, 2.24), bodyMat); body.position.y = 1.18; j.add(body);
+  const hood = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.66, 2.2), bodyMat); hood.position.set(1.75, 1.42, 0); j.add(hood);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.18, 2.2), bodyMat); roof.position.set(-0.45, 2.52, 0); j.add(roof);
+  for (const [px, pz] of [[0.55, 1.0], [0.55, -1.0], [-1.45, 1.0], [-1.45, -1.0]]) { const pil = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.3, 0.14), trimMat); pil.position.set(px, 1.92, pz); j.add(pil); }
+  const ws = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.15, 2.02), glassMat); ws.position.set(0.6, 1.98, 0); ws.rotation.z = 0.2; j.add(ws);
+  for (const sz of [1.04, -1.04]) { const sg = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.05, 0.05), glassMat); sg.position.set(-0.45, 1.98, sz); j.add(sg); }
+  const wgeo = new THREE.CylinderGeometry(0.72, 0.72, 0.56, 16);
+  for (const [dx, dz] of [[1.62, 1.04], [1.62, -1.04], [-1.62, 1.04], [-1.62, -1.04]]) {
+    const w = new THREE.Mesh(wgeo, tyreMat); w.rotation.x = Math.PI / 2; w.position.set(dx, 0.72, dz); j.add(w);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.58, 8), hubMat); hub.rotation.x = Math.PI / 2; hub.position.set(dx, 0.72, dz); j.add(hub);
+    const fender = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.34, 0.42), bodyMat); fender.position.set(dx, 1.32, dz > 0 ? 0.98 : -0.98); j.add(fender);   // bridges body→wheel (no gap)
+  }
+  const bumper = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.4, 2.3), trimMat); bumper.position.set(2.6, 0.95, 0); j.add(bumper);
+  const grille = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 1.9), trimMat); grille.position.set(2.52, 1.4, 0); j.add(grille);
+  // headlights (real lights, point forward = local +x) — used for the checkpoint reveal
+  const lights = [];
+  for (const lz of [0.72, -0.72]) {
+    const hl = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 12), new THREE.MeshStandardMaterial({ color: 0xfff1c0, roughness: 0.3, emissive: 0xfff1c0, emissiveIntensity: 1.4 }));
+    hl.rotation.z = Math.PI / 2; hl.position.set(2.58, 1.48, lz); j.add(hl);
+    const beam = new THREE.SpotLight(0xfff0c4, 6, 36, 0.5, 0.4, 1.4); beam.position.set(2.6, 1.5, lz);
+    beam.target.position.set(10, 0.6, lz); j.add(beam); j.add(beam.target); lights.push(beam);
+  }
+  // roof light-bar (ranger marking)
+  const lb = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.22, 1.4), barMat); lb.position.set(-0.45, 2.74, 0); j.add(lb);
+  for (const lz of [0.45, -0.45]) { const dome = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, 0.36), new THREE.MeshStandardMaterial({ color: 0xc94a2a, roughness: 0.4, emissive: 0x3a1206 })); dome.position.set(-0.45, 2.86, lz); j.add(dome); }
+  // roll cage over the open bed (posts rooted in body — no floating bars)
+  for (const cx of [-1.5, 0.4]) for (const sz of [1, -1]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8), barMat); post.position.set(cx, 2.05, sz * 0.98); j.add(post); }
+  for (const cx of [-1.5, 0.4]) { const cb = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.1, 8), barMat); cb.rotation.x = Math.PI / 2; cb.position.set(cx, 2.78, 0); j.add(cb); }
+  for (const sz of [1, -1]) { const sr = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 8), barMat); sr.rotation.z = Math.PI / 2; sr.position.set(-0.55, 2.78, sz * 0.98); j.add(sr); }
+  j.userData.lights = lights;
+  return j;
+}
+function buildJeepRiders(j) {                             // driver + passenger seated in the cab
+  const cols = [0x4a5236, 0x595b40];
+  for (let i = 0; i < 2; i++) { const t = makeTrooper(cols[i]); t.position.set(-0.2, 0.95, i === 0 ? 0.55 : -0.55); t.rotation.y = Math.PI / 2; t.scale.setScalar(0.8); j.add(t); }
+}
+function startIntroJeep() {
+  const j = buildJeep();
+  j.position.set(2, groundH(2, 56), 56); j.rotation.y = Math.PI / 2;   // front (+x local) points toward −z = direction of travel
+  buildJeepRiders(j); scene.add(j); introProp = j;
+  intro = { kind: "jeep", t: 0, phase: "drive", jeep: j, line: -1, shake: 0, camActive: true, stopped: false };
+  if (playerMesh) playerMesh.visible = false;
+  ["introTint", "introVig", "introBlack", "introRadio", "introBig"].forEach(k => { const e = $(k); if (e) e.style.opacity = "0"; });
+  $("introMission").classList.remove("show");
+  $("intro").classList.remove("hidden");
+  $("introCap").textContent = "Jurassic Survival · Investigation · Sector 9";
+  $("introCap").style.opacity = "1";
+  $("hud").style.display = "none";
+  S.phase = "intro";
+}
+function updateIntroJeep(dt) {
+  if (!intro) return;
+  intro.t += dt; const T = intro.t, j = intro.jeep;
+  const tint = $("introTint"), cap = $("introCap");
+  if (intro.line + 1 < INTRO_RADIO_JEEP.length && T >= INTRO_RADIO_JEEP[intro.line + 1].t) {
+    intro.line++; const e = INTRO_RADIO_JEEP[intro.line]; const r = $("introRadio"); r.innerHTML = e.h; r.style.opacity = "1";
+    if (e.say) { Audio.squelch(); speakRadio(e.say); }
+  }
+  tint.style.background = "#1f2733"; tint.style.opacity = "0.3";   // last light / dusk
+  const driveTo = (tz, rate) => { if (j) { j.position.z += (tz - j.position.z) * dt * rate; j.position.y = groundH(j.position.x, j.position.z); } };
+
+  if (T < 7) {                            // 1 · grind up the track toward the checkpoint
+    intro.phase = "drive"; intro.shake = 0.09; driveTo(20, 0.5);
+    cap.style.opacity = T > 5 ? "0" : "1";
+  } else if (T < 11) {                    // 2 · the team's frequency cuts to silence
+    intro.phase = "closing"; intro.shake = 0.06; driveTo(11, 0.6);
+    if (!intro._cut && T > 9.5) { intro._cut = 1; Audio.ambient(false); }
+  } else if (T < 14.5) {                  // 3 · halt at the wrecked checkpoint, headlights reveal
+    intro.phase = "arrive"; intro.shake = T > 12 ? 0.02 : 0.05; driveTo(8, 2.2);
+    if (!intro.stopped && T > 13) intro.stopped = true;
+  } else {                                // 4 · dismount on foot
+    endIntroJeep();
+  }
+}
+function updateIntroCameraJeep() {
+  const j = intro.jeep; if (!j) return;
+  camera.position.lerp(tmp.set(j.position.x - 1.4, j.position.y + 2.35, j.position.z + 5.2), 0.1);   // over the driver's shoulder
+  camera.lookAt(j.position.x + 1.0, j.position.y + 1.5, j.position.z - 10);                          // forward over the hood
+  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+}
+function endIntroJeep() {                                 // step out beside the jeep, on foot into Sector 9
+  const j = intro.jeep; const P = S.player;
+  P.x = j ? j.position.x - 2.4 : 0; P.z = j ? j.position.z + 1.2 : 0; P.yaw = 0;   // face forward, into the trees
+  cam.yaw = 0; cam.pitch = -0.05; camera.up.set(0, 1, 0);
+  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
+  finishIntroCommon("INVESTIGATION · follow the tracks — reach the objective marker");
+}
 function lockPointer() {   // pointer lock needs a user gesture; the timer-driven auto-end may be rejected — canvas click recovers it
   if (isTouch) return;
   try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
@@ -2089,6 +2198,7 @@ function lockPointer() {   // pointer lock needs a user gesture; the timer-drive
 function skipIntro() {
   if (!intro) return;
   if (intro.heli) scene.remove(intro.heli.group);
+  if (intro.kind === "jeep") { endIntroJeep(); return; }
   if (intro.kind === "research") { Audio.rotor(false); endIntroResearch(); return; }
   if (!wreckMesh) wreckMesh = buildWreck(intro.wx, intro.wz);
   S.player.x = 0; S.player.z = 0; placeAtWreck();
@@ -2099,7 +2209,7 @@ function skipIntro() {
 function startRun() {
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = [];
-  clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField();
+  clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField(); clearIntroProp();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
