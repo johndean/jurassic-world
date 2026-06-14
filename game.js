@@ -2545,8 +2545,10 @@ function dexSetModel(id) {
   if (!tmpl) return;                                 // model still streaming in — viewer stays empty, text loads instantly
   let skinned = false; tmpl.traverse(o => { if (o.isSkinnedMesh) skinned = true; });
   const inst = skinned ? skeletonClone(tmpl) : tmpl.clone(true);
+  inst.traverse(o => { if (o.isMesh || o.isSkinnedMesh) o.frustumCulled = false; });
+  // Show every species at its clean BIND POSE (no baked clip) — same as in-game. The auto-rig walk clip
+  // mangled the T-Rex (stretched mesh); the viewer just auto-rotates, so a static pose reads best.
   const g = fitModel(inst, 2.2, sp.modelYaw || 0);
-  if (skinned) { const a = MODEL_ANIMS[sp.modelPath] || []; if (a.length) { const mx = new THREE.AnimationMixer(inst); mx.clipAction(a[0]).play(); g.userData.mixer = mx; } }
   dexScene.add(g); dexModel = g;
   const box = measureBox(g), ctr = new THREE.Vector3(), size = new THREE.Vector3();
   box.getCenter(ctr); box.getSize(size);
