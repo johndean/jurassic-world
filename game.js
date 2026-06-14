@@ -1579,6 +1579,33 @@ function showStart() {
 }
 /* ====================================================== field guide ====== */
 let dexBuilt = false, dexMax = null;
+// Render a small portrait of a species straight from its loaded .glb (no extra assets/credits).
+let dexR = null, dexScene = null, dexCam = null; const dexCache = {};
+function dexThumb(id) {
+  if (dexCache[id]) return dexCache[id];
+  const sp = SPECIES[id], tmpl = MODELS[sp.modelPath];
+  if (!tmpl) return null;                       // model not streamed in yet → caller shows a fallback tile
+  if (!dexR) {
+    dexR = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
+    dexR.setSize(320, 320); dexR.setClearColor(0x12160f, 1); dexR.outputColorSpace = THREE.SRGBColorSpace;
+    dexR.toneMapping = THREE.ACESFilmicToneMapping; dexR.toneMappingExposure = 1.15;
+    dexScene = new THREE.Scene();
+    dexScene.add(new THREE.HemisphereLight(0xd6e4ea, 0x33402e, 1.2));
+    const dl = new THREE.DirectionalLight(0xfff1df, 1.7); dl.position.set(3, 5, 4); dexScene.add(dl);
+    if (scene && scene.environment) dexScene.environment = scene.environment;
+    dexCam = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
+  }
+  let skinned = false; tmpl.traverse(o => { if (o.isSkinnedMesh) skinned = true; });
+  const inst = skinned ? skeletonClone(tmpl) : tmpl.clone(true);
+  const g = fitModel(inst, 2.0, (sp.modelYaw || 0) + 0.5);    // slight 3/4 turn for a portrait
+  dexScene.add(g);
+  dexCam.position.set(2.7, 1.5, 3.1); dexCam.lookAt(0, 1.0, 0);
+  dexR.render(dexScene, dexCam);
+  let url = null; try { url = dexR.domElement.toDataURL("image/jpeg", 0.85); } catch (e) { url = null; }
+  dexScene.remove(g);
+  if (url) dexCache[id] = url;
+  return url;
+}
 function buildFieldGuide() {
   const grid = $("dexGrid"); if (!grid) return;
   const list = Object.values(SPECIES);
@@ -1586,8 +1613,9 @@ function buildFieldGuide() {
   list.forEach(s => { dexMax.run = Math.max(dexMax.run, s.move.run); dexMax.len = Math.max(dexMax.len, s.size.lengthM); dexMax.mass = Math.max(dexMax.mass, s.size.massKg); dexMax.hp = Math.max(dexMax.hp, s.combat.health); dexMax.dmg = Math.max(dexMax.dmg, s.combat.damage); dexMax.sight = Math.max(dexMax.sight, s.senses.sightRangeM); });
   const order = list.slice().sort((a, b) => a.diet === b.diet ? b.size.lengthM - a.size.lengthM : (a.diet === "carnivore" ? -1 : 1));
   grid.innerHTML = order.map(s => `<button class="dex-card ${s.diet === "carnivore" ? "pred" : "herb"}" data-id="${s.id}">
-    <img src="./assets/codex/${s.id}.webp" loading="lazy" onerror="this.style.visibility='hidden'">
+    <img class="dc-img" data-sp="${s.id}" alt="">
     <div class="dc-name">${s.displayName}</div><div class="dc-tag">${s.diet === "carnivore" ? "PREDATOR" : "HERBIVORE"} · ${s.archetype}</div></button>`).join("");
+  grid.querySelectorAll(".dc-img").forEach(im => { const u = dexThumb(im.dataset.sp); if (u) im.src = u; else im.style.display = "none"; });
   grid.querySelectorAll(".dex-card").forEach(c => c.addEventListener("click", () => {
     grid.querySelectorAll(".dex-card").forEach(x => x.classList.toggle("sel", x === c));
     renderDex(c.dataset.id);
@@ -1604,7 +1632,7 @@ function renderDex(id) {
   $("dexDetail").innerHTML = `
     <div class="dd-head ${carn ? "pred" : "herb"}"><div class="dd-name">${s.displayName}</div>
       <div class="dd-sub">${carn ? "PREDATOR" : "HERBIVORE"} · ${s.archetype} · ${c.era || ""}</div></div>
-    <img class="dd-img" src="./assets/codex/${id}.webp" onerror="this.style.display='none'">
+    <img class="dd-img" alt="">
     <p class="dd-facts">${c.facts || ""}</p>
     <div class="dd-stats">
       ${dexBar("LENGTH", s.size.lengthM, dexMax.len, " m")}
@@ -1619,6 +1647,8 @@ function renderDex(id) {
       <div class="dd-col weak"><h4>WEAKNESSES</h4><ul>${(c.weaknesses || []).map(x => `<li>${x}</li>`).join("")}</ul></div>
     </div>
     <div class="dd-survive"><h4>${carn ? "HOW TO SURVIVE IT" : "HANDLING"}</h4><p>${c.survival || ""}</p></div>`;
+  const di = $("dexDetail").querySelector(".dd-img"), u = dexThumb(id);
+  if (u) di.src = u; else di.style.display = "none";
 }
 $("guideBtn").addEventListener("click", () => { if (!dexBuilt) buildFieldGuide(); $("codex").classList.add("on"); });
 $("dexClose").addEventListener("click", () => $("codex").classList.remove("on"));
