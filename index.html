@@ -18,6 +18,33 @@
     box-shadow:inset 0 0 220px 60px rgba(214,86,47,.0);}
   #flash{position:fixed;inset:0;pointer-events:none;z-index:31;background:#d6562f;opacity:0;}
 
+  /* opening crash intro */
+  #intro{position:fixed;inset:0;z-index:70;pointer-events:none;overflow:hidden;font-family:ui-monospace,monospace;}
+  #intro.hidden{display:none;}
+  #introTint{position:absolute;inset:0;opacity:0;background:#c9a23a;mix-blend-mode:multiply;transition:opacity .35s,background .5s;}
+  #introBlack{position:absolute;inset:0;background:#000;opacity:0;}
+  #introVig{position:absolute;inset:0;opacity:0;box-shadow:inset 0 0 240px 90px #000;background:radial-gradient(circle at 50% 46%,transparent 30%,rgba(0,0,0,.6) 100%);}
+  #introCap{position:absolute;left:0;right:0;top:9%;text-align:center;font-size:12px;letter-spacing:.5em;color:rgba(215,224,218,.85);
+    text-transform:uppercase;opacity:0;transition:opacity .6s;text-shadow:0 1px 6px #000;}
+  #introRadio{position:absolute;left:0;right:0;bottom:13%;text-align:center;font-size:13px;letter-spacing:.1em;line-height:1.7;
+    color:#bfe2ea;opacity:0;transition:opacity .35s;text-shadow:0 1px 6px #000;padding:0 8%;}
+  #introRadio .rc{color:#8a978f;}
+  #introBig{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;
+    font-size:min(13vw,86px);letter-spacing:.18em;color:#ff5230;opacity:0;text-shadow:0 0 30px rgba(255,40,20,.5);}
+  #introMission{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);width:min(520px,84vw);opacity:0;
+    background:rgba(8,11,10,.82);border:1px solid rgba(224,119,47,.55);border-radius:8px;padding:20px 24px;
+    box-shadow:0 0 50px rgba(0,0,0,.6);transition:opacity .5s,transform .5s;}
+  #introMission.show{opacity:1;transform:translate(-50%,-50%);}
+  .im-h{font-size:11px;letter-spacing:.3em;color:#e0772f;margin-bottom:14px;}
+  .im-row{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid rgba(150,170,160,.18);padding:9px 0;}
+  .im-row b{font-size:10px;letter-spacing:.2em;color:#8a978f;font-weight:400;}
+  .im-row span{font-size:15px;letter-spacing:.08em;color:#e7eee9;font-weight:700;}
+  .im-fac{margin-top:14px;font-size:12px;letter-spacing:.1em;color:#bfe2ea;text-align:center;}
+  .im-fac b{color:#e0772f;font-size:16px;}
+  #introSkip{position:absolute;top:16px;right:16px;pointer-events:auto;font:11px ui-monospace,monospace;letter-spacing:.14em;
+    color:#d7e0da;background:rgba(10,14,13,.55);border:1px solid rgba(150,170,160,.5);padding:8px 14px;border-radius:6px;cursor:pointer;transition:.15s;}
+  #introSkip:hover{border-color:#e0772f;color:#fff;}
+
   /* ===== HUD (ported from ExtractionHUD.jsx, wired to live sim state) ===== */
   #hud{
     --hud-bg: rgba(10,14,13,0.62);
@@ -315,6 +342,23 @@
 <div id="vig"></div>
 <div id="flash"></div>
 <div id="dev"></div>
+
+<!-- opening helicopter-crash intro (cinematic overlay) -->
+<div id="intro" class="hidden">
+  <div id="introTint"></div>
+  <div id="introVig"></div>
+  <div id="introBlack"></div>
+  <div id="introCap"></div>
+  <div id="introRadio"></div>
+  <div id="introBig"></div>
+  <div id="introMission">
+    <div class="im-h">▰ MISSION UPDATE</div>
+    <div class="im-row"><b>PRIMARY</b><span>SURVIVE</span></div>
+    <div class="im-row"><b>SECONDARY</b><span>LOCATE EMERGENCY EXTRACTION</span></div>
+    <div class="im-fac">MILITARY EXTRACTION FACILITY ALPHA — <b>2.3 KM</b></div>
+  </div>
+  <button id="introSkip">SKIP INTRO ▸</button>
+</div>
 
 <!-- HUD overlay -->
 <div id="hud">

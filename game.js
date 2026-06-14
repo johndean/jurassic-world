@@ -596,6 +596,7 @@ function initInput() {
     if (e.code === "Digit2") selectTool(1);
     if (e.code === "Digit3") selectTool(2);
     if (e.code === "KeyH" || e.code === "Slash") toggleKeyHelp();          // controls reference (desktop)
+    if (intro && (e.code === "Escape" || e.code === "Enter" || e.code === "Space")) { skipIntro(); return; }
     if (e.code === "Escape" && mapOpen) toggleMap();
     if (e.code === "Escape") $("keyHelp").classList.remove("on");
   });
@@ -1328,11 +1329,158 @@ function updateEvac(dt) {
 }
 function clearEvac() { if (evac) { scene.remove(evac.heli.group); evac = null; } }
 
+/* ============================================ opening crash intro ======== *
+ * Compressed (~36s) interactive build of OPENING_SEQUENCE.md: deployment flight
+ * -> trouble -> MAYDAY -> spin -> crash -> black -> wake at the burning wreck ->
+ * mission update -> jungle silence + distant roar -> hand control to the player.
+ * Skippable; auto-skips on later runs in the same session (you've seen it). */
+let intro = null, wreckMesh = null, introSeen = false;
+const introCine = () => intro !== null;                  // input locked while the intro plays
+const INTRO_CAM_END = 21;                                // after the crash the normal (wreck) camera takes over
+const INTRO_RADIO = [
+  { t: 1.2, h: `<span class="rc">RANGER-6:</span> Entering Alpha airspace. Stay sharp.` },
+  { t: 7.0, h: `<span class="rc">RANGER-6:</span> Thermal readings high… lost contact with Outpost Seven.` },
+  { t: 11.5, h: `<span class="rc">PILOT:</span> Mayday — losing navigation, controls unresponsive!` },
+  { t: 15.5, h: `<span class="rc">PILOT:</span> She's spinning — BRACE! BRACE!` },
+  { t: 22.8, h: `…ringing… muffled voices… you come to in the wreck.` },
+  { t: 32.5, h: `The jungle has gone silent. Something heard the crash.` },
+];
+
+function buildWreck(x, z) {
+  const heli = buildHeli();                              // reuse the chopper, scorched + canted as wreckage
+  const g = heli.group; g.position.set(x, groundH(x, z), z); g.rotation.set(0.32, 2.2, 0.46);
+  if (heli.rotor) heli.rotor.rotation.z = 0.5;
+  g.traverse(o => { if (o.isMesh && o.material && o.material.color) { o.material = o.material.clone(); o.material.color.multiplyScalar(0.45); } });
+  const fire = new THREE.PointLight(0xff5a1e, 4.5, 28, 2); fire.position.set(0, 1.4, 0.4); g.add(fire);
+  const smoke = [];
+  for (let i = 0; i < 6; i++) { const p = new THREE.Mesh(new THREE.SphereGeometry(0.85, 8, 7), new THREE.MeshBasicMaterial({ color: 0x2a2e30, transparent: true, opacity: 0.4, depthWrite: false })); p.userData.ph = i / 6; g.add(p); smoke.push(p); }
+  g.userData.fire = fire; g.userData.smoke = smoke;
+  scene.add(g); return g;
+}
+function updateWreck(dt) {
+  if (!wreckMesh) return;
+  const fire = wreckMesh.userData.fire; if (fire) fire.intensity = 3.5 + Math.sin(S.t * 17) * 1.1 + Math.random() * 0.6;
+  for (const p of wreckMesh.userData.smoke) { p.userData.ph = (p.userData.ph + dt * 0.22) % 1; const k = p.userData.ph; p.position.set(0.2 + k * 0.9, 1.4 + k * 7, 0.3); p.scale.setScalar(0.6 + k * 2.4); p.material.opacity = 0.42 * (1 - k); }
+}
+function clearWreck() { if (wreckMesh) { scene.remove(wreckMesh); wreckMesh = null; } }
+
+function placeAtWreck() {                                 // stand the survivor next to the wreck, facing it
+  const P = S.player; P.yaw = Math.atan2(intro ? intro.wx : 6, intro ? intro.wz : 4);
+  cam.yaw = P.yaw; cam.pitch = -0.12; camera.up.set(0, 1, 0);
+  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
+}
+function startIntro() {
+  const wx = 6, wz = 4;
+  if (introSeen) {   // already watched this session → drop straight into the world at the wreck
+    wreckMesh = buildWreck(wx, wz); intro = { wx, wz }; placeAtWreck(); intro = null;
+    S.phase = "playing"; $("hud").style.display = ""; Audio.ambient(true);
+    toast("SURVIVE · find the extraction beacon"); lockPointer(); return;
+  }
+  Audio.rotor(true);
+  const heli = buildHeli(); heli.group.position.set(60, 150, 120);
+  intro = { t: 0, phase: "flight", heli, line: -1, shake: 0, crashed: false, camActive: true, wx, wz };
+  if (playerMesh) playerMesh.visible = false;
+  ["introTint", "introVig", "introBlack", "introRadio", "introBig"].forEach(k => { const e = $(k); if (e) e.style.opacity = "0"; });
+  $("introMission").classList.remove("show");
+  $("intro").classList.remove("hidden");
+  $("introCap").textContent = "Jurassic Survival · Island Alpha";
+  $("introCap").style.opacity = "1";
+  $("hud").style.display = "none";
+  S.phase = "intro";
+}
+function updateIntro(dt) {
+  if (!intro) return;
+  intro.t += dt; const T = intro.t, g = intro.heli ? intro.heli.group : null;
+  const tint = $("introTint"), big = $("introBig"), cap = $("introCap");
+  if (intro.line + 1 < INTRO_RADIO.length && T >= INTRO_RADIO[intro.line + 1].t) { intro.line++; const r = $("introRadio"); r.innerHTML = INTRO_RADIO[intro.line].h; r.style.opacity = "1"; }
+  if (g && !intro.crashed && intro.heli.rotor) { intro.heli.rotor.rotation.y += dt * 30; if (intro.heli.tailRotor) intro.heli.tailRotor.rotation.x += dt * 60; }
+
+  if (T < 6.5) {                          // 1 · deployment flight
+    intro.phase = "flight"; intro.shake = 0.04;
+    if (g) { g.position.x += (-6 - g.position.x) * dt * 0.4; g.position.z += (-30 - g.position.z) * dt * 0.4; g.position.y += (70 - g.position.y) * dt * 0.5; }
+    cap.style.opacity = T > 4.5 ? "0" : "1";
+  } else if (T < 11) {                    // 2 · first signs of trouble
+    intro.phase = "trouble"; intro.shake = 0.12;
+    tint.style.background = "#c9a23a"; tint.style.opacity = "0.22";
+    if (g) { g.position.y += (52 - g.position.y) * dt * 0.5; g.position.x += (4 - g.position.x) * dt * 0.4; g.position.z += (-12 - g.position.z) * dt * 0.4; }
+  } else if (T < 15) {                    // 3 · something is wrong (mayday)
+    intro.phase = "wrong"; intro.shake = 0.32;
+    if (!intro._alarm) { intro._alarm = 1; Audio.alarm(); }
+    tint.style.background = "#d6562f"; tint.style.opacity = "0.4";
+    big.textContent = "MAYDAY"; big.style.opacity = T < 14.4 ? "1" : "0";
+    if (g) g.position.y += (40 - g.position.y) * dt * 0.5;
+  } else if (T < 19) {                    // 4 · loss of control (spin)
+    intro.phase = "spin"; intro.shake = 0.7;
+    tint.style.background = "#3a2516"; tint.style.opacity = "0.5";
+    big.textContent = "BRACE!"; big.style.opacity = T < 18.4 ? "1" : "0";
+    if (g) g.position.y += (24 - g.position.y) * dt * 0.6;
+  } else if (T < INTRO_CAM_END) {         // 5 · crash
+    intro.phase = "crash"; intro.shake = 1.4;
+    if (g && !intro.crashed) { g.position.x += (intro.wx - g.position.x) * dt * 4; g.position.z += (intro.wz - g.position.z) * dt * 4; g.position.y += (groundH(intro.wx, intro.wz) - g.position.y) * dt * 4; }
+    if (!intro.crashed && T > 19.4) {
+      intro.crashed = true; flash(); Audio.crash(); Audio.rotor(false); big.style.opacity = "0";
+      if (intro.heli) scene.remove(intro.heli.group);
+      wreckMesh = buildWreck(intro.wx, intro.wz);
+      S.player.x = 0; S.player.z = 0; placeAtWreck();
+      $("introBlack").style.opacity = "1"; intro.camActive = false; intro.shake = 0;
+    }
+  } else if (T < 27) {                    // 6 · awakening at the wreck
+    intro.phase = "wake";
+    const k = clamp((T - 22.5) / 1.6, 0, 1);
+    $("introBlack").style.opacity = String(1 - k);
+    $("introVig").style.opacity = String(0.85 - k * 0.4);
+    tint.style.opacity = "0";
+  } else if (T < 32) {                    // 7 · first objective
+    intro.phase = "mission"; $("introMission").classList.add("show");
+    $("introRadio").style.opacity = T > 27.4 ? "0" : "1";
+  } else if (T < 36) {                    // 8 · silence → roar
+    intro.phase = "silence";
+    if (!intro._cut) { intro._cut = 1; Audio.ambient(false); $("introMission").classList.remove("show"); }
+    if (!intro._roar && T > 32.6) { intro._roar = 1; Audio.roar(); }
+  } else { endIntro(); return; }
+  if (wreckMesh) updateWreck(dt);
+}
+function updateIntroCamera() {
+  const g = intro.heli ? intro.heli.group : null; if (!g) return;
+  const T = intro.t;
+  if (T < 15) {                           // trailing chase over the valley
+    camera.position.lerp(tmp.set(g.position.x - 10, g.position.y + 6, g.position.z + 16), 0.06);
+    camera.lookAt(g.position.x, g.position.y - 2, g.position.z - 10);
+  } else {                                // spin: orbit + roll the horizon
+    const a = T * 2.4;
+    camera.position.lerp(tmp.set(g.position.x + Math.sin(a) * 13, g.position.y + 4, g.position.z + Math.cos(a) * 13), 0.12);
+    camera.up.set(Math.sin(a * 0.7) * 0.5, 1, 0).normalize();
+    camera.lookAt(g.position.x, g.position.y, g.position.z);
+  }
+  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; camera.position.z += (Math.random() - 0.5) * intro.shake; }
+}
+function endIntro() {
+  introSeen = true; intro = null;
+  $("intro").classList.add("hidden"); $("introMission").classList.remove("show");
+  ["introTint", "introVig", "introBlack", "introRadio", "introCap", "introBig"].forEach(k => { const e = $(k); if (e) e.style.opacity = "0"; });
+  camera.up.set(0, 1, 0); $("hud").style.display = "";
+  S.phase = "playing"; Audio.ambient(true);
+  if (playerMesh) playerMesh.visible = true;
+  toast("SURVIVE · find the extraction beacon");
+  lockPointer();
+}
+function lockPointer() {   // pointer lock needs a user gesture; the timer-driven auto-end may be rejected — canvas click recovers it
+  if (isTouch) return;
+  try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+}
+function skipIntro() {
+  if (!intro) return;
+  if (intro.heli) scene.remove(intro.heli.group);
+  if (!wreckMesh) wreckMesh = buildWreck(intro.wx, intro.wz);
+  S.player.x = 0; S.player.z = 0; placeAtWreck();
+  Audio.rotor(false); endIntro();
+}
+
 /* ================================================== run lifecycle ======== */
 function startRun() {
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = [];
-  clearRemotes(); clearEvac(); clearFx();
+  clearRemotes(); clearEvac(); clearFx(); clearWreck();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
@@ -1361,10 +1509,9 @@ function startRun() {
     do { x = rand(-half, half); z = rand(-half, half); tries++; } while (dist2(x, z, 0, 0) < minR * minR && tries < 24);
     dinos.push(spawnDino(species, clamp(x, -half, half), clamp(z, -half, half)));
   }
-  S.phase = "playing";
   $("startScreen").classList.add("hidden"); $("endScreen").classList.add("hidden");
   cam.yaw = 0; cam.pitch = -0.18;
-  Audio.ambient(true);
+  startIntro();   // play the opening crash cinematic, then hand control to the player ("playing")
 }
 function endRun(won) {
   if (S.phase !== "playing") return;
@@ -1379,7 +1526,7 @@ function endRun(won) {
 
 /* ================================================== procedural audio ===== */
 const Audio = (() => {
-  let ctx = null, ambGain = null, ambOn = false, hbTimer = 0;
+  let ctx = null, ambGain = null, ambOn = false, hbTimer = 0, rotGain = null;
   function ensure() { if (!ctx) { try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { } } return ctx; }
   function blip(freq, dur, type, vol, slideTo) {
     if (!ctx) return; const o = ctx.createOscillator(), g = ctx.createGain();
@@ -1417,6 +1564,19 @@ const Audio = (() => {
     beacon(call) { blip(call ? 880 : 1320, call ? 0.4 : 0.12, "square", 0.12, call ? 660 : null); },
     win() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => blip(f, 0.4, "triangle", 0.18), i * 130)); },
     lose() { [196, 165, 131, 98].forEach((f, i) => setTimeout(() => blip(f, 0.5, "sawtooth", 0.16), i * 160)); },
+    // ---- opening crash-intro cues ----
+    rotor(on) {   // persistent helicopter engine + rotor thrum (fades out for the crash)
+      ensure(); if (!ctx) return;
+      if (on && !rotGain) {
+        rotGain = ctx.createGain(); rotGain.gain.value = 0.0; rotGain.connect(ctx.destination);
+        const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 260; f.connect(rotGain);
+        [30, 44, 60].forEach(fr => { const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = fr; o.connect(f); o.start(); });
+        const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 11; lg.gain.value = 90; lfo.connect(lg).connect(f.frequency); lfo.start();
+      }
+      if (rotGain) rotGain.gain.setTargetAtTime(on ? 0.12 : 0.0, ctx.currentTime, on ? 0.6 : 0.25);
+    },
+    alarm() { blip(1180, 0.16, "square", 0.14); setTimeout(() => blip(1180, 0.16, "square", 0.14), 220); },
+    crash() { ensure(); noise(0.7, 0.5, 500); blip(64, 0.9, "sawtooth", 0.34, 28); setTimeout(() => noise(1.4, 0.12, 240), 120); },
   };
 })();
 function initAudio() { /* ctx created on first gesture (start button) */ }
@@ -1580,6 +1740,7 @@ function flash() { const f = $("flash"); f.style.transition = "none"; f.style.op
 /* ====================================================== camera =========== */
 function updateCamera() {
   const P = S.player;
+  if (intro && intro.camActive) { updateIntroCamera(); return; }   // scripted flight/spin/crash camera
   if (evacCine()) {   // evac: rise high and recentre to keep visual over the whole park while the chopper climbs away
     const g = evac.heli.group, prog = evac.phase === "liftoff" ? Math.min(1, evac.t / 5.2) : 0;
     camera.position.lerp(tmp.set((evac.hx + 18) * (1 - prog), 26 + prog * 112, (evac.hz + 60) * (1 - prog) + 72 * prog), 0.04);
@@ -1615,11 +1776,12 @@ function frame(now) {
     if (S.phase === "playing") simulate(STEP);
     acc -= STEP; steps++;
   }
+  if (S.phase === "intro") updateIntro(Math.min(0.05, dtMs / 1000));   // cinematic runs on real time, capped
   tickMs = performance.now() - t0;
   updateCamera();
   // HUD ~12 Hz
   hudAcc += dtMs / 1000;
-  if (hudAcc > 1 / 12) { hudAcc = 0; if (S.phase !== "menu") updateHUD(); }
+  if (hudAcc > 1 / 12) { hudAcc = 0; if (S.phase !== "menu" && S.phase !== "intro") updateHUD(); }
   // toast fade
   if (toastTimer > 0) { toastTimer -= dtMs / 1000; if (toastTimer <= 0) $("toast").style.opacity = "0"; }
   if (playerMixer) { playerAction.timeScale = GAIT_RATE[S.player.gait] ?? 1; playerMixer.update(dtMs / 1000); }
@@ -1641,6 +1803,7 @@ function simulate(dt) {
   updateEvac(dt);
   updateTools(dt);
   updateFx(dt);
+  if (wreckMesh) updateWreck(dt);
   Audio.tickHeartbeat(dt, S.player.fear);
   if (Net.on) netTick(dt);
 }
@@ -1855,8 +2018,9 @@ function renderDex(id) {
 $("guideBtn").addEventListener("click", () => { $("codex").classList.add("on"); if (!dexBuilt) buildFieldGuide(); dexStart(); });
 $("dexClose").addEventListener("click", () => $("codex").classList.remove("on"));
 
-$("startBtn").addEventListener("click", () => { Audio.init(); startRun(); if (!isTouch) canvas.requestPointerLock(); });
-$("againBtn").addEventListener("click", () => { startRun(); if (!isTouch) canvas.requestPointerLock(); });
+$("startBtn").addEventListener("click", () => { Audio.init(); startRun(); });   // pointer lock acquired at the intro handoff
+$("againBtn").addEventListener("click", () => { Audio.init(); startRun(); });
+const introSkipBtn = $("introSkip"); if (introSkipBtn) introSkipBtn.addEventListener("click", skipIntro);
 $("againBtn").textContent = STR.again;
 
 boot();

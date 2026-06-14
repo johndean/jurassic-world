@@ -37,7 +37,10 @@ safe zone** — tools exist to get you *there alive*.
 **melee** (last resort), wired to a simple inventory + a `1/2/3` (desktop) / on-screen buttons (touch) HUD,
 applying `scared`/stagger to predators in range. Then expand to horn / spray / smoke / trip-flare.
 
-## Also pending (from the Opening Constitution)
-- The interactive **helicopter-crash intro** code (design recorded in `OPENING_SEQUENCE.md`; the in-game
-  cinematic state machine is not yet implemented). **Done now:** the evac helicopter shows on the
-  minimap/tactical map as an inbound marker with a dashed track to the beacon.
+## Opening Constitution — now implemented
+- The interactive **helicopter-crash intro** (design in `OPENING_SEQUENCE.md`) is **built and live**: the
+  ~36s compressed 8-beat cinematic (flight → trouble → MAYDAY → spin → crash → black → wake at the burning
+  wreck → mission update → jungle silence + roar), a **Skip** control (button / Esc / Enter / Space), and
+  the smoking crash-site wreck the player wakes beside. Auto-skips on later runs in the same session.
+- The evac helicopter also shows on the minimap/tactical map as an inbound marker with a dashed track to
+  the beacon, and the evac chopper now **lands and is boarded** on a successful hold.
