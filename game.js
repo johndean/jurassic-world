@@ -716,7 +716,7 @@ function spawnDino(speciesId, x, z) {
     x, z, yaw: rand(0, 6.28), vx: 0, vz: 0, hp: sp.combat.health,
     state: baseStateFor(sp),
     bb: { lastSeenX: 0, lastSeenZ: 0, hasTarget: false, threat: 0, role: "harry", scared: 0, homeX: x, homeZ: z, hue: 0 },
-    cd: 0, decideIn: rand(0, 0.25), lod: "full", anim: 0, alive: true,
+    cd: 0, decideIn: rand(0, 0.25), lod: "full", anim: 0, alive: true, gaitPhase: rand(0, 6.28),
   };
 }
 // When a species' .glb finishes streaming, swap any already-spawned grey-box instances
@@ -950,16 +950,20 @@ function steer(a, dt, P) {
   } else {
     const legs = a.mesh.userData.legs;
     if (legs) { const sw = Math.sin(S.t * (run ? 16 : 8) + a.x) * 0.5 * moveAmt; legs[0].rotation.x = sw; legs[1].rotation.x = -sw; }
-    else {   // static .glb model has NO skeleton: fake a clearly visible lumbering gait by bouncing +
-             // pitching + waddling the whole body while it moves.
+    else {   // static .glb model (no skeleton): a distance-synced lumbering body gait. Cadence is tied
+             // to ground speed (so it reads as steps, not a glide); amplitude scales walk->run. Combines
+             // a stride bob, footfall pitch + head dip, a weight-shift roll, and a hip/tail waddle.
       const spd = Math.hypot(a.vx, a.vz);
-      const mv = Math.min(1, spd / (sp.move.walk || 2));   // ~1 once at walking speed
-      const ph = S.t * (run ? 11 : 7) + a.x;
+      const legLen = sp.greybox.standH || 2;
+      a.gaitPhase += spd * dt * (2.0 / Math.max(1, legLen));        // 2*PI ~ one full L+R stride cycle
+      const ph = a.gaitPhase, amp = Math.min(1.25, spd / (sp.move.walk || 2));
       const body = a.mesh.children[0];
-      if (mv > 0.05) {
-        a.mesh.position.y += Math.abs(Math.sin(ph)) * (sp.greybox.standH || 2) * 0.07 * mv;   // stride bounce
-        if (body) { body.rotation.x = Math.sin(ph) * 0.13 * mv; body.rotation.z = Math.cos(ph * 0.5) * 0.10 * mv; }
-      } else if (body) { body.rotation.x *= 0.9; body.rotation.z *= 0.9; }
+      a.mesh.position.y += Math.abs(Math.sin(ph)) * legLen * 0.05 * amp;            // stride bob on each footfall
+      if (body) {
+        body.rotation.x = (Math.sin(ph * 2) * 0.05 + Math.sin(ph) * 0.035) * amp;   // footfall dip + head bob
+        body.rotation.z = Math.sin(ph) * 0.11 * amp;                                // weight-shift roll (lean onto planted leg)
+        body.rotation.y = (sp.modelYaw || 0) + Math.cos(ph) * 0.06 * amp;           // hip/tail waddle (keeps facing offset)
+      }
     }
     if (a.mesh.userData.jaw) a.mesh.userData.jaw.rotation.x = a.anim > 0 ? 0.5 : 0;
   }
