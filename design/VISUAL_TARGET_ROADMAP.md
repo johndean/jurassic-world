@@ -77,6 +77,11 @@ This is what makes it *feel* painted. All code, no/low credits.
   articulated legs). That is the realistic browser ceiling. **True per-species skeletal walking is a
   UE5 item** (rigged marketplace pack or Control Rig per body archetype) — see `ue5/03_SYSTEMS_DESIGN.md`
   §5b and the UE5 production plan. Wire whatever clips exist to the AI states in `steer()`.
+- **Action animations** (dino attack/roar/flee, player idle/run/crouch) are likewise **procedural
+  overlays** in-browser — bite-lunge, apex rear-up + roar audio, flee lean, crouch body-drop, idle sway
+  — *not* bone-driven clips. Convincing at distance, zero credits. The **skeletal versions are a UE5
+  item** (Control Rig clip sets wired to the AI/input states); treat the procedural set as their
+  design-intent reference.
 - Address the **hands** weak spot (retopo, multi-image input, or accept at distance).
 - **Done when:** player moves believably (rigged) and creatures read as walking, not gliding (procedural
   in-browser; skeletal in UE5).

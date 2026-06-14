@@ -79,6 +79,15 @@ plays a skeletal walk; **all other species use a distance-synced procedural body
 footfall pitch, weight-shift roll, hip/tail waddle, cadence tied to ground speed). Good for stylized
 realtime, but it is body-motion only — no articulated legs.
 
+The same limit applies to **action animations**. The browser build's attack / roar / flee (dinos) and
+idle / run / crouch (player) are **procedural overlays driven by AI/input state** — a forward bite-lunge
++ head dip, an apex rear-up + chest swell + audio cue, a flee forward-lean, a crouch body-drop, an idle
+breathing sway — *not* bone-driven animation clips (the static meshes have no jaw/limb/spine bones to
+articulate; the player has a single walk clip time-scaled by gait). They read convincingly at distance
+and cost zero credits, but **true skeletal attack/roar/idle/run/crouch clips remain a UE5 item**
+(Control Rig + retargeted clip sets per body archetype, or a pre-rigged marketplace pack), wired to the
+same AI states. Treat the browser procedural set as the design-intent reference for those UE5 clips.
+
 In UE5 this is solved properly, two ways (cheapest → best):
 - **Rigged dino marketplace pack (Fab):** dinosaurs that arrive **already rigged + animated** (walk /
   run / idle / attack). Drop-in, no auto-rig gamble. This is the slice's recommended source (see
