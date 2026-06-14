@@ -1164,62 +1164,93 @@ function updateExtraction(dt) {
   if ((S.extraction.hold | 0) !== (S._lastBeep | 0)) { S._lastBeep = S.extraction.hold; if ((S.extraction.hold | 0) % 3 === 0) Audio.beacon(false); }
   if (S.extraction.hold >= S.extraction.holdMax && !S.extraction.won) {
     S.extraction.won = true;
-    if (evac) { evac.phase = "boarding"; evac.t = 0; }   // board the hovering chopper, then lift off (cinematic)
+    if (evac) { evac.phase = "boarding"; evac.t = 0; toast("BOARD THE CHOPPER"); }   // walk to the door + climb in
     else endRun(true);
   }
 }
 
 /* ============================================ helicopter evac cinematic === *
- * On "call extraction" a real chopper flies in and hovers at the beacon. On a
- * successful hold the player boards, it lifts off, and the camera rises to an
- * aerial fly-over of the whole park before the EXTRACTED screen. */
-let evac = null;   // { phase: incoming|hover|boarding|liftoff, t, heli:{group,rotor}, hx, hz, hoverY, done }
+ * On "call extraction" a real chopper flies in and TOUCHES DOWN beside the
+ * beacon (rotors spinning the whole time). You survive the hold next to it,
+ * then WALK to the open door and climb aboard; it spools up, lifts off, and
+ * the camera rises to an aerial fly-over of the park before the EXTRACTED
+ * screen. Phases: incoming → landing → grounded → boarding → climbing → liftoff. */
+let evac = null;   // { phase, t, heli:{group,rotor,tailRotor}, hx,hz, lx,lz, groundY, done }
 
 function buildHeli() {
   const g = new THREE.Group();
-  let rotor = null;
+  let topY = 3.4, len = 12, tailRotor = null;
+  const bladeMat = new THREE.MeshStandardMaterial({ color: 0x14160f, roughness: 0.95, metalness: 0.05 });
   if (MODELS[HELI_MODEL]) {
-    g.add(fitModel(MODELS[HELI_MODEL].clone(true), 4.6, 0));   // realistic model, ~4.6m tall
+    const m = fitModel(MODELS[HELI_MODEL].clone(true), 4.6, 0);   // realistic model, ~4.6m tall, feet at y=0
+    g.add(m);
+    const bb = measureBox(m); topY = bb.max.y; len = Math.max(bb.max.x - bb.min.x, 7);
   } else {                                                     // procedural fallback (boxy but functional)
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0x49513f, roughness: 0.85, metalness: 0.2, flatShading: true });
     const dark = new THREE.MeshStandardMaterial({ color: 0x20231e, roughness: 1 });
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(1.5, 3.2, 6, 12), bodyMat); body.rotation.z = Math.PI / 2; body.position.y = 0.6; g.add(body);
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(5, 0.5, 0.5), bodyMat); tail.position.set(-3.8, 1.1, 0); g.add(tail);
-    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.2, 0.4), bodyMat); fin.position.set(-6, 1.5, 0); g.add(fin);
-    for (const sx of [-1, 1]) { const sk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.2, 6), dark); sk.rotation.x = Math.PI / 2; sk.position.set(0.3, -0.9, sx * 1.1); g.add(sk); }
-    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.8, 6), dark); mast.position.y = 2.4; g.add(mast);
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(1.5, 3.2, 6, 12), bodyMat); body.rotation.z = Math.PI / 2; body.position.y = 1.5; g.add(body);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(5, 0.5, 0.5), bodyMat); tail.position.set(-3.8, 2.0, 0); g.add(tail);
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.2, 0.4), bodyMat); fin.position.set(-6, 2.4, 0); g.add(fin);
+    for (const sx of [-1, 1]) { const sk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.2, 6), dark); sk.rotation.x = Math.PI / 2; sk.position.set(0.3, 0.12, sx * 1.1); g.add(sk); }
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.8, 6), dark); mast.position.y = 3.2; g.add(mast);
+    topY = 3.4; len = 12;
   }
-  // spinning rotor disc (motion-blur look) — sells a running chopper for model + fallback alike
-  rotor = new THREE.Mesh(new THREE.CircleGeometry(6.8, 36), new THREE.MeshBasicMaterial({ color: 0x0c0e0c, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
-  rotor.rotation.x = -Math.PI / 2; rotor.position.y = 2.7; g.add(rotor);
+  // --- visible spinning MAIN rotor: hub + crossed blades + faint blur disc (reads as motion on model + fallback) ---
+  const rotor = new THREE.Group(); rotor.position.y = topY + 0.18;
+  rotor.add(new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.42, 8), bladeMat));
+  for (let i = 0; i < 2; i++) { const bl = new THREE.Mesh(new THREE.BoxGeometry(13.4, 0.09, 0.52), bladeMat); bl.rotation.y = i * Math.PI / 2; rotor.add(bl); }
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(7.0, 36), new THREE.MeshBasicMaterial({ color: 0x0c0e0c, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false }));
+  disc.rotation.x = -Math.PI / 2; disc.position.y = 0.14; rotor.add(disc);
+  g.add(rotor);
+  // --- spinning TAIL rotor (fallback only; real model carries its own) ---
+  if (!MODELS[HELI_MODEL]) {
+    tailRotor = new THREE.Group(); tailRotor.position.set(-len * 0.46, topY * 0.62, 0.45);
+    for (let i = 0; i < 2; i++) { const tb = new THREE.Mesh(new THREE.BoxGeometry(0.07, 2.6, 0.24), bladeMat); tb.rotation.z = i * Math.PI / 2; tailRotor.add(tb); }
+    g.add(tailRotor);
+  }
   scene.add(g);
-  return { group: g, rotor };
+  return { group: g, rotor, tailRotor };
 }
 function startEvac() {
   if (evac) return;
   const bx = S.extraction.beacon.x, bz = S.extraction.beacon.z;
+  const lx = bx + 4.5, lz = bz + 2.5;                      // clear landing pad, inside the beacon safe zone
+  const groundY = groundH(lx, lz);
   const heli = buildHeli();
-  heli.group.position.set(bx + 45, 115, bz + 45);          // enters high + far
-  evac = { phase: "incoming", t: 0, heli, hx: bx, hz: bz, hoverY: groundH(bx, bz) + 9, done: false };
+  heli.group.position.set(lx + 50, groundY + 120, lz + 50);   // enters high + far
+  heli.group.rotation.y = Math.atan2(bx - lx, bz - lz);       // nose roughly toward the beacon
+  evac = { phase: "incoming", t: 0, heli, hx: bx, hz: bz, lx, lz, groundY, hoverY: groundY + 12, done: false };
 }
 function updateEvac(dt) {
   if (!evac) return;
   const g = evac.heli.group; evac.t += dt;
-  if (evac.heli.rotor) evac.heli.rotor.rotation.z += dt * 42;            // spin rotor
-  const bx = evac.hx, bz = evac.hz;
-  if (evac.phase === "incoming") {
-    g.position.lerp(tmp.set(bx + 7, evac.hoverY, bz + 7), Math.min(1, dt * 0.6));
-    if (g.position.distanceTo(tmp.set(bx + 7, evac.hoverY, bz + 7)) < 1.5) evac.phase = "hover";
-  } else if (evac.phase === "hover") {
-    g.position.y = evac.hoverY + Math.sin(evac.t * 1.5) * 0.3;
-  } else if (evac.phase === "boarding") {
-    g.position.y = evac.hoverY + Math.sin(evac.t * 1.5) * 0.3;
-    const P = S.player;                                                   // walk under the chopper, then board
-    P.x += (bx - P.x) * Math.min(1, dt * 2); P.z += (bz - P.z) * Math.min(1, dt * 2); P.gait = "walk";
-    if (playerMesh) playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z);
-    if (evac.t > 1.6) { if (playerMesh) playerMesh.visible = false; evac.phase = "liftoff"; evac.t = 0; Audio.beacon(true); }
-  } else if (evac.phase === "liftoff") {
-    g.position.y += dt * 9; g.position.x += dt * 5; g.position.z -= dt * 2;   // climb + fly away
+  const rs = (evac.phase === "grounded" || evac.phase === "boarding") ? 24 : 32;   // idle slightly slower
+  if (evac.heli.rotor) evac.heli.rotor.rotation.y += dt * rs;                      // spin main rotor (vertical axis)
+  if (evac.heli.tailRotor) evac.heli.tailRotor.rotation.x += dt * rs * 2.4;        // spin tail rotor
+  const lx = evac.lx, lz = evac.lz;
+
+  if (evac.phase === "incoming") {                          // descend + close on the landing pad from high/far
+    const tgt = tmp.set(lx, evac.hoverY, lz);
+    g.position.lerp(tgt, Math.min(1, dt * 0.55));
+    if (g.position.distanceTo(tgt) < 2.0) { evac.phase = "landing"; evac.t = 0; }
+  } else if (evac.phase === "landing") {                    // settle straight down onto the skids
+    g.position.x += (lx - g.position.x) * Math.min(1, dt * 3);
+    g.position.z += (lz - g.position.z) * Math.min(1, dt * 3);
+    g.position.y += (evac.groundY - g.position.y) * Math.min(1, dt * 1.7);
+    if (g.position.y - evac.groundY < 0.1) { g.position.y = evac.groundY; evac.phase = "grounded"; evac.t = 0; Audio.beacon(true); toast("CHOPPER DOWN — HOLD, THEN BOARD"); }
+  } else if (evac.phase === "grounded") {                   // sits with rotors running through the hold
+    g.position.y = evac.groundY;
+  } else if (evac.phase === "boarding") {                   // YOU keep control — walk to the door to climb in
+    g.position.y = evac.groundY;
+    if (dist2(S.player.x, S.player.z, lx, lz) < 5.0 * 5.0) { evac.phase = "climbing"; evac.t = 0; }
+  } else if (evac.phase === "climbing") {                   // brief auto climb-aboard, then hide
+    g.position.y = evac.groundY;
+    const P = S.player;
+    P.x += (lx - P.x) * Math.min(1, dt * 4); P.z += (lz - P.z) * Math.min(1, dt * 4); P.gait = "walk";
+    if (playerMesh) playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9 + Math.min(1, evac.t) * 0.9, P.z);
+    if (evac.t > 1.2) { if (playerMesh) playerMesh.visible = false; evac.phase = "liftoff"; evac.t = 0; Audio.beacon(true); }
+  } else if (evac.phase === "liftoff") {                    // spool up, climb + bank away
+    g.position.y += dt * 9; g.position.x += dt * 5; g.position.z -= dt * 2;
     if (evac.t > 5.2 && !evac.done) { evac.done = true; endRun(true); }
   }
 }
@@ -1540,7 +1571,7 @@ function simulate(dt) {
   Audio.tickHeartbeat(dt, S.player.fear);
   if (Net.on) netTick(dt);
 }
-const evacCine = () => evac && (evac.phase === "boarding" || evac.phase === "liftoff");
+const evacCine = () => evac && (evac.phase === "climbing" || evac.phase === "liftoff");   // input/cam locked only once aboard
 
 /* ============================================== co-op multiplayer ======== *
  * Player-sync: shared room + shared world seed; each player sees the others as
@@ -1645,38 +1676,68 @@ function showStart() {
 /* ====================================================== field guide ====== */
 let dexBuilt = false, dexMax = null;
 // Render a small portrait of a species straight from its loaded .glb (no extra assets/credits).
-let dexR = null, dexScene = null, dexCam = null; const dexCache = {};
-function dexThumb(id) {
-  if (dexCache[id]) return dexCache[id];
+/* ---- Field Guide: live 3D viewer (drag to rotate · scroll/pinch to zoom) ----
+ * The gallery is a fast text name-list (no per-item GL renders — that was the
+ * lag). Selecting a species loads its real .glb into ONE persistent, lit, auto-
+ * rotating viewer you can spin and zoom. */
+let dexR = null, dexScene = null, dexCam = null, dexModel = null, dexLoopOn = false;
+const dexView = { yaw: 0.7, pitch: 0.16, dist: 3.0, radius: 1.5, target: new THREE.Vector3(), drag: false };
+function dexViewerInit() {
+  if (dexR) return;
+  const cv = $("dexCanvas"); if (!cv) return;
+  dexR = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: false });
+  dexR.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  dexR.setClearColor(0x0c110d, 1); dexR.outputColorSpace = THREE.SRGBColorSpace;
+  dexR.toneMapping = THREE.ACESFilmicToneMapping; dexR.toneMappingExposure = 1.3;
+  dexScene = new THREE.Scene();
+  dexScene.add(new THREE.HemisphereLight(0xe3eef2, 0x3c4a34, 1.25));   // brighter sky/ground bounce — kills the "dull" look
+  const key = new THREE.DirectionalLight(0xfff1de, 2.4); key.position.set(5, 7, 5); dexScene.add(key);
+  const fill = new THREE.DirectionalLight(0xbcd4ff, 0.9); fill.position.set(-6, 3, -3); dexScene.add(fill);
+  const rim = new THREE.DirectionalLight(0xffce9a, 1.4); rim.position.set(-2, 4, -7); dexScene.add(rim);   // warm backlight separates it from the bg
+  if (scene && scene.environment) dexScene.environment = scene.environment;
+  const gd = new THREE.Mesh(new THREE.CircleGeometry(4, 48), new THREE.MeshStandardMaterial({ color: 0x0e130d, roughness: 1, metalness: 0 }));
+  gd.rotation.x = -Math.PI / 2; gd.position.y = -0.02; dexScene.add(gd);
+  dexCam = new THREE.PerspectiveCamera(40, 1, 0.05, 200);
+  // drag to orbit + scroll/pinch to zoom (pointer events cover mouse + touch)
+  let px = 0, py = 0, pinch = 0;
+  cv.addEventListener("pointerdown", e => { dexView.drag = true; px = e.clientX; py = e.clientY; cv.setPointerCapture && cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointermove", e => { if (!dexView.drag) return; dexView.yaw -= (e.clientX - px) * 0.01; dexView.pitch = Math.max(-0.35, Math.min(0.95, dexView.pitch + (e.clientY - py) * 0.006)); px = e.clientX; py = e.clientY; });
+  const end = () => { dexView.drag = false; };
+  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+  cv.addEventListener("wheel", e => { dexView.dist = Math.max(1.7, Math.min(7, dexView.dist + Math.sign(e.deltaY) * 0.3)); e.preventDefault(); }, { passive: false });
+  cv.addEventListener("touchmove", e => { if (e.touches.length === 2) { const dx = e.touches[0].clientX - e.touches[1].clientX, dy = e.touches[0].clientY - e.touches[1].clientY, d = Math.hypot(dx, dy); if (pinch) dexView.dist = Math.max(1.7, Math.min(7, dexView.dist - (d - pinch) * 0.012)); pinch = d; e.preventDefault(); } }, { passive: false });
+  cv.addEventListener("touchend", () => { pinch = 0; });
+}
+function dexSetModel(id) {
+  if (!dexR) return;
+  if (dexModel) { dexScene.remove(dexModel); dexModel = null; }
   const sp = SPECIES[id], tmpl = MODELS[sp.modelPath];
-  if (!tmpl) return null;                       // model not streamed in yet → caller shows a fallback tile
-  if (!dexR) {
-    dexR = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
-    dexR.setSize(460, 460); dexR.setClearColor(0x12160f, 1); dexR.outputColorSpace = THREE.SRGBColorSpace;
-    dexR.toneMapping = THREE.ACESFilmicToneMapping; dexR.toneMappingExposure = 1.15;
-    dexScene = new THREE.Scene();
-    dexScene.add(new THREE.HemisphereLight(0xd6e4ea, 0x33402e, 1.2));
-    const dl = new THREE.DirectionalLight(0xfff1df, 1.7); dl.position.set(3, 5, 4); dexScene.add(dl);
-    if (scene && scene.environment) dexScene.environment = scene.environment;
-    dexCam = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-  }
+  if (!tmpl) return;                                 // model still streaming in — viewer stays empty, text loads instantly
   let skinned = false; tmpl.traverse(o => { if (o.isSkinnedMesh) skinned = true; });
   const inst = skinned ? skeletonClone(tmpl) : tmpl.clone(true);
-  const g = fitModel(inst, 2.0, (sp.modelYaw || 0) + 0.5);    // slight 3/4 turn for a portrait
-  dexScene.add(g);
-  // frame the WHOLE model by its bounds (quadrupeds are long, bipeds tall) so nothing is cut off
+  const g = fitModel(inst, 2.2, sp.modelYaw || 0);
+  if (skinned) { const a = MODEL_ANIMS[sp.modelPath] || []; if (a.length) { const mx = new THREE.AnimationMixer(inst); mx.clipAction(a[0]).play(); g.userData.mixer = mx; } }
+  dexScene.add(g); dexModel = g;
   const box = measureBox(g), ctr = new THREE.Vector3(), size = new THREE.Vector3();
   box.getCenter(ctr); box.getSize(size);
-  const radius = (Math.max(size.x, size.y, size.z) * 0.5) || 1;
-  const dist = (radius * 1.2) / Math.sin((dexCam.fov * Math.PI / 180) / 2);
-  dexCam.position.set(ctr.x + dist * 0.5, ctr.y + radius * 0.5, ctr.z + dist * 0.8);
-  dexCam.lookAt(ctr);
-  dexR.render(dexScene, dexCam);
-  let url = null; try { url = dexR.domElement.toDataURL("image/jpeg", 0.85); } catch (e) { url = null; }
-  dexScene.remove(g);
-  if (url) dexCache[id] = url;
-  return url;
+  dexView.target.copy(ctr);
+  dexView.radius = (Math.max(size.x, size.y, size.z) * 0.5) || 1;
+  dexView.yaw = 0.7; dexView.pitch = 0.16; dexView.dist = 3.0;   // reset framing per species
 }
+function dexLoop() {
+  const codex = $("codex");
+  if (!codex || !codex.classList.contains("on")) { dexLoopOn = false; return; }   // self-stops when the guide closes
+  requestAnimationFrame(dexLoop);
+  const cv = dexR.domElement, w = cv.clientWidth || 1, h = cv.clientHeight || 1, pr = dexR.getPixelRatio();
+  if (cv.width !== Math.floor(w * pr) || cv.height !== Math.floor(h * pr)) { dexR.setSize(w, h, false); dexCam.aspect = w / h; dexCam.updateProjectionMatrix(); }
+  if (!dexView.drag) dexView.yaw += 0.0045;          // gentle auto-spin when idle
+  const r = dexView.radius * dexView.dist, cp = Math.cos(dexView.pitch);
+  dexCam.position.set(dexView.target.x + Math.sin(dexView.yaw) * r * cp, dexView.target.y + Math.sin(dexView.pitch) * r, dexView.target.z + Math.cos(dexView.yaw) * r * cp);
+  dexCam.lookAt(dexView.target);
+  if (dexModel && dexModel.userData.mixer) dexModel.userData.mixer.update(0.016);
+  dexR.render(dexScene, dexCam);
+}
+function dexStart() { dexViewerInit(); if (!dexLoopOn) { dexLoopOn = true; requestAnimationFrame(dexLoop); } }
 function buildFieldGuide() {
   const grid = $("dexGrid"); if (!grid) return;
   const list = Object.values(SPECIES);
@@ -1684,23 +1745,13 @@ function buildFieldGuide() {
   list.forEach(s => { dexMax.run = Math.max(dexMax.run, s.move.run); dexMax.len = Math.max(dexMax.len, s.size.lengthM); dexMax.mass = Math.max(dexMax.mass, s.size.massKg); dexMax.hp = Math.max(dexMax.hp, s.combat.health); dexMax.dmg = Math.max(dexMax.dmg, s.combat.damage); dexMax.sight = Math.max(dexMax.sight, s.senses.sightRangeM); });
   const order = list.slice().sort((a, b) => a.diet === b.diet ? b.size.lengthM - a.size.lengthM : (a.diet === "carnivore" ? -1 : 1));
   grid.innerHTML = order.map(s => `<button class="dex-card ${s.diet === "carnivore" ? "pred" : "herb"}" data-id="${s.id}">
-    <img class="dc-img" data-sp="${s.id}" alt="">
-    <div class="dc-name">${s.displayName}</div><div class="dc-tag">${s.diet === "carnivore" ? "PREDATOR" : "HERBIVORE"} · ${s.archetype}</div></button>`).join("");
+    <span class="dc-name">${s.displayName}</span><span class="dc-tag">${s.diet === "carnivore" ? "PREDATOR" : "HERBIVORE"} · ${s.archetype}</span></button>`).join("");
   grid.querySelectorAll(".dex-card").forEach(c => c.addEventListener("click", () => {
     grid.querySelectorAll(".dex-card").forEach(x => x.classList.toggle("sel", x === c));
     renderDex(c.dataset.id);
   }));
-  // render portraits progressively (time-sliced) so opening the guide never blocks/janks the UI
-  const imgs = [...grid.querySelectorAll(".dc-img")]; let qi = 0;
-  (function chunk() {
-    const t0 = performance.now();
-    while (qi < imgs.length && performance.now() - t0 < 7) {
-      const im = imgs[qi++], u = dexThumb(im.dataset.sp);
-      if (u) im.src = u; else im.style.display = "none";
-    }
-    if (qi < imgs.length) requestAnimationFrame(chunk);
-  })();
-  if (order[0]) { renderDex(order[0].id); grid.firstElementChild?.classList.add("sel"); }
+  dexViewerInit();
+  if (order[0]) { renderDex(order[0].id); grid.firstElementChild && grid.firstElementChild.classList.add("sel"); }
   dexBuilt = true;
 }
 function dexBar(label, val, max, unit) {
@@ -1712,7 +1763,6 @@ function renderDex(id) {
   $("dexDetail").innerHTML = `
     <div class="dd-head ${carn ? "pred" : "herb"}"><div class="dd-name">${s.displayName}</div>
       <div class="dd-sub">${carn ? "PREDATOR" : "HERBIVORE"} · ${s.archetype} · ${c.era || ""}</div></div>
-    <img class="dd-img" alt="">
     <p class="dd-facts">${c.facts || ""}</p>
     <div class="dd-stats">
       ${dexBar("LENGTH", s.size.lengthM, dexMax.len, " m")}
@@ -1727,10 +1777,9 @@ function renderDex(id) {
       <div class="dd-col weak"><h4>WEAKNESSES</h4><ul>${(c.weaknesses || []).map(x => `<li>${x}</li>`).join("")}</ul></div>
     </div>
     <div class="dd-survive"><h4>${carn ? "HOW TO SURVIVE IT" : "HANDLING"}</h4><p>${c.survival || ""}</p></div>`;
-  const di = $("dexDetail").querySelector(".dd-img"), u = dexThumb(id);
-  if (u) di.src = u; else di.style.display = "none";
+  dexSetModel(id);
 }
-$("guideBtn").addEventListener("click", () => { if (!dexBuilt) buildFieldGuide(); $("codex").classList.add("on"); });
+$("guideBtn").addEventListener("click", () => { $("codex").classList.add("on"); if (!dexBuilt) buildFieldGuide(); dexStart(); });
 $("dexClose").addEventListener("click", () => $("codex").classList.remove("on"));
 
 $("startBtn").addEventListener("click", () => { Audio.init(); startRun(); if (!isTouch) canvas.requestPointerLock(); });

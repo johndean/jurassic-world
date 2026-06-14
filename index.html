@@ -173,22 +173,24 @@
     padding:8px 14px;border-radius:5px;cursor:pointer;}
   #dexClose:hover{border-color:#e0772f;color:#fff;}
   .dex-body{flex:1;display:flex;min-height:0;}
-  .dex-grid{flex:0 0 300px;overflow-y:auto;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;align-content:start;
+  .dex-grid{flex:0 0 220px;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:6px;
     border-right:1px solid var(--hud-line);-webkit-overflow-scrolling:touch;}
-  .dex-card{background:rgba(15,20,18,.7);border:1px solid var(--hud-line);border-radius:6px;padding:8px 6px;cursor:pointer;
-    text-align:center;color:#d7e0da;transition:.12s;overflow:hidden;}
-  .dex-card:hover,.dex-card.sel{border-color:#e0772f;background:rgba(224,119,47,.1);}
-  .dex-card img{width:100%;height:96px;object-fit:contain;border-radius:4px;display:block;margin-bottom:5px;background:#12160f;}
+  .dex-card{background:rgba(15,20,18,.7);border:1px solid var(--hud-line);border-radius:6px;padding:9px 11px;cursor:pointer;
+    text-align:left;color:#d7e0da;transition:.12s;display:flex;flex-direction:column;gap:2px;}
+  .dex-card:hover,.dex-card.sel{border-color:#e0772f;background:rgba(224,119,47,.12);}
   .dex-card.pred{border-left:3px solid var(--hud-alert);}
   .dex-card.herb{border-left:3px solid var(--hud-good);}
-  .dc-name{font-size:11px;font-weight:700;letter-spacing:.04em;}
-  .dc-tag{font-size:8px;color:#8a978f;letter-spacing:.06em;margin-top:2px;text-transform:uppercase;}
-  .dex-detail{flex:1;overflow-y:auto;padding:20px 26px;-webkit-overflow-scrolling:touch;}
+  .dc-name{font-size:13px;font-weight:700;letter-spacing:.04em;}
+  .dc-tag{font-size:8px;color:#8a978f;letter-spacing:.06em;text-transform:uppercase;}
+  .dex-viewer{flex:1;min-width:0;position:relative;background:radial-gradient(circle at 50% 38%,#1a221a 0%,#0c110d 70%);}
+  #dexCanvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab;}
+  #dexCanvas:active{cursor:grabbing;}
+  .dex-hint{position:absolute;left:0;right:0;bottom:12px;text-align:center;font-size:9px;letter-spacing:.18em;color:#8a978f;pointer-events:none;}
+  .dex-detail{flex:0 0 360px;overflow-y:auto;padding:20px 24px;border-left:1px solid var(--hud-line);-webkit-overflow-scrolling:touch;}
   .dd-head{border-bottom:1px solid var(--hud-line);padding-bottom:10px;margin-bottom:14px;}
   .dd-head.pred .dd-name{color:#e8907a;} .dd-head.herb .dd-name{color:#9fe08a;}
-  .dd-name{font-size:26px;font-weight:800;letter-spacing:.04em;}
+  .dd-name{font-size:24px;font-weight:800;letter-spacing:.04em;}
   .dd-sub{font-size:11px;color:#8a978f;letter-spacing:.12em;text-transform:uppercase;margin-top:4px;}
-  .dd-img{width:min(560px,100%);aspect-ratio:1/1;object-fit:contain;background:#12160f;border:1px solid var(--hud-line);border-radius:8px;margin-bottom:14px;display:block;}
   .dd-facts{font-size:13px;line-height:1.7;color:#c2ccc4;max-width:640px;margin:0 0 16px;}
   .dd-stats{max-width:520px;margin-bottom:18px;}
   .dx-stat{display:grid;grid-template-columns:92px 1fr 78px;align-items:center;gap:10px;margin:5px 0;font-size:10px;letter-spacing:.08em;color:#8a978f;}
@@ -202,7 +204,11 @@
   .dd-survive{background:rgba(224,119,47,.08);border:1px solid rgba(224,119,47,.35);border-radius:6px;padding:12px 14px;max-width:640px;}
   .dd-survive h4{margin:0 0 5px;font-size:11px;letter-spacing:.16em;color:#e0772f;}
   .dd-survive p{margin:0;font-size:13px;line-height:1.65;color:#e7d8c8;}
-  @media (max-width:720px){ .dex-body{flex-direction:column;} .dex-grid{flex:0 0 auto;max-height:38vh;grid-template-columns:1fr 1fr 1fr;border-right:none;border-bottom:1px solid var(--hud-line);} .dd-name{font-size:22px;} }
+  @media (max-width:720px){ .dex-body{flex-direction:column;}
+    .dex-grid{flex:0 0 auto;order:2;max-height:24vh;border-right:none;border-top:1px solid var(--hud-line);}
+    .dex-viewer{order:1;flex:0 0 40vh;}
+    .dex-detail{order:3;flex:1 1 auto;border-left:none;border-top:1px solid var(--hud-line);}
+    .dd-name{font-size:22px;} }
   /* character / role select */
   .cs-label{color:#8a978f;font-size:11px;letter-spacing:.22em;margin:4px 0 10px;text-transform:uppercase;}
   .char-select{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;max-width:740px;margin:0 auto 20px;}
@@ -398,6 +404,7 @@
   <div class="dex-head"><span>FIELD GUIDE · ISLAND ALPHA · 30 SPECIES</span><button id="dexClose">CLOSE ✕</button></div>
   <div class="dex-body">
     <div class="dex-grid" id="dexGrid"></div>
+    <div class="dex-viewer"><canvas id="dexCanvas"></canvas><div class="dex-hint">DRAG TO ROTATE · SCROLL / PINCH TO ZOOM</div></div>
     <div class="dex-detail" id="dexDetail"></div>
   </div>
 </div>
