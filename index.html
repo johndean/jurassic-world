@@ -242,9 +242,21 @@
   /* mobile touch controls */
   #touch{position:fixed;inset:0;z-index:45;display:none;pointer-events:none;touch-action:none;}
   #stick{position:absolute;left:0;bottom:0;width:46%;height:55%;pointer-events:auto;touch-action:none;}
-  #stickKnob{position:absolute;width:64px;height:64px;border-radius:50%;border:2px solid rgba(224,119,47,.7);
-    background:rgba(224,119,47,.18);transform:translate(-50%,-50%);left:-200px;top:-200px;}
+  #stickBase{position:absolute;width:136px;height:136px;border-radius:50%;border:2px solid rgba(224,119,47,.45);
+    background:radial-gradient(circle,rgba(224,119,47,.12),rgba(224,119,47,.03));transform:translate(-50%,-50%);
+    left:-300px;top:-300px;pointer-events:none;transition:opacity .25s;}
+  #stickBase.idle{opacity:.6;}
+  #stickBase .ar{position:absolute;color:#e0772f;font-size:13px;line-height:1;opacity:.5;transform:translate(-50%,-50%);transition:opacity .08s,text-shadow .08s;}
+  #stickBase .ar.up{left:50%;top:11%;} #stickBase .ar.dn{left:50%;top:89%;}
+  #stickBase .ar.lf{left:11%;top:50%;} #stickBase .ar.rt{left:89%;top:50%;}
+  #stickBase .ar.on{opacity:1;text-shadow:0 0 9px #e0772f;}
+  #stickBase .ar-lbl{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:8px;letter-spacing:.22em;color:rgba(224,119,47,.7);}
+  #stickKnob{position:absolute;width:60px;height:60px;border-radius:50%;border:2px solid rgba(224,119,47,.85);
+    background:rgba(224,119,47,.28);box-shadow:0 0 12px rgba(224,119,47,.4);transform:translate(-50%,-50%);left:-300px;top:-300px;pointer-events:none;}
   #lookpad{position:absolute;right:0;bottom:0;width:54%;height:62%;pointer-events:auto;touch-action:none;}
+  #lookHint{position:absolute;right:22px;top:18px;text-align:right;font:10px ui-monospace,monospace;letter-spacing:.16em;
+    color:rgba(143,184,196,.6);pointer-events:none;transition:opacity .4s;}
+  #lookHint small{font-size:8px;letter-spacing:.1em;color:rgba(143,184,196,.45);}
   .tbtn{position:absolute;pointer-events:auto;touch-action:none;width:74px;height:74px;border-radius:50%;
     border:1px solid rgba(150,170,160,.5);background:rgba(10,14,13,.55);color:#d7e0da;
     font:10px ui-monospace,monospace;letter-spacing:.08em;display:flex;align-items:center;justify-content:center;}
@@ -265,6 +277,27 @@
   .t-ch{display:block;font-size:9px;font-weight:700;color:#9fe08a;margin-top:1px;min-height:11px;}
   .t-cd{position:absolute;left:0;bottom:0;width:100%;height:0;background:rgba(0,0,0,.55);pointer-events:none;}
   @media (max-width:560px){ #tools{bottom:10px;left:14px;transform:none;} .tool{width:62px;} }
+  /* desktop keyboard reference slideout */
+  #keyHelpBtn{position:fixed;top:14px;right:14px;z-index:47;display:none;font:11px ui-monospace,monospace;letter-spacing:.12em;
+    color:#d7e0da;background:rgba(10,14,13,.66);border:1px solid var(--hud-line);padding:8px 12px;border-radius:6px;cursor:pointer;transition:.15s;}
+  #keyHelpBtn:hover{border-color:#e0772f;color:#fff;}
+  #keyHelp{position:fixed;top:0;right:0;height:100%;width:320px;max-width:86vw;z-index:90;background:rgba(8,11,10,.97);
+    border-left:1px solid var(--hud-line);transform:translateX(106%);transition:transform .26s ease;display:flex;flex-direction:column;
+    font-family:ui-monospace,monospace;color:#d7e0da;box-shadow:-12px 0 40px rgba(0,0,0,.5);}
+  #keyHelp.on{transform:none;}
+  .kh-head{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--hud-line);
+    font-size:13px;letter-spacing:.2em;color:#e0772f;}
+  #keyHelpClose{font:inherit;color:#d7e0da;background:transparent;border:1px solid var(--hud-line);border-radius:5px;width:30px;height:30px;cursor:pointer;}
+  #keyHelpClose:hover{border-color:#e0772f;color:#fff;}
+  .kh-body{padding:14px 18px;overflow-y:auto;}
+  .kh-sec{font-size:9px;letter-spacing:.22em;color:#8a978f;margin:16px 0 8px;border-bottom:1px dashed var(--hud-line);padding-bottom:5px;}
+  .kh-sec:first-child{margin-top:0;}
+  .kh-row{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;color:#c2ccc4;margin:7px 0;}
+  .kh-row .keys{flex:0 0 auto;display:flex;gap:3px;align-items:center;color:#8a978f;font-size:10px;}
+  kbd{display:inline-block;min-width:14px;text-align:center;font:11px ui-monospace,monospace;color:#e7d8c8;background:rgba(255,255,255,.07);
+    border:1px solid var(--hud-line);border-bottom-width:2px;border-radius:4px;padding:2px 5px;}
+  .kh-tip{margin-top:18px;font-size:11px;line-height:1.6;color:#8a978f;background:rgba(224,119,47,.08);border:1px solid rgba(224,119,47,.3);border-radius:6px;padding:10px 12px;}
+  .kh-tip b{color:#e0772f;}
   @media (max-width:760px){
     .obj{min-width:0;max-width:172px;left:18px;}
     .compass,.squad,.contact{display:none;}
@@ -367,12 +400,40 @@
 </div>
 
 <div id="touch">
-  <div id="stick"><div id="stickKnob"></div></div>
-  <div id="lookpad"></div>
+  <div id="stick">
+    <div id="stickBase" class="idle">
+      <span class="ar up">▲</span><span class="ar dn">▼</span><span class="ar lf">◀</span><span class="ar rt">▶</span>
+      <span class="ar-lbl">MOVE</span>
+    </div>
+    <div id="stickKnob"></div>
+  </div>
+  <div id="lookpad"><div id="lookHint">◌ LOOK / AIM<br><small>drag to turn</small></div></div>
   <button class="tbtn" id="btnSprint">SPRINT</button>
   <button class="tbtn" id="btnCrouch">CROUCH</button>
   <button class="tbtn" id="btnCall">CALL</button>
   <button class="tbtn use" id="btnUse">USE</button>
+</div>
+
+<!-- desktop keyboard reference (slideout) -->
+<button id="keyHelpBtn" title="Controls (H)">⌨ CONTROLS</button>
+<div id="keyHelp">
+  <div class="kh-head">CONTROLS <button id="keyHelpClose">✕</button></div>
+  <div class="kh-body">
+    <div class="kh-sec">MOVEMENT</div>
+    <div class="kh-row"><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>Move</span></div>
+    <div class="kh-row"><span class="keys"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd></span><span>Move (alt)</span></div>
+    <div class="kh-row"><span class="keys"><kbd>Mouse</kbd></span><span>Look / aim</span></div>
+    <div class="kh-row"><span class="keys"><kbd>Shift</kbd></span><span>Sprint</span></div>
+    <div class="kh-row"><span class="keys"><kbd>Ctrl</kbd></span><span>Crouch (quieter)</span></div>
+    <div class="kh-sec">DEFENSE TOOLS</div>
+    <div class="kh-row"><span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><span>Select Flare / Decoy / Melee</span></div>
+    <div class="kh-row"><span class="keys"><kbd>F</kbd></span><span>Use selected tool</span></div>
+    <div class="kh-sec">EXTRACTION</div>
+    <div class="kh-row"><span class="keys"><kbd>E</kbd></span><span>Call extraction (at beacon)</span></div>
+    <div class="kh-row"><span class="keys"><kbd>M</kbd></span><span>Toggle tactical map</span></div>
+    <div class="kh-row"><span class="keys"><kbd>H</kbd> / <kbd>?</kbd></span><span>Toggle this panel</span></div>
+    <div class="kh-tip">Reach the <b>beacon</b> = safe zone. Call evac, survive the hold, then board the chopper.</div>
+  </div>
 </div>
 
 <!-- start screen -->

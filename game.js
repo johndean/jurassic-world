@@ -595,7 +595,9 @@ function initInput() {
     if (e.code === "Digit1") selectTool(0);
     if (e.code === "Digit2") selectTool(1);
     if (e.code === "Digit3") selectTool(2);
+    if (e.code === "KeyH" || e.code === "Slash") toggleKeyHelp();          // controls reference (desktop)
     if (e.code === "Escape" && mapOpen) toggleMap();
+    if (e.code === "Escape") $("keyHelp").classList.remove("on");
   });
   addEventListener("keyup", e => { if (typing(e)) return; keys.delete(e.code); });
   addEventListener("blur", () => keys.clear());
@@ -616,23 +618,32 @@ function initInput() {
   // defense tool bar: tap a tool to select it; tap the selected one (or the USE button) to activate
   document.querySelectorAll("#tools .tool").forEach(el => el.addEventListener("click", () => { const i = +el.dataset.i; if (i === selTool) useTool(); else selectTool(i); }));
   const bu = $("btnUse"); if (bu) bu.addEventListener("pointerdown", e => { e.preventDefault(); useTool(); });
+
+  // keyboard reference slideout — desktop only (touch users have on-screen labels + the joystick affordance)
+  if (!isTouch) { const kb = $("keyHelpBtn"); if (kb) { kb.style.display = "block"; kb.addEventListener("click", toggleKeyHelp); } }
+  const kc = $("keyHelpClose"); if (kc) kc.addEventListener("click", () => $("keyHelp").classList.remove("on"));
 }
+function toggleKeyHelp() { const k = $("keyHelp"); if (k) k.classList.toggle("on"); }
 
 function setupTouch() {
-  const stick = $("stick"), knob = $("stickKnob"), look = $("lookpad");
+  const stick = $("stick"), knob = $("stickKnob"), base = $("stickBase"), look = $("lookpad"), lookHint = $("lookHint");
+  const ar = { up: base.querySelector(".up"), dn: base.querySelector(".dn"), lf: base.querySelector(".lf"), rt: base.querySelector(".rt") };
   let sid = null, ox = 0, oy = 0, lid = null, lx = 0, ly = 0;
-  const t = (e, el) => { const r = el.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-  stick.addEventListener("pointerdown", e => { sid = e.pointerId; [ox, oy] = [e.clientX, e.clientY]; knob.style.left = e.clientX + "px"; knob.style.top = e.clientY + "px"; stick.setPointerCapture(e.pointerId); });
+  const setArrows = (dx, dy) => { const th = 0.28; ar.up.classList.toggle("on", dy < -th); ar.dn.classList.toggle("on", dy > th); ar.lf.classList.toggle("on", dx < -th); ar.rt.classList.toggle("on", dx > th); };
+  // park the move pad at an idle "home" spot so players can SEE the stick (with up/down/left/right arrows) before touching
+  const parkBase = () => { const hx = Math.round(window.innerWidth * 0.13), hy = Math.round(window.innerHeight - 150); base.classList.add("idle"); base.style.left = knob.style.left = hx + "px"; base.style.top = knob.style.top = hy + "px"; setArrows(0, 0); };
+  parkBase(); addEventListener("resize", parkBase);
+  stick.addEventListener("pointerdown", e => { sid = e.pointerId; [ox, oy] = [e.clientX, e.clientY]; base.classList.remove("idle"); base.style.left = knob.style.left = ox + "px"; base.style.top = knob.style.top = oy + "px"; stick.setPointerCapture(e.pointerId); });
   stick.addEventListener("pointermove", e => {
     if (e.pointerId !== sid) return;
     let dx = e.clientX - ox, dy = e.clientY - oy; const len = Math.hypot(dx, dy) || 1, max = 52;
     const cl = Math.min(len, max); dx = dx / len * cl; dy = dy / len * cl;
     knob.style.left = (ox + dx) + "px"; knob.style.top = (oy + dy) + "px";
-    input.mx = dx / max; input.mz = dy / max;
+    input.mx = dx / max; input.mz = dy / max; setArrows(input.mx, input.mz);
   });
-  const endStick = e => { if (e.pointerId === sid) { sid = null; input.mx = input.mz = 0; knob.style.left = "-200px"; } };
+  const endStick = e => { if (e.pointerId === sid) { sid = null; input.mx = input.mz = 0; parkBase(); } };
   stick.addEventListener("pointerup", endStick); stick.addEventListener("pointercancel", endStick);
-  look.addEventListener("pointerdown", e => { lid = e.pointerId; lx = e.clientX; ly = e.clientY; look.setPointerCapture(e.pointerId); });
+  look.addEventListener("pointerdown", e => { lid = e.pointerId; lx = e.clientX; ly = e.clientY; look.setPointerCapture(e.pointerId); if (lookHint) lookHint.style.opacity = "0"; });
   look.addEventListener("pointermove", e => {
     if (e.pointerId !== lid) return;
     cam.yaw -= (e.clientX - lx) * 0.006; cam.pitch = clamp(cam.pitch - (e.clientY - ly) * 0.005, -0.95, 0.45);
@@ -825,15 +836,15 @@ function fitModel(model, targetH, yawOffset) {
 // (e.g. hero bipeds with a baked walk clip) are cloned with SkeletonUtils (clone(true) breaks
 // skinned skeletons) and get their own AnimationMixer, surfaced on g.userData for the agent to drive.
 function buildModelMesh(sp, tmpl) {
-  const anims = MODEL_ANIMS[sp.modelPath] || [];
+  // EVERY dinosaur animates the same way: a procedural, distance-synced body gait (see steer()).
+  // Skinned meshes (only the T-Rex auto-rig) are bound correctly via SkeletonUtils and shown at their
+  // bind pose, then driven by that same gait — we deliberately DON'T attach the baked skeletal clip,
+  // which rendered the T-Rex broken (body missing, just legs + head). frustumCulled is forced off so no
+  // part of a skinned mesh ever gets culled away.
   let skinned = false; tmpl.traverse(o => { if (o.isSkinnedMesh) skinned = true; });
   const inst = (skinned ? skeletonClone(tmpl) : tmpl.clone(true));
+  inst.traverse(o => { if (o.isMesh || o.isSkinnedMesh) o.frustumCulled = false; });
   const g = fitModel(inst, sp.greybox.standH || sp.size.eyeHeightM || 3, sp.modelYaw || 0);
-  if (skinned && anims.length) {
-    const mixer = new THREE.AnimationMixer(inst);
-    const action = mixer.clipAction(anims[0]); action.play();
-    g.userData.mixer = mixer; g.userData.walkAction = action;
-  }
   const blob = new THREE.Mesh(new THREE.CircleGeometry((sp.greybox.bodyL || 1) * 0.9, 14), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.3, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; blob.position.y = 0.03; g.add(blob);
   return g;
@@ -890,6 +901,56 @@ function perceive(a, P) {
  * decoy lures them away, melee is a risky last resort. The beacon is a SAFE ZONE. */
 const SAFE_R = 18;                                  // beacon safe-zone radius (m)
 function playerSafe() { const b = S.extraction.beacon; return dist2(S.player.x, S.player.z, b.x, b.z) < SAFE_R * SAFE_R; }
+/* ---- world FX so tool use + dino reactions are actually VISIBLE in the scene ---- */
+const fxList = [];
+function addFx(obj, life, update) { scene.add(obj); fxList.push({ obj, life, t: 0, update }); }
+function updateFx(dt) {
+  for (let i = fxList.length - 1; i >= 0; i--) {
+    const f = fxList[i]; f.t += dt; if (f.update) f.update(f.t);
+    if (f.t >= f.life) { scene.remove(f.obj); fxList.splice(i, 1); }
+  }
+}
+function clearFx() { for (const f of fxList) scene.remove(f.obj); fxList.length = 0; if (decoyMesh) decoyMesh.visible = false; }
+function fxRing(x, z, color, maxR, life) {            // expanding ground shockwave
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.7, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.set(x, groundH(x, z) + 0.1, z);
+  addFx(m, life, t => { const k = t / life, r = 1 + k * maxR; m.scale.set(r, r, r); m.material.opacity = 0.85 * (1 - k); });
+}
+function fxFlare(x, z) {                              // bright signal flare: rising glow + light + shockwave
+  const y = groundH(x, z), grp = new THREE.Group(); grp.position.set(x, y, z);
+  const light = new THREE.PointLight(0xff7e2a, 10, 48, 2);
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), new THREE.MeshBasicMaterial({ color: 0xffdd9a, transparent: true }));
+  grp.add(light, ball);
+  addFx(grp, 5, t => { const k = t / 5, h = 1.2 + k * 6; light.position.y = ball.position.y = h; light.intensity = 10 * (1 - k); ball.material.opacity = 1 - k * 0.7; ball.scale.setScalar(1 - k * 0.3); });
+  fxRing(x, z, 0xff7e2a, 24, 1.0);
+}
+function fxMelee(x, z, yaw) {                         // quick slash arc in front of the player
+  const fx = x + Math.sin(yaw) * 1.8, fz = z + Math.cos(yaw) * 1.8;
+  const m = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.13, 6, 18, Math.PI), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthTest: false }));
+  m.position.set(fx, groundH(fx, fz) + 1.1, fz); m.rotation.set(Math.PI / 2, 0, -yaw);
+  addFx(m, 0.26, t => { const k = t / 0.26; m.material.opacity = 0.95 * (1 - k); m.scale.setScalar(1 + k * 0.7); });
+}
+function fxReact(a, glyph, color) {                  // floating reaction marker over a dino (e.g. "!" recoil)
+  const cv = document.createElement("canvas"); cv.width = cv.height = 64;
+  const ctx = cv.getContext("2d"); ctx.font = "bold 50px ui-monospace,monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = color || "#ffce4a"; ctx.shadowColor = "#000"; ctx.shadowBlur = 6; ctx.fillText(glyph, 32, 34);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  spr.scale.set(1.6, 1.6, 1.6);
+  const h = (a.sp.greybox.standH || 3) + 1.3;
+  addFx(spr, 1.3, t => { const k = t / 1.3; spr.position.set(a.x, groundH(a.x, a.z) + h + k * 0.9, a.z); spr.material.opacity = 1 - k * k; });
+}
+let decoyMesh = null;
+function showDecoy(x, z) {                            // persistent lure marker while the decoy is active
+  if (!decoyMesh) {
+    decoyMesh = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.1, 32), new THREE.MeshBasicMaterial({ color: 0x8fb8c4, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.09;
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 3.2, 8), new THREE.MeshBasicMaterial({ color: 0x8fb8c4, transparent: true, opacity: 0.45 })); beam.position.y = 1.6;
+    const l = new THREE.PointLight(0x8fb8c4, 3.2, 24); l.position.y = 1.6;
+    decoyMesh.add(ring, beam, l); decoyMesh.userData.ring = ring; scene.add(decoyMesh);
+  }
+  decoyMesh.position.set(x, groundH(x, z), z); decoyMesh.visible = true;
+}
 const decoy = { x: 0, z: 0, t: 0 };                 // active thrown decoy (lures predators)
 const TOOLS = [
   { id: "flare", name: "FLARE", icon: "✸", charges: 3, max: 3, cd: 0, cdMax: 7 },
@@ -899,25 +960,36 @@ const TOOLS = [
 let selTool = 0;
 function selectTool(i) { if (i >= 0 && i < TOOLS.length) selTool = i; }
 function scareDinos(x, z, r, secs) {
+  let n = 0;
   for (const a of dinos) {
     if (!a.alive || a.sp.diet !== "carnivore") continue;
-    if (dist2(a.x, a.z, x, z) < r * r) { a.bb.scared = Math.max(a.bb.scared, secs); a.bb.lastSeenX = x; a.bb.lastSeenZ = z; a.state = "Retreat"; }
+    if (dist2(a.x, a.z, x, z) < r * r) {
+      const was = a.bb.scared;
+      a.bb.scared = Math.max(a.bb.scared, secs); a.bb.lastSeenX = x; a.bb.lastSeenZ = z; a.state = "Retreat";
+      if (was < 0.2 && n < 6) { fxReact(a, "!", "#ffce4a"); n++; }   // visible recoil over newly-spooked predators
+    }
   }
+  return n;
 }
 function useTool() {
   if (S.phase !== "playing" || !S.player.alive) return;
   const t = TOOLS[selTool], P = S.player; if (t.cd > 0 || t.charges <= 0) return;
-  if (t.id === "flare") { t.charges--; t.cd = t.cdMax; flash(); Audio.beacon(true); P.noise = Math.max(P.noise, 0.8); scareDinos(P.x, P.z, 24, 5); toast("FLARE · predators recoil"); }
-  else if (t.id === "decoy") { t.charges--; t.cd = t.cdMax; decoy.x = P.x + Math.sin(P.yaw) * 15; decoy.z = P.z + Math.cos(P.yaw) * 15; decoy.t = 6; Audio.step("run"); toast("DECOY thrown · draws them off"); }
+  if (t.id === "flare") { t.charges--; t.cd = t.cdMax; flash(); fxFlare(P.x, P.z); Audio.beacon(true); P.noise = Math.max(P.noise, 0.8); const n = scareDinos(P.x, P.z, 24, 5); toast(n ? `FLARE · ${n} predator${n > 1 ? "s" : ""} recoil` : "FLARE · no predators near"); }
+  else if (t.id === "decoy") { t.charges--; t.cd = t.cdMax; decoy.x = P.x + Math.sin(P.yaw) * 15; decoy.z = P.z + Math.cos(P.yaw) * 15; decoy.t = 6; showDecoy(decoy.x, decoy.z); Audio.step("run"); toast("DECOY thrown · draws them off"); }
   else if (t.id === "melee") {
     t.cd = t.cdMax; let hit = null, hd = 99;
     const fx = Math.sin(P.yaw), fz = Math.cos(P.yaw);
     for (const a of dinos) { if (!a.alive || a.sp.diet !== "carnivore") continue; const rx = a.x - P.x, rz = a.z - P.z, dd = Math.hypot(rx, rz) || 1; if (dd < 3.6 && (rx * fx + rz * fz) / dd > 0.25 && dd < hd) { hd = dd; hit = a; } }
-    if (hit) { hit.hp -= 22; hit.bb.scared = Math.max(hit.bb.scared, 1.8); hit.bb.lastSeenX = P.x; hit.bb.lastSeenZ = P.z; hit.state = "Retreat"; hit.anim = 0.3; Audio.hit(); flash(); if (hit.hp <= 0) killDino(hit); toast("STRUCK · " + hit.sp.displayName); }
+    fxMelee(P.x, P.z, P.yaw);
+    if (hit) { hit.hp -= 22; hit.bb.scared = Math.max(hit.bb.scared, 1.8); hit.bb.lastSeenX = P.x; hit.bb.lastSeenZ = P.z; hit.state = "Retreat"; hit.anim = 0.3; Audio.hit(); flash(); fxReact(hit, hit.hp <= 0 ? "✕" : "!", "#e8907a"); if (hit.hp <= 0) killDino(hit); toast("STRUCK · " + hit.sp.displayName); }
     else toast("MELEE · nothing in reach");
   }
 }
-function updateTools(dt) { if (decoy.t > 0) decoy.t = Math.max(0, decoy.t - dt); for (const t of TOOLS) if (t.cd > 0) t.cd = Math.max(0, t.cd - dt); }
+function updateTools(dt) {
+  if (decoy.t > 0) { decoy.t = Math.max(0, decoy.t - dt); if (decoyMesh) { const s = 1 + Math.sin(S.t * 6) * 0.12; decoyMesh.userData.ring.scale.set(s, s, s); decoyMesh.children.forEach(c => { if (c.material) c.material.opacity = (c.isMesh ? (c.geometry.type === "RingGeometry" ? 0.85 : 0.45) : 1) * Math.min(1, decoy.t); }); } }
+  else if (decoyMesh) decoyMesh.visible = false;
+  for (const t of TOOLS) if (t.cd > 0) t.cd = Math.max(0, t.cd - dt);
+}
 
 function decide(a, P) {
   const sp = a.sp, bb = a.bb;
@@ -1260,7 +1332,7 @@ function clearEvac() { if (evac) { scene.remove(evac.heli.group); evac = null; }
 function startRun() {
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = [];
-  clearRemotes(); clearEvac();
+  clearRemotes(); clearEvac(); clearFx();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
@@ -1568,6 +1640,7 @@ function simulate(dt) {
   updateExtraction(dt);
   updateEvac(dt);
   updateTools(dt);
+  updateFx(dt);
   Audio.tickHeartbeat(dt, S.player.fear);
   if (Net.on) netTick(dt);
 }
