@@ -62,7 +62,10 @@ const PLAYER_MODEL = "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a
 const GROUND_TEX = "https://d8j0ntlcm91z4.cloudfront.net/user_3F4NGeiRVgVtbKFFkoeC4vFwa2f/hf_20260614_002025_be16d317-be18-49b8-95e3-b3ad06fb8dc2.png";
 const _texLoader = new THREE.TextureLoader();
 // foliage models (CDN .glb) used to replace grey-box trees; filled with URLs once generated
-const FOLIAGE = { tree: null, fern: null };
+const FOLIAGE = {
+  tree: "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/f98ce7d6-e340-4108-948d-c8933ac8088d.glb",
+  fern: "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/4281d7db-f9ea-4fcd-a061-e06a05b8c306.glb",
+};
 const PLAYER_MODEL_YAW = 0;        // facing correction; flip to Math.PI if the player faces the camera
 let playerMixer = null, playerAction = null;
 const GAIT_RATE = { idle: 0, walk: 1, run: 1.7, crouch: 0.6 };  // walk-clip playback speed per gait
