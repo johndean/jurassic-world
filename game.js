@@ -562,6 +562,7 @@ function buildWorld() {
   // INSTANCED rocks — boulders across the valley, clustered along the river, sitting on the terrain
   const dm = new THREE.Object3D();
   const NR = 130;
+  clearColliders();
   const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0x5b615f, roughness: 1, flatShading: true }), NR);
   for (let i = 0; i < NR; i++) {
     let x, z;
@@ -570,11 +571,13 @@ function buildWorld() {
     const s = rand(0.7, 3.6) * (i % 3 === 0 ? 1.4 : 1);
     dm.position.set(x, groundH(x, z) + s * 0.25, z); dm.rotation.set(rand(0, 3), rand(0, 6), rand(0, 3)); dm.scale.set(s, s * 0.7, s); dm.updateMatrix();
     rocks.setMatrixAt(i, dm.matrix);
+    if (s > 1.35) addCollider(x, z, s * 0.6, { h: s * 0.7 });   // big boulders are solid; small ones stay steppable
   }
   rocks.instanceMatrix.needsUpdate = true;
   scene.add(rocks);
 
   buildRuins();
+  addCollidersFromObject(ruinsGroup, { min: 0.9, minH: 1.1, scale: 0.78 });   // ruined masonry / columns / jeep are solid
   buildTowers();
   buildPlayer();
 
@@ -839,6 +842,68 @@ function addBlob(parent, r) {
   parent.add(blob);
 }
 
+/* ============================================ solid-world colliders ====== *
+ * Zero-ghosting: a queryable registry of cheap circle proxies for solid props (boulders, ruins,
+ * mission buildings). Player + dinos are pushed out — the same technique already used for trees, so
+ * no physics engine and no per-frame raycast. Conservative by design: radii sit just inside the
+ * visual mesh (you brush past props, no far invisible wall) and radial push-out can never trap you.
+ *   · colliders/collGrid  = STATIC world (rocks, ruins), built once in buildWorld → spatial-hashed.
+ *   · missionColliders     = per-run set-piece props, rebuilt with the mission (small flat list). */
+const colliders = [];
+const COLL_CELL = 12;                       // spatial-hash cell size (m)
+const collGrid = new Map();
+const missionColliders = [];
+const _EMPTY = [];
+const _cbox = new THREE.Box3(), _csz = new THREE.Vector3(), _cc = new THREE.Vector3();
+function clearColliders() { colliders.length = 0; collGrid.clear(); }
+function addCollider(x, z, r, meta) {
+  const c = Object.assign({ x, z, r }, meta || {}); colliders.push(c);
+  const pad = r + 2;                        // register into every cell the proxy (+ entity margin) touches
+  for (let cx = Math.floor((x - pad) / COLL_CELL); cx <= Math.floor((x + pad) / COLL_CELL); cx++)
+    for (let cz = Math.floor((z - pad) / COLL_CELL); cz <= Math.floor((z + pad) / COLL_CELL); cz++) {
+      const k = cx + "," + cz; let a = collGrid.get(k); if (!a) collGrid.set(k, a = []); a.push(c);
+    }
+  return c;
+}
+function queryColliders(x, z) { return collGrid.get(Math.floor(x / COLL_CELL) + "," + Math.floor(z / COLL_CELL)) || _EMPTY; }
+// Auto-derive circle proxies from a built group's meshes (world AABB handles rotation). Compact meshes
+// → one circle; elongated meshes (walls) → a row of circles tiled along the longer axis. `into` lets
+// mission set-pieces collect into their own list so they clear with the mission.
+function addCollidersFromObject(root, opt) {
+  if (!root) return;
+  opt = opt || {};
+  const minH = opt.minH != null ? opt.minH : 0.7, min = opt.min != null ? opt.min : 0.7, sc = opt.scale != null ? opt.scale : 0.8, into = opt.into;
+  const push = into ? (x, z, r, m) => into.push(Object.assign({ x, z, r }, m)) : addCollider;
+  root.updateWorldMatrix(true, true);
+  root.traverse(o => {
+    if (!o.isMesh || o.isInstancedMesh) return;
+    if (opt.filter && !opt.filter(o)) return;
+    _cbox.setFromObject(o); if (_cbox.isEmpty()) return;
+    _cbox.getSize(_csz); _cbox.getCenter(_cc);
+    if (_csz.y < minH) return;                              // low/flat (floors, slabs, rings) → walk over
+    const rMax = Math.max(_csz.x, _csz.z) * 0.5, rMin = Math.min(_csz.x, _csz.z) * 0.5;
+    if (rMax < min) return;                                 // tiny debris
+    if (rMax < rMin * 1.8) { push(_cc.x, _cc.z, rMax * sc, { h: _csz.y }); return; }   // compact → one circle
+    const along = _csz.x >= _csz.z, n = Math.min(8, Math.max(2, Math.round(rMax / rMin))), r = rMin * sc, span = rMax - rMin;
+    for (let i = 0; i < n; i++) { const t = (i / (n - 1) - 0.5) * 2 * span; push(along ? _cc.x + t : _cc.x, along ? _cc.z : _cc.z + t, r, { h: _csz.y }); }
+  });
+}
+// Push an entity (player/dino) out of every overlapping solid proxy. pr = entity body radius.
+function resolveColliders(e, pr) {
+  let hit = false;
+  const near = queryColliders(e.x, e.z);
+  for (let i = 0; i < near.length; i++) hit = _pushOut(e, near[i], pr) || hit;
+  for (let i = 0; i < missionColliders.length; i++) hit = _pushOut(e, missionColliders[i], pr) || hit;
+  return hit;
+}
+function _pushOut(e, c, pr) {
+  const rr = c.r + pr, dx = e.x - c.x, dz = e.z - c.z, d2 = dx * dx + dz * dz;
+  if (d2 >= rr * rr) return false;
+  if (d2 > 1e-4) { const d = Math.sqrt(d2), p = (rr - d) / d; e.x += dx * p; e.z += dz * p; }
+  else e.x += rr;                            // exact centre → deterministic nudge
+  return true;
+}
+
 function buildBeacon() {
   const half = BIOME.map.size / 2;
   const [a, b] = BIOME.extraction.beaconPickRingM;
@@ -920,7 +985,7 @@ const SURVIVORS = {
   fallen_outpost: { name: "MAYA", site: "outpost", color: 0x9a5a3c, off: [-2.2, 1.6], escortFrom: 3 },
   ghosts: { name: "SURVEYOR", site: "cave", color: 0x3c6a9a, off: [2.4, 1.8], escortFrom: 5 },
 };
-function clearMissionSites() { for (const s of missionSites) scene.remove(s); missionSites = []; survivor = null; }
+function clearMissionSites() { for (const s of missionSites) scene.remove(s); missionSites = []; survivor = null; missionColliders.length = 0; }
 function spawnDrawn(species, P) {   // a predator pulled toward the player by noise — spawns mid-range, already hunting
   if (!SPECIES[species]) return null;
   if (dinos.filter(d => d.alive).length >= BIOME.spawnDirector.maxActiveAI + 6) return null;   // hard cap (no runaway)
@@ -989,6 +1054,9 @@ function buildSiteProp(type, x, z) {
   else if (type === "generator") buildGenerator(g);
   else if (type === "cave") buildCave(g);
   else buildBuilding(g, type);   // command / facility / campsite / safehouse / supply
+  // make the set-piece solid (into the per-run list so it clears with the mission). Conservative radii
+  // keep the objective console reachable — proximity (< r) still triggers from just outside the wall.
+  addCollidersFromObject(g, { min: 0.9, minH: 1.0, scale: 0.72, into: missionColliders });
   return g;
 }
 function buildMissionSites() {
@@ -1386,6 +1454,8 @@ function updatePlayer(dt) {
       P.x = t.x + dx / d * rr; P.z = t.z + dz / d * rr;
     }
   }
+  // collide with solid world props (rocks, ruins, mission buildings) — skip while on a tower/zip
+  if (!P.onTower && !P.zip) resolveColliders(P, 0.45);
   const lim = BIOME.map.size / 2 - 3;
   P.x = clamp(P.x, -lim, lim); P.z = clamp(P.z, -lim, lim);
   if (P.onTower) {   // railed on 3 sides; step off the FRONT (ladder side, +Z) to ride the zip down (or press E)
@@ -1936,6 +2006,9 @@ function updateDinos(dt, P) {
     a.decideIn -= dt;
     if (a.decideIn <= 0) { a.decideIn = 0.25; if (a.lod === "full") decide(a, P); else { a.state = baseStateFor(a.sp); } }
     steer(a, dt, P);
+    // dinos obey the same solid world — push out of props (full LOD only; big bodies use bigger radii
+    // so they naturally can't squeeze through tight gaps). Downed/sedated dinos are frozen, so skip.
+    if (a.lod === "full" && !isDown(a) && resolveColliders(a, dinoBodyR(a))) { a.mesh.position.x = a.x; a.mesh.position.z = a.z; }
     // map intel: a contact is "sighted" while within detection range; stamp its last-seen track
     // so the tactical map can show a decaying ghost once it slips away (binoculars also sight it).
     const seenNow = dist2(a.x, a.z, P.x, P.z) < MAP_SIGHT_R * MAP_SIGHT_R;
@@ -1945,6 +2018,7 @@ function updateDinos(dt, P) {
   }
 }
 function killDino(a) { a.alive = false; scene.remove(a.mesh); }
+function dinoBodyR(a) { return clamp((a.sp.size && a.sp.size.lengthM || 4) * 0.1, 0.4, 2.0); }   // body radius for collision push-out
 
 /* ================================================== spawn director ======= */
 let spawnTimer = 0;
