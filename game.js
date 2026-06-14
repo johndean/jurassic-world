@@ -1905,9 +1905,19 @@ function updateField(dt) {   // tranq sedation + snare traps lifecycle (DNA coll
 }
 const isDown = a => a.sedated || a.trapped;   // immobilised (free to sample); still free-roam for the player
 
+function domScore(sp) { return sp.combat.health + (isApex(sp) ? 400 : 0); }   // who wins a stand-off
+function strongerRivalNear(a) {   // a much stronger predator nearby → the weaker one yields its ground
+  let best = null, bd = 18 * 18; const my = domScore(a.sp);
+  for (const d of dinos) { if (!d.alive || d.sp.diet !== "carnivore" || d === a) continue; if (domScore(d.sp) < my * 1.35) continue; const dd = dist2(a.x, a.z, d.x, d.z); if (dd < bd) { bd = dd; best = d; } }
+  return best;
+}
 function decide(a, P) {
   const sp = a.sp, bb = a.bb;
   if (isDown(a)) { a.state = "Down"; return; }   // sedated / trapped → no AI
+  // feeding at a kill / resting — but a close player snaps the predator out of it (stays a threat)
+  if (a.feedT > 0 && dist2(P.x, P.z, a.x, a.z) > 18 * 18) { a.state = "Feed"; return; }
+  if (a.restT > 0 && dist2(P.x, P.z, a.x, a.z) > 30 * 30) { a.state = "Rest"; return; }
+  if (a.feedT > 0 || a.restT > 0) { a.feedT = 0; a.restT = 0; }
   const per = (a.lod === "full") ? perceive(a, P) : { seen: false, heard: false, d: 999 };
   const aggr = sp.behavior.aggression + (S.extraction.called ? (BIOME.spawnDirector.escalation.trexAggroBonus * (isApex(sp) ? 1 : 0.4)) : 0);
 
@@ -1930,9 +1940,13 @@ function decide(a, P) {
     if (bb.hasTarget && (per.heard || rng() < aggr * 0.6)) { a.state = "Investigate"; return; }
   }
   if (playerSafe()) bb.hasTarget = false;   // lose interest once you reach the beacon
-  // no player interest → hunt herd prey (predator vs prey) or patrol
+  // predator hierarchy: yield ground to a much stronger predator (emergent, not scripted)
+  const rival = strongerRivalNear(a);
+  if (rival) { a.state = "Retreat"; bb.lastSeenX = rival.x; bb.lastSeenZ = rival.z; bb.preyHunt = null; return; }
+  // no player interest → hunt herd prey (predator vs prey), rest, or patrol the home territory
   const prey = nearestPreyTo(a.x, a.z);
   if (prey && Math.hypot(prey.x - a.x, prey.z - a.z) < sp.senses.sightRangeM) { a.state = "Chase"; bb.lastSeenX = prey.x; bb.lastSeenZ = prey.z; bb.preyHunt = prey; }
+  else if (rng() < 0.05 && dist2(P.x, P.z, a.x, a.z) > 60 * 60) { a.state = "Rest"; a.restT = rand(3, 7); bb.preyHunt = null; }   // calm & far → lie up
   else { a.state = "Patrol"; bb.preyHunt = null; }
 }
 
@@ -1957,11 +1971,13 @@ function updatePackRoles() {
   const pack = dinos.filter(d => usesPackTactics(d.sp) && d.alive);
   if (!pack.length) return;
   const P = S.player;
-  // lead = closest; flanks alternate sides; rest harry from behind
+  // lead = closest; flanks alternate sides; rest harry from behind. The species' declared packRoles
+  // (species.json) set how many flankers the formation uses (deinonychus = 2-flank pincer).
+  const roles = pack[0].sp.behavior.packRoles, maxFlank = roles ? Math.max(1, roles.filter(r => /flank/i.test(r)).length) : 2;
   pack.sort((a, b) => dist2(a.x, a.z, P.x, P.z) - dist2(b.x, b.z, P.x, P.z));
   pack.forEach((d, i) => {
     if (i === 0) d.bb.role = "lead";
-    else if (i <= 2) { d.bb.role = "flank"; d.bb.flankSide = (i % 2 === 1) ? 1 : -1; }
+    else if (i <= maxFlank) { d.bb.role = "flank"; d.bb.flankSide = (i % 2 === 1) ? 1 : -1; }
     else d.bb.role = "harry";
   });
 }
@@ -1977,15 +1993,20 @@ function steer(a, dt, P) {
     return;
   }
   if (bb.scared > 0) bb.scared = Math.max(0, bb.scared - dt);   // flare/melee fear wears off (Flee/Graze re-set it as needed)
+  if (a.feedT > 0) a.feedT -= dt; if (a.restT > 0) a.restT -= dt;   // ecosystem timers (feeding/resting)
   let tx = a.x, tz = a.z, run = false, sepW = 1;
   switch (a.state) {
     case "Graze": {
-      const hc = herdCenter();
+      const social = sp.behavior.social, herds = social === "herd" || social === "flock";   // solitary species don't clump
+      const hc = herds ? herdCenter() : null;
       if (hc && Math.hypot(hc.x - a.x, hc.z - a.z) > 14) { tx = hc.x; tz = hc.z; }   // cohesion
-      else { tx = a.x + Math.sin(a.yaw + Math.sin(S.t * 0.3 + a.x) * 0.6); tz = a.z + Math.cos(a.yaw + 0.3); } // amble
+      else { const md = S.t * 0.02 + (hc ? 0 : a.x);   // slow herd migration drift across the valley + amble
+        tx = a.x + Math.sin(md) * 0.8 + Math.sin(a.yaw + Math.sin(S.t * 0.3 + a.x) * 0.6) * 0.4; tz = a.z + Math.cos(md) * 0.8 + Math.cos(a.yaw + 0.3) * 0.4; }
       bb.scared = Math.max(0, bb.scared - dt);
       break;
     }
+    case "Feed": { tx = a.x; tz = a.z; break; }   // stationary at the carcass
+    case "Rest": { tx = a.x; tz = a.z; break; }   // lying up
     case "Flee": {
       run = true; bb.scared = 0.8;
       tx = a.x + (a.x - bb.fleeFromX); tz = a.z + (a.z - bb.fleeFromZ);
@@ -1993,7 +2014,12 @@ function steer(a, dt, P) {
       for (const o of dinos) if (isPrey(o.sp) && o.alive && o !== a && dist2(a.x, a.z, o.x, o.z) < 220) o.bb.scared = Math.max(o.bb.scared, 0.6);
       break;
     }
-    case "Patrol": { tx = bb.homeX + Math.sin(S.t * 0.2 + bb.homeX) * sp.behavior.territoryRadiusM * 0.5; tz = bb.homeZ + Math.cos(S.t * 0.17 + bb.homeZ) * sp.behavior.territoryRadiusM * 0.5; break; }
+    case "Patrol": {   // hold a home territory: wander within it, but turn back if you've strayed too far
+      const terr = sp.behavior.territoryRadiusM, hx = bb.homeX != null ? bb.homeX : a.x, hz = bb.homeZ != null ? bb.homeZ : a.z;
+      if (Math.hypot(a.x - hx, a.z - hz) > terr * 1.8) { tx = hx; tz = hz; }
+      else { tx = hx + Math.sin(S.t * 0.2 + hx) * terr * 0.5; tz = hz + Math.cos(S.t * 0.17 + hz) * terr * 0.5; }
+      break;
+    }
     case "Investigate": { tx = bb.lastSeenX; tz = bb.lastSeenZ; run = false; break; }
     case "Stalk": { const dx = bb.lastSeenX - a.x, dz = bb.lastSeenZ - a.z, d = Math.hypot(dx, dz) || 1; tx = a.x + dx / d; tz = a.z + dz / d; break; }
     case "Chase": {
@@ -2015,7 +2041,7 @@ function steer(a, dt, P) {
       const d = Math.hypot(P.x - a.x, P.z - a.z);
       if (d < sp.combat.attackRangeM && a.cd <= 0 && S.player.alive) { a.cd = sp.combat.attackCooldownS; a.anim = 0.4; damagePlayer(sp.combat.damage, sp.displayName); }
       // also can kill prey
-      if (bb.preyHunt && Math.hypot(bb.preyHunt.x - a.x, bb.preyHunt.z - a.z) < sp.combat.attackRangeM + 1 && a.cd <= 0) { a.cd = 1; bb.preyHunt.hp -= 30; }
+      if (bb.preyHunt && Math.hypot(bb.preyHunt.x - a.x, bb.preyHunt.z - a.z) < sp.combat.attackRangeM + 1 && a.cd <= 0) { a.cd = 1; bb.preyHunt.hp -= 30; if (bb.preyHunt.hp <= 0) { a.feedT = rand(4, 7); a.state = "Feed"; bb.preyHunt = null; } }   // kill → feed at the carcass
       break;
     }
     case "Retreat": { run = true; tx = a.x + (a.x - (bb.lastSeenX)); tz = a.z + (a.z - (bb.lastSeenZ)); break; }
@@ -2121,7 +2147,12 @@ function updateSpawnDirector(dt, P) {
   if (spawnTimer > 0) return;
   spawnTimer = S.extraction.called ? sd.escalation.spawnIntervalS : sd.escalation.spawnIntervalS * 1.4;
   const active = dinos.filter(d => d.alive).length;
-  for (const r of sd.roster) {
+  // when the beacon is called (loud), the noise draws the heavy hitters first — order the roster by
+  // each species' behavior.noiseDrawWeight so high-weight apexes are prioritised during the hot hold.
+  const roster = S.extraction.called
+    ? [...sd.roster].sort((x, y) => ((SPECIES[y.species]?.behavior.noiseDrawWeight || 0) - (SPECIES[x.species]?.behavior.noiseDrawWeight || 0)))
+    : sd.roster;
+  for (const r of roster) {
     let target = r.target;
     if (r.species === "deinonychus" && S.extraction.called) {
       const prog = clamp(S.extraction.hold / S.extraction.holdMax, 0, 1);
@@ -3500,7 +3531,7 @@ let mapLayers = { threat: true, territory: false, ghosts: true };
 function dinoMapState(d) {
   if (isDown(d)) return d.sedated ? "SEDATED" : "TRAPPED";
   return ({ Chase: "HUNTING", Attack: "ATTACKING", Stalk: "STALKING", Investigate: "ALERT",
-    Flee: "FLEEING", Retreat: "WOUNDED", Patrol: "ROAMING", Graze: "GRAZING" })[d.state] || "";
+    Flee: "FLEEING", Retreat: "RETREATING", Patrol: "ROAMING", Graze: "GRAZING", Feed: "FEEDING", Rest: "RESTING" })[d.state] || "";
 }
 function mapThreatRadiusM(d) {  // how far this predator projects danger — drives the threat ring
   const b = d.sp.behavior || {};
