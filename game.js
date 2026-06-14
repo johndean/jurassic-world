@@ -1869,24 +1869,24 @@ const INTRO_CAM_END = 21;                                // after the crash the 
 const INTRO_KIND = { dna: "research", ghosts: "jeep" };   // future: blackout:boat, last_sample:monorail, fallen_outpost:halo, extinction:airship
 const introKind = () => (selectedMission && INTRO_KIND[selectedMission.id]) || "crash";
 const INTRO_RADIO = [
-  { t: 1.2, h: `<span class="rc">RANGER-6:</span> Entering Alpha airspace. Stay sharp.`, say: "Ranger Six, entering Alpha airspace. Stay sharp.", voice: { rate: 1.0, pitch: 0.98 } },
-  { t: 7.0, h: `<span class="rc">RANGER-6:</span> Thermal readings high… lost contact with Outpost Seven.`, say: "Thermal readings are high. We've lost contact with Outpost Seven.", voice: { rate: 1.04, pitch: 1.0 } },
-  { t: 11.5, h: `<span class="rc">PILOT:</span> Mayday — losing navigation, controls unresponsive!`, say: "Mayday! Mayday! We're losing navigation — controls are unresponsive!", voice: { rate: 1.32, pitch: 1.14 } },
-  { t: 15.5, h: `<span class="rc">PILOT:</span> She's spinning — BRACE! BRACE!`, say: "She's going down! Hold on — brace! Brace! Brace!", voice: { rate: 1.5, pitch: 1.22 } },
+  { t: 1.2, h: `<span class="rc">RANGER-6:</span> Entering Alpha airspace. Stay sharp.`, say: "Ranger Six, entering Alpha airspace. Stay sharp.", voice: { rate: 1.0, pitch: 0.98 }, clip: "ranger_enter" },
+  { t: 7.0, h: `<span class="rc">RANGER-6:</span> Thermal readings high… lost contact with Outpost Seven.`, say: "Thermal readings are high. We've lost contact with Outpost Seven.", voice: { rate: 1.04, pitch: 1.0 }, clip: "ranger_thermal" },
+  { t: 11.5, h: `<span class="rc">PILOT:</span> Mayday — losing navigation, controls unresponsive!`, say: "Mayday! Mayday! We're losing navigation — controls are unresponsive!", voice: { rate: 1.32, pitch: 1.14 }, clip: "pilot_mayday" },
+  { t: 15.5, h: `<span class="rc">PILOT:</span> She's spinning — BRACE! BRACE!`, say: "She's going down! Hold on — brace! Brace! Brace!", voice: { rate: 1.5, pitch: 1.22 }, clip: "pilot_brace" },
   { t: 22.8, h: `…ringing… muffled voices… you come to in the wreck.` },
   { t: 32.5, h: `The jungle has gone silent. Something heard the crash.` },
 ];
 const INTRO_RADIO_RESEARCH = [   // DNA SAMPLE COLLECTION — research-heli deployment (calm scientist briefing, no crash)
-  { t: 1.0, h: `<span class="rc">DR. SOTO:</span> Research flight, you're cleared over Sector 4 — what's left of it.`, say: "Research flight, you're cleared over Sector four. What's left of it.", voice: { rate: 0.98, pitch: 1.0 } },
-  { t: 5.5, h: `<span class="rc">DR. SOTO:</span> The program collapsed weeks ago. We need them <b>alive</b> — tranq or trap, do NOT kill them.`, say: "The program collapsed weeks ago. We need them alive. Tranq or trap — do not kill them.", voice: { rate: 1.0, pitch: 1.0 } },
-  { t: 9.5, h: `<span class="rc">DR. SOTO:</span> Climb the watchtowers, glass the valley, bring me ${DNA_GOAL} samples. The beacon's hot for your evac.`, say: "Climb the watchtowers, glass the valley, and bring me three samples. The beacon is hot for your evac.", voice: { rate: 1.0, pitch: 1.0 } },
-  { t: 13.5, h: `<span class="rc">PILOT:</span> Skids down. Good luck — we'll be listening.`, say: "Skids down. Good luck — we'll be listening.", voice: { rate: 1.04, pitch: 0.98 } },
+  { t: 1.0, h: `<span class="rc">DR. SOTO:</span> Research flight, you're cleared over Sector 4 — what's left of it.`, say: "Research flight, you're cleared over Sector four. What's left of it.", voice: { rate: 0.98, pitch: 1.0 }, clip: "soto_cleared" },
+  { t: 5.5, h: `<span class="rc">DR. SOTO:</span> The program collapsed weeks ago. We need them <b>alive</b> — tranq or trap, do NOT kill them.`, say: "The program collapsed weeks ago. We need them alive. Tranq or trap — do not kill them.", voice: { rate: 1.0, pitch: 1.0 }, clip: "soto_alive" },
+  { t: 9.5, h: `<span class="rc">DR. SOTO:</span> Climb the watchtowers, glass the valley, bring me ${DNA_GOAL} samples. The beacon's hot for your evac.`, say: "Climb the watchtowers, glass the valley, and bring me three samples. The beacon is hot for your evac.", voice: { rate: 1.0, pitch: 1.0 }, clip: "soto_samples" },
+  { t: 13.5, h: `<span class="rc">PILOT:</span> Skids down. Good luck — we'll be listening.`, say: "Skids down. Good luck — we'll be listening.", voice: { rate: 1.04, pitch: 0.98 }, clip: "pilot_skids" },
 ];
 const INTRO_RADIO_JEEP = [   // GHOSTS OF SECTOR 9 — ranger jeep-convoy (chatter → unsettling silence)
-  { t: 1.0, h: `<span class="rc">CONVOY LEAD:</span> Sector 9 track ahead. Survey team went dark thirty-one hours ago.`, say: "Sector nine track ahead. Survey team went dark thirty-one hours ago.", voice: { rate: 1.0, pitch: 0.97 } },
-  { t: 5.0, h: `<span class="rc">RANGER-2:</span> Last ping was the old checkpoint. We're almost on it.`, say: "Last ping was the old checkpoint. We're almost on it.", voice: { rate: 1.04, pitch: 1.02 } },
-  { t: 8.5, h: `<span class="rc">CONVOY LEAD:</span> …checkpoint's wrecked. Gate's torn clean off. Eyes up, everybody.`, say: "The checkpoint's wrecked. Gate's torn clean off — eyes up, everybody!", voice: { rate: 1.18, pitch: 1.08 } },
-  { t: 12.0, h: `<span class="rc">CONVOY LEAD:</span> Tracks lead into the trees — wheels stop here. On foot from now.`, say: "Tracks lead into the trees. Wheels stop here. On foot from now.", voice: { rate: 1.06, pitch: 1.0 } },
+  { t: 1.0, h: `<span class="rc">CONVOY LEAD:</span> Sector 9 track ahead. Survey team went dark thirty-one hours ago.`, say: "Sector nine track ahead. Survey team went dark thirty-one hours ago.", voice: { rate: 1.0, pitch: 0.97 }, clip: "convoy_sector" },
+  { t: 5.0, h: `<span class="rc">RANGER-2:</span> Last ping was the old checkpoint. We're almost on it.`, say: "Last ping was the old checkpoint. We're almost on it.", voice: { rate: 1.04, pitch: 1.02 }, clip: "ranger2_ping" },
+  { t: 8.5, h: `<span class="rc">CONVOY LEAD:</span> …checkpoint's wrecked. Gate's torn clean off. Eyes up, everybody.`, say: "The checkpoint's wrecked. Gate's torn clean off — eyes up, everybody!", voice: { rate: 1.18, pitch: 1.08 }, clip: "convoy_wrecked" },
+  { t: 12.0, h: `<span class="rc">CONVOY LEAD:</span> Tracks lead into the trees — wheels stop here. On foot from now.`, say: "Tracks lead into the trees. Wheels stop here. On foot from now.", voice: { rate: 1.06, pitch: 1.0 }, clip: "convoy_tracks" },
 ];
 // Spoken radio via the Web Speech API. Quality is bounded by the OS voices, so we aggressively prefer
 // natural / neural / online voices (Chrome's "Google US English", macOS premium) over the built-in
@@ -1925,6 +1925,19 @@ function speakRadio(text, opt) {
   } catch (e) {}
 }
 try { if (window.speechSynthesis) { window.speechSynthesis.onvoiceschanged = () => { _radioVoice = pickRadioVoice(); }; _radioVoice = pickRadioVoice(); } } catch (e) {}
+// Real human VO: bundled Inworld clips per radio line (assets/audio/intro/*.m4a). Prefer the clip;
+// fall back to the synthetic voice if a clip is missing or blocked.
+const RADIO_DIR = "./assets/audio/intro/";
+const _radioClips = {};
+function radioClip(name) { if (!_radioClips[name]) { const a = new Audio(RADIO_DIR + name + ".m4a"); a.preload = "auto"; a.volume = 0.95; _radioClips[name] = a; } return _radioClips[name]; }
+function preloadRadio() { ["pilot_mayday","pilot_brace","ranger_enter","ranger_thermal","soto_cleared","soto_alive","soto_samples","pilot_skids","convoy_sector","ranger2_ping","convoy_wrecked","convoy_tracks"].forEach(radioClip); }
+function stopRadioClips() { for (const k in _radioClips) { try { _radioClips[k].pause(); _radioClips[k].currentTime = 0; } catch (e) {} } }
+function playRadio(e) {   // e = { say, voice, clip }
+  if (e && e.clip) {
+    try { const a = radioClip(e.clip); a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => speakRadio(e.say, e.voice)); return; } catch (err) {}
+  }
+  speakRadio(e.say, e.voice);
+}
 
 function buildWreck(x, z) {
   const heli = buildHeli();                              // reuse the chopper, scorched + canted as wreckage
@@ -2010,7 +2023,7 @@ function updateIntroCrash(dt) {
   const tint = $("introTint"), big = $("introBig"), cap = $("introCap");
   if (intro.line + 1 < INTRO_RADIO.length && T >= INTRO_RADIO[intro.line + 1].t) {
     intro.line++; const e = INTRO_RADIO[intro.line]; const r = $("introRadio"); r.innerHTML = e.h; r.style.opacity = "1";
-    if (e.say) { Audio.squelch(); speakRadio(e.say, e.voice); }    // actual spoken radio / mayday
+    if (e.say || e.clip) { Audio.squelch(); playRadio(e); }    // actual spoken radio / mayday
   }
   if (g && !intro.crashed && intro.heli.rotor) { intro.heli.rotor.rotation.y += dt * 30; if (intro.heli.tailRotor) intro.heli.tailRotor.rotation.x += dt * 60; }
 
@@ -2082,6 +2095,7 @@ function updateIntroCameraCrash() {
 function finishIntroCommon(msg) {                          // shared hand-off: return control, clear cinematic DOM
   introSeen = true; intro = null;
   try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
+  stopRadioClips();
   Audio.rotor(false);
   $("intro").classList.add("hidden"); $("introMission").classList.remove("show");
   ["introTint", "introVig", "introBlack", "introRadio", "introCap", "introBig"].forEach(k => { const e = $(k); if (e) e.style.opacity = "0"; });
@@ -2116,7 +2130,7 @@ function updateIntroResearch(dt) {
   const tint = $("introTint"), cap = $("introCap");
   if (intro.line + 1 < INTRO_RADIO_RESEARCH.length && T >= INTRO_RADIO_RESEARCH[intro.line + 1].t) {
     intro.line++; const e = INTRO_RADIO_RESEARCH[intro.line]; const r = $("introRadio"); r.innerHTML = e.h; r.style.opacity = "1";
-    if (e.say) { Audio.squelch(); speakRadio(e.say, e.voice); }
+    if (e.say || e.clip) { Audio.squelch(); playRadio(e); }
   }
   if (g && intro.heli.rotor) { const rs = intro.landed ? 12 : 30; intro.heli.rotor.rotation.y += dt * rs; if (intro.heli.tailRotor) intro.heli.tailRotor.rotation.x += dt * rs * 2; }
 
@@ -2225,7 +2239,7 @@ function updateIntroJeep(dt) {
   const tint = $("introTint"), cap = $("introCap");
   if (intro.line + 1 < INTRO_RADIO_JEEP.length && T >= INTRO_RADIO_JEEP[intro.line + 1].t) {
     intro.line++; const e = INTRO_RADIO_JEEP[intro.line]; const r = $("introRadio"); r.innerHTML = e.h; r.style.opacity = "1";
-    if (e.say) { Audio.squelch(); speakRadio(e.say, e.voice); }
+    if (e.say || e.clip) { Audio.squelch(); playRadio(e); }
   }
   tint.style.background = "#1f2733"; tint.style.opacity = "0.3";   // last light / dusk
   const driveTo = (tz, rate) => { if (j) { j.position.z += (tz - j.position.z) * dt * rate; j.position.y = groundH(j.position.x, j.position.z); } };
@@ -2274,7 +2288,7 @@ function skipIntro() {
 function startRun() {
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = [];
-  clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField(); clearIntroProp();
+  clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField(); clearIntroProp(); preloadRadio();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
