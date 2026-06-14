@@ -243,9 +243,22 @@
     border:1px solid rgba(150,170,160,.5);background:rgba(10,14,13,.55);color:#d7e0da;
     font:10px ui-monospace,monospace;letter-spacing:.08em;display:flex;align-items:center;justify-content:center;}
   .tbtn:active{background:rgba(224,119,47,.4);}
-  #btnSprint{right:18px;bottom:200px;}
-  #btnCrouch{right:104px;bottom:140px;}
-  #btnCall{right:18px;bottom:114px;border-color:rgba(224,119,47,.7);}
+  #btnSprint{right:18px;bottom:230px;}
+  #btnCrouch{right:104px;bottom:170px;}
+  #btnCall{right:18px;bottom:144px;border-color:rgba(224,119,47,.7);}
+  #btnUse{right:104px;bottom:260px;border-color:rgba(143,184,196,.7);}
+  /* defense toolset bar */
+  #tools{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:46;display:flex;gap:8px;}
+  .tool{position:relative;width:76px;padding:8px 6px 6px;background:rgba(10,14,13,.62);border:1px solid var(--hud-line);
+    border-radius:9px;color:#d7e0da;font:inherit;cursor:pointer;text-align:center;overflow:hidden;pointer-events:auto;-webkit-tap-highlight-color:transparent;}
+  .tool.sel{border-color:#e0772f;box-shadow:0 0 0 1px #e0772f;background:rgba(224,119,47,.15);}
+  .tool.empty{opacity:.38;}
+  .tool b{position:absolute;top:3px;left:6px;font-size:8px;color:#8a978f;font-weight:400;}
+  .t-ic{display:block;font-size:19px;line-height:1;margin-top:3px;color:#e0772f;}
+  .t-nm{display:block;font-size:8px;letter-spacing:.1em;margin-top:3px;color:#c2ccc4;}
+  .t-ch{display:block;font-size:9px;font-weight:700;color:#9fe08a;margin-top:1px;min-height:11px;}
+  .t-cd{position:absolute;left:0;bottom:0;width:100%;height:0;background:rgba(0,0,0,.55);pointer-events:none;}
+  @media (max-width:560px){ #tools{bottom:10px;left:14px;transform:none;} .tool{width:62px;} }
   @media (max-width:760px){
     .obj{min-width:0;max-width:172px;left:18px;}
     .compass,.squad,.contact{display:none;}
@@ -341,12 +354,19 @@
 <div id="toast"></div>
 
 <!-- touch controls -->
+<div id="tools">
+  <button class="tool" data-i="0"><b>1</b><span class="t-ic">✸</span><span class="t-nm">FLARE</span><span class="t-ch"></span><i class="t-cd"></i></button>
+  <button class="tool" data-i="1"><b>2</b><span class="t-ic">◓</span><span class="t-nm">DECOY</span><span class="t-ch"></span><i class="t-cd"></i></button>
+  <button class="tool" data-i="2"><b>3</b><span class="t-ic">✕</span><span class="t-nm">MELEE</span><span class="t-ch"></span><i class="t-cd"></i></button>
+</div>
+
 <div id="touch">
   <div id="stick"><div id="stickKnob"></div></div>
   <div id="lookpad"></div>
   <button class="tbtn" id="btnSprint">SPRINT</button>
   <button class="tbtn" id="btnCrouch">CROUCH</button>
   <button class="tbtn" id="btnCall">CALL</button>
+  <button class="tbtn use" id="btnUse">USE</button>
 </div>
 
 <!-- start screen -->

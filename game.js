@@ -534,6 +534,10 @@ function buildBeacon() {
   S.extraction.beacon.x = bx; S.extraction.beacon.z = bz;
 
   const g = new THREE.Group(); g.position.set(bx, groundH(bx, bz), bz);
+  // SAFE ZONE ring on the ground — inside this radius predators disengage and you take no damage
+  const safe = new THREE.Mesh(new THREE.RingGeometry(18 - 0.6, 18, 48),
+    new THREE.MeshBasicMaterial({ color: 0x6fae6b, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+  safe.rotation.x = -Math.PI / 2; safe.position.y = 0.12; g.add(safe);
   const pylon = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 4.2, 8),
     new THREE.MeshStandardMaterial({ color: 0x3a4a3a, roughness: 1, emissive: 0x123512, emissiveIntensity: 0.5, flatShading: true }));
   pylon.position.y = 2.1; g.add(pylon);
@@ -587,6 +591,10 @@ function initInput() {
     keys.add(e.code);
     if (e.code === "KeyE") tryCall();
     if (e.code === "KeyM") toggleMap();
+    if (e.code === "KeyF") useTool();                                   // use selected defense tool
+    if (e.code === "Digit1") selectTool(0);
+    if (e.code === "Digit2") selectTool(1);
+    if (e.code === "Digit3") selectTool(2);
     if (e.code === "Escape" && mapOpen) toggleMap();
   });
   addEventListener("keyup", e => { if (typing(e)) return; keys.delete(e.code); });
@@ -604,6 +612,10 @@ function initInput() {
   // false; maxTouchPoints stays > 0, so include it to reliably detect iPads (and 2-in-1 touch laptops).
   if (navigator.maxTouchPoints > 0 || "ontouchstart" in window || matchMedia("(pointer:coarse)").matches) { isTouch = true; setupTouch(); }
   $("touch").style.display = isTouch ? "block" : "none";
+
+  // defense tool bar: tap a tool to select it; tap the selected one (or the USE button) to activate
+  document.querySelectorAll("#tools .tool").forEach(el => el.addEventListener("click", () => { const i = +el.dataset.i; if (i === selTool) useTool(); else selectTool(i); }));
+  const bu = $("btnUse"); if (bu) bu.addEventListener("pointerdown", e => { e.preventDefault(); useTool(); });
 }
 
 function setupTouch() {
@@ -748,7 +760,7 @@ function lerp2angle(a, b) { let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.P
 
 function damagePlayer(amount, bySpecies) {
   const P = S.player; if (!P.alive) return;
-  if (evacCine()) return;   // invulnerable once boarding the chopper / lifting off
+  if (evacCine() || playerSafe()) return;   // invulnerable while boarding the chopper, and inside the beacon safe zone
   P.hp = Math.max(0, P.hp - amount);
   hitCooldownVisual = 3.0; flash(); Audio.hit();
   if (P.hp <= 0) { P.alive = false; S.killedBy = bySpecies; endRun(false); }
@@ -873,6 +885,40 @@ function perceive(a, P) {
 }
 
 // utility scorer (~4 Hz) — picks a state; emergent, not scripted
+/* ===================================================== defense toolset === *
+ * Deterrence, not action-hero firepower: a flare scares predators off, a thrown
+ * decoy lures them away, melee is a risky last resort. The beacon is a SAFE ZONE. */
+const SAFE_R = 18;                                  // beacon safe-zone radius (m)
+function playerSafe() { const b = S.extraction.beacon; return dist2(S.player.x, S.player.z, b.x, b.z) < SAFE_R * SAFE_R; }
+const decoy = { x: 0, z: 0, t: 0 };                 // active thrown decoy (lures predators)
+const TOOLS = [
+  { id: "flare", name: "FLARE", icon: "✸", charges: 3, max: 3, cd: 0, cdMax: 7 },
+  { id: "decoy", name: "DECOY", icon: "◓", charges: 6, max: 6, cd: 0, cdMax: 3 },
+  { id: "melee", name: "MELEE", icon: "✕", charges: Infinity, max: Infinity, cd: 0, cdMax: 1.1 },
+];
+let selTool = 0;
+function selectTool(i) { if (i >= 0 && i < TOOLS.length) selTool = i; }
+function scareDinos(x, z, r, secs) {
+  for (const a of dinos) {
+    if (!a.alive || a.sp.diet !== "carnivore") continue;
+    if (dist2(a.x, a.z, x, z) < r * r) { a.bb.scared = Math.max(a.bb.scared, secs); a.bb.lastSeenX = x; a.bb.lastSeenZ = z; a.state = "Retreat"; }
+  }
+}
+function useTool() {
+  if (S.phase !== "playing" || !S.player.alive) return;
+  const t = TOOLS[selTool], P = S.player; if (t.cd > 0 || t.charges <= 0) return;
+  if (t.id === "flare") { t.charges--; t.cd = t.cdMax; flash(); Audio.beacon(true); P.noise = Math.max(P.noise, 0.8); scareDinos(P.x, P.z, 24, 5); toast("FLARE · predators recoil"); }
+  else if (t.id === "decoy") { t.charges--; t.cd = t.cdMax; decoy.x = P.x + Math.sin(P.yaw) * 15; decoy.z = P.z + Math.cos(P.yaw) * 15; decoy.t = 6; Audio.step("run"); toast("DECOY thrown · draws them off"); }
+  else if (t.id === "melee") {
+    t.cd = t.cdMax; let hit = null, hd = 99;
+    const fx = Math.sin(P.yaw), fz = Math.cos(P.yaw);
+    for (const a of dinos) { if (!a.alive || a.sp.diet !== "carnivore") continue; const rx = a.x - P.x, rz = a.z - P.z, dd = Math.hypot(rx, rz) || 1; if (dd < 3.6 && (rx * fx + rz * fz) / dd > 0.25 && dd < hd) { hd = dd; hit = a; } }
+    if (hit) { hit.hp -= 22; hit.bb.scared = Math.max(hit.bb.scared, 1.8); hit.bb.lastSeenX = P.x; hit.bb.lastSeenZ = P.z; hit.state = "Retreat"; hit.anim = 0.3; Audio.hit(); flash(); if (hit.hp <= 0) killDino(hit); toast("STRUCK · " + hit.sp.displayName); }
+    else toast("MELEE · nothing in reach");
+  }
+}
+function updateTools(dt) { if (decoy.t > 0) decoy.t = Math.max(0, decoy.t - dt); for (const t of TOOLS) if (t.cd > 0) t.cd = Math.max(0, t.cd - dt); }
+
 function decide(a, P) {
   const sp = a.sp, bb = a.bb;
   const per = (a.lod === "full") ? perceive(a, P) : { seen: false, heard: false, d: 999 };
@@ -887,12 +933,16 @@ function decide(a, P) {
     return;
   }
   // carnivores
-  if (a.hp < sp.combat.health * sp.behavior.fleeHealthPct) { a.state = "Retreat"; return; }
-  if (S.t >= GRACE_S) {   // spawn grace: ignore the player for the first seconds so you can orient/move
+  if (a.hp < sp.combat.health * sp.behavior.fleeHealthPct || bb.scared > 0) { a.state = "Retreat"; return; }   // wounded or flared/struck → flee
+  if (decoy.t > 0 && dist2(a.x, a.z, decoy.x, decoy.z) < (sp.senses.sightRangeM * 1.3) ** 2) {                  // a thrown decoy pulls them off you
+    a.state = "Investigate"; bb.lastSeenX = decoy.x; bb.lastSeenZ = decoy.z; bb.hasTarget = true; bb.preyHunt = null; return;
+  }
+  if (!playerSafe() && S.t >= GRACE_S) {   // beacon = SAFE ZONE: predators won't engage the player inside it
     if (per.seen && per.d < sp.combat.attackRangeM + 0.5) { a.state = "Attack"; return; }
     if ((per.seen || (bb.hasTarget && rng() < aggr)) && per.d < sp.senses.sightRangeM * 1.4) { a.state = (usesPackTactics(sp) ? "Chase" : (per.seen ? "Chase" : "Stalk")); return; }
     if (bb.hasTarget && (per.heard || rng() < aggr * 0.6)) { a.state = "Investigate"; return; }
   }
+  if (playerSafe()) bb.hasTarget = false;   // lose interest once you reach the beacon
   // no player interest → hunt herd prey (predator vs prey) or patrol
   const prey = nearestPreyTo(a.x, a.z);
   if (prey && Math.hypot(prey.x - a.x, prey.z - a.z) < sp.senses.sightRangeM) { a.state = "Chase"; bb.lastSeenX = prey.x; bb.lastSeenZ = prey.z; bb.preyHunt = prey; }
@@ -932,6 +982,7 @@ function updatePackRoles() {
 // execute the chosen state via steering → vx,vz
 function steer(a, dt, P) {
   const sp = a.sp, bb = a.bb;
+  if (bb.scared > 0) bb.scared = Math.max(0, bb.scared - dt);   // flare/melee fear wears off (Flee/Graze re-set it as needed)
   let tx = a.x, tz = a.z, run = false, sepW = 1;
   switch (a.state) {
     case "Graze": {
@@ -1179,6 +1230,7 @@ function startRun() {
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = [];
   clearRemotes(); clearEvac();
+  decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
   Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole });
@@ -1309,6 +1361,7 @@ function updateHUD() {
   // squad (self)
   $("sqCount").textContent = (P.alive ? 1 : 0) + "/1";
   const tg = $("sqTag"); if (tg) tg.textContent = P.role ? P.role.name : "ALPHA-01";
+  updateToolHUD();
   const sb = $("sqSelfBar"); if (sb) { sb.style.width = P.hp + "%"; sb.style.background = hpColor(P.hp); }
   $("sqSelf").className = "sq-row" + (P.alive ? "" : " ko");
 
@@ -1359,6 +1412,16 @@ function updateHUD() {
   v.style.boxShadow = `inset 0 0 ${160 + intensity * 120}px ${40 + intensity * 60}px rgba(${col},${0.0 + intensity * 0.55})`;
 }
 function setBar(barId, numId, v, color) { const b = $(barId); b.style.width = clamp(v, 0, 100) + "%"; b.style.background = color; $(numId).textContent = Math.round(v); }
+const _toolEls = () => document.querySelectorAll("#tools .tool");
+function updateToolHUD() {
+  _toolEls().forEach((el, i) => {
+    const t = TOOLS[i]; if (!t) return;
+    el.classList.toggle("sel", i === selTool);
+    el.classList.toggle("empty", t.max !== Infinity && t.charges <= 0);
+    const ch = el.querySelector(".t-ch"); if (ch) ch.textContent = t.max === Infinity ? "∞" : "×" + t.charges;
+    const cd = el.querySelector(".t-cd"); if (cd) cd.style.height = (t.cd > 0 ? (t.cd / t.cdMax * 100) : 0).toFixed(0) + "%";
+  });
+}
 
 // Build the tactical map as an SVG string (viewBox 0..100). Shared by the corner minimap (big=false)
 // and the fullscreen overlay (big=true, which adds species tooltips + bigger markers).
@@ -1473,6 +1536,7 @@ function simulate(dt) {
   updateThreat(dt, S.player);
   updateExtraction(dt);
   updateEvac(dt);
+  updateTools(dt);
   Audio.tickHeartbeat(dt, S.player.fear);
   if (Net.on) netTick(dt);
 }
