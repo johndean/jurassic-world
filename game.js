@@ -75,6 +75,11 @@ const FOLIAGE = {
   tree: "./assets/models/tree.glb",
   fern: "./assets/models/fern.glb",
 };
+// photoreal hero ruin structures (streamed .glb); empty until generated. {url, x, z, targetH, yaw}
+const RUINS = {
+  gate: { url: "./assets/models/ruin_gate.glb", x: 0, z: -56, h: 12, yaw: 0 },
+  centre: { url: "./assets/models/ruin_centre.glb", x: -45, z: 26, h: 10, yaw: 0.5 },
+};
 const PLAYER_MODEL_YAW = 0;        // facing correction; flip to Math.PI if the player faces the camera
 let playerMixer = null, playerAction = null;
 const GAIT_RATE = { idle: 0, walk: 1, run: 1.7, crouch: 0.6 };  // walk-clip playback speed per gait
@@ -96,6 +101,10 @@ async function preloadModels() {
   const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.fern].filter(Boolean))];
   await Promise.all(foliage.map(async p => { MODELS[p] = await loadModel(p); }));
   buildFoliage();
+  // hero ruin structures (photoreal .glb) — replace the procedural gate/centre once they land
+  const ruins = [...new Set([RUINS.gate.url, RUINS.centre.url].filter(Boolean))];
+  await Promise.all(ruins.map(async p => { MODELS[p] = await loadModel(p); }));
+  buildRuinModels();
 }
 
 // ---- core state object (the "room snapshot")
@@ -248,101 +257,146 @@ function buildWorld() {
   blobPool = [];
 }
 
-// Jurassic-World theme: weathered concrete + moss-overgrown ruins, an iconic gate, a derelict
-// visitor centre, a leaning watchtower, a broken electric perimeter fence and an abandoned tour jeep.
-// All procedural (no assets), placed on the terrain inside the valley floor.
+// Jurassic-World theme: moss-overgrown ruins built from irregular weathered stone — broken masonry
+// walls, segmented/toppled columns with protruding rebar, rubble piles, a derelict watchtower, a
+// broken perimeter fence and an abandoned jeep. The hero gate + visitor-centre are streamed in as
+// photoreal .glb models (buildRuinModels); this lays down the procedural surround + fallbacks.
+let ruinsGroup = null;
 function buildRuins() {
   const half = BIOME.map.size / 2;
-  const g = new THREE.Group();
-  const concrete = new THREE.MeshStandardMaterial({ color: 0x8d9088, roughness: 0.95, metalness: 0.02, flatShading: true });
-  const mossy = new THREE.MeshStandardMaterial({ color: 0x5d6b4a, roughness: 1, metalness: 0, flatShading: true });
-  const wood = new THREE.MeshStandardMaterial({ color: 0x6b4e34, roughness: 1, flatShading: true });
-  const rust = new THREE.MeshStandardMaterial({ color: 0x7a4a32, roughness: 1, metalness: 0.12, flatShading: true });
+  const g = new THREE.Group(); ruinsGroup = g;
+  // a few weathered-stone variants (jittered so masonry doesn't read as one flat colour)
+  const stone = [0x8a8d83, 0x7c8377, 0x717a68, 0x6a6f63].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 1, metalness: 0.02, flatShading: true }));
+  const moss = new THREE.MeshStandardMaterial({ color: 0x5a6b46, roughness: 1, flatShading: true });
+  const rust = new THREE.MeshStandardMaterial({ color: 0x6f4630, roughness: 1, metalness: 0.15, flatShading: true });
   const torchMat = new THREE.MeshStandardMaterial({ color: 0xffb347, emissive: 0xff7a1a, emissiveIntensity: 2.4 });
-  const place = (mesh, x, z, yOff = 0, ry = 0) => { mesh.position.set(x, groundH(x, z) + yOff, z); mesh.rotation.y = ry; g.add(mesh); return mesh; };
+  const sm = () => stone[(rand(0, 1) * stone.length) | 0];
 
-  // iconic gate: two timber posts + crossbeam, flaming braziers, and a canvas-textured sign
+  // a broken masonry wall: a run of irregular stacked blocks with a jagged (broken) top + gaps
+  function brokenWall(cx, cz, len, baseH, ry) {
+    const w = new THREE.Group(), bw = 1.8;
+    for (let x = -len / 2; x < len / 2; x += bw * rand(0.95, 1.18)) {
+      if (rand(0, 1) < 0.13) continue;                   // a missing block
+      const h = baseH * rand(0.42, 1.0);
+      const b = new THREE.Mesh(new THREE.BoxGeometry(bw * rand(0.82, 1.0), h, 1.5 * rand(0.9, 1.12)), rand(0, 1) < 0.3 ? moss : sm());
+      b.position.set(x, h / 2, rand(-0.14, 0.14));
+      b.rotation.set(rand(-0.04, 0.04), rand(-0.06, 0.06), rand(-0.05, 0.05));
+      w.add(b);
+    }
+    w.position.set(cx, groundH(cx, cz), cz); w.rotation.y = ry; g.add(w); return w;
+  }
+  // a column built from stacked drums; broken ones lose their top drums + sprout rebar
+  function column(cx, cz, h, broken) {
+    const c = new THREE.Group(); let y = 0; const drum = 1.5;
+    const segs = Math.max(1, Math.round(h / drum * (broken ? rand(0.4, 0.8) : 1)));
+    for (let i = 0; i < segs; i++) { const r = 0.72 + rand(-0.05, 0.05); const s = new THREE.Mesh(new THREE.CylinderGeometry(r, r + 0.06, drum, 12), rand(0, 1) < 0.25 ? moss : sm()); s.position.y = y + drum / 2; s.rotation.y = rand(0, 6); c.add(s); y += drum * rand(0.96, 1.0); }
+    if (broken) for (let k = 0; k < 3; k++) { const rb = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, rand(0.6, 1.4), 5), rust); rb.position.set(rand(-0.3, 0.3), y + 0.3, rand(-0.3, 0.3)); rb.rotation.set(rand(-0.4, 0.4), 0, rand(-0.4, 0.4)); c.add(rb); }
+    c.position.set(cx, groundH(cx, cz), cz); g.add(c); return c;
+  }
+  // a pile of rubble (broken icosahedral chunks)
+  function rubble(cx, cz, radius, n) {
+    for (let i = 0; i < n; i++) { const a = rand(0, 6.28), d = rand(0, radius), x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d, s = rand(0.3, 1.1); const r = new THREE.Mesh(new THREE.IcosahedronGeometry(s, 0), rand(0, 1) < 0.35 ? moss : sm()); r.position.set(x, groundH(x, z) + s * 0.4, z); r.rotation.set(rand(0, 3), rand(0, 6), rand(0, 3)); r.scale.y = rand(0.6, 1); g.add(r); }
+  }
+
+  // ---- iconic gate (procedural fallback; replaced by a .glb when buildRuinModels runs) ----
+  const gateGrp = new THREE.Group(); g.add(gateGrp);
   (function gate() {
     const gx = 0, gz = -56, postH = 11, span = 16;
     for (const sx of [-1, 1]) {
       const px = gx + sx * span / 2;
-      place(new THREE.Mesh(new THREE.BoxGeometry(2.4, postH, 2.4), wood), px, gz, postH / 2);
-      const fl = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.7, 8), torchMat);
-      fl.position.set(px, groundH(px, gz) + postH + 1.0, gz); g.add(fl);
-      const pl = new THREE.PointLight(0xff8a2a, 6, 42, 2); pl.position.copy(fl.position); g.add(pl);
+      // pillar of stacked stone blocks
+      let y = 0; for (let i = 0; i < 7; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(2.6 + rand(-0.2, 0.2), 1.6, 2.6 + rand(-0.2, 0.2)), rand(0, 1) < 0.3 ? moss : sm()); b.position.set(px + rand(-0.1, 0.1), groundH(px, gz) + y + 0.8, gz); b.rotation.y = rand(-0.05, 0.05); gateGrp.add(b); y += 1.55; }
+      const fl = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.7, 8), torchMat); fl.position.set(px, groundH(px, gz) + postH + 1.0, gz); gateGrp.add(fl);
+      const pl = new THREE.PointLight(0xff8a2a, 6, 42, 2); pl.position.copy(fl.position); gateGrp.add(pl);
     }
-    place(new THREE.Mesh(new THREE.BoxGeometry(span + 3, 1.8, 1.4), wood), gx, gz, postH - 0.5);
-    // sign with stenciled title (CanvasTexture)
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(span + 3, 1.7, 1.5), rust); beam.position.set(gx, groundH(gx, gz) + postH - 0.4, gz); beam.rotation.z = 0.02; gateGrp.add(beam);
     const cv = document.createElement("canvas"); cv.width = 512; cv.height = 132;
     const ctx = cv.getContext("2d"); ctx.fillStyle = "#160f0a"; ctx.fillRect(0, 0, 512, 132);
     ctx.strokeStyle = "#e0772f"; ctx.lineWidth = 6; ctx.strokeRect(8, 8, 496, 116);
-    ctx.fillStyle = "#e0772f"; ctx.font = "bold 60px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText("ISLA ALPHA", 256, 66);
+    ctx.fillStyle = "#e0772f"; ctx.font = "bold 60px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("ISLA ALPHA", 256, 66);
     const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
-    const sign = new THREE.Mesh(new THREE.BoxGeometry(span * 0.72, 3.0, 0.4),
-      [rust, rust, rust, rust, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, emissive: 0x2a1505, emissiveIntensity: 0.35 }), rust]);
-    sign.position.set(gx, groundH(gx, gz) + postH - 3.4, gz + 0.6); g.add(sign);
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(span * 0.72, 3.0, 0.4), [rust, rust, rust, rust, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, emissive: 0x2a1505, emissiveIntensity: 0.35 }), rust]);
+    sign.position.set(gx, groundH(gx, gz) + postH - 3.4, gz + 0.7); gateGrp.add(sign);
   })();
 
-  // derelict visitor centre: broken walls, fallen + standing columns, collapsed roof slab
+  // ---- derelict visitor centre (procedural fallback) ----
+  const centreGrp = new THREE.Group(); g.add(centreGrp);
   (function centre() {
-    const cx = -45, cz = 26;
-    place(new THREE.Mesh(new THREE.BoxGeometry(26, 1, 18), concrete), cx, cz, 0.5);
-    place(new THREE.Mesh(new THREE.BoxGeometry(26, 9, 1), mossy), cx, cz - 8.5, 4.5);
-    place(new THREE.Mesh(new THREE.BoxGeometry(1, 7, 18), mossy), cx - 12.5, cz, 3.5);
-    place(new THREE.Mesh(new THREE.BoxGeometry(1, 4, 11), mossy), cx + 12.5, cz + 3, 2);
-    for (let i = 0; i < 4; i++) place(new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.8, 8, 10), concrete), cx - 9 + i * 6, cz + 8, 4);
-    const fallen = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.8, 9, 10), concrete); fallen.rotation.z = Math.PI / 2; place(fallen, cx + 3, cz + 11, 0.85);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(14, 0.8, 12), concrete); place(roof, cx - 3, cz, 6.6); roof.rotation.set(0.3, 0.2, 0.16);
+    const cx = -45, cz = 26, sub = g; ruinsGroup = g;
+    brokenWall(cx, cz - 8.5, 26, 9, 0);
+    brokenWall(cx - 12.5, cz, 18, 7, Math.PI / 2);
+    brokenWall(cx + 12.5, cz + 3, 12, 5, Math.PI / 2);
+    for (let i = 0; i < 4; i++) column(cx - 9 + i * 6, cz + 8, 8, rand(0, 1) < 0.5);
+    const fallen = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.78, 7, 12), sm()); fallen.rotation.z = Math.PI / 2; fallen.position.set(cx + 4, groundH(cx + 4, cz + 11) + 0.8, cz + 11); g.add(fallen);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(13, 0.8, 11, 3, 1, 3), sm()); roof.position.set(cx - 3, groundH(cx, cz) + 6.4, cz); roof.rotation.set(0.32, 0.2, 0.17); g.add(roof);
+    rubble(cx, cz, 13, 26);
   })();
 
-  // leaning ruined watchtower
+  // ---- derelict watchtower: braced steel frame, sagging deck, broken roof ----
   (function tower() {
     const tx = 50, tz = -14, t = new THREE.Group();
-    const legGeo = new THREE.BoxGeometry(0.8, 16, 0.8);
-    for (const [dx, dz] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) { const l = new THREE.Mesh(legGeo, rust); l.position.set(dx, 8, dz); t.add(l); }
-    const cab = new THREE.Mesh(new THREE.BoxGeometry(9, 4, 9), mossy); cab.position.y = 16; t.add(cab);
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(7, 3, 4), rust); roof.position.y = 19.5; roof.rotation.y = Math.PI / 4; t.add(roof);
-    t.position.set(tx, groundH(tx, tz), tz); t.rotation.z = 0.06; g.add(t);
+    const legGeo = new THREE.CylinderGeometry(0.35, 0.4, 16, 6);
+    const legs = [[-3, -3], [3, -3], [-3, 3], [3, 3]];
+    legs.forEach(([dx, dz]) => { const l = new THREE.Mesh(legGeo, rust); l.position.set(dx, 8, dz); l.rotation.set(rand(-0.02, 0.02), 0, rand(-0.02, 0.02)); t.add(l); });
+    // X-bracing between legs
+    for (let lvl = 4; lvl <= 12; lvl += 4) for (const [a, b] of [[0, 1], [1, 3], [3, 2], [2, 0]]) { const A = legs[a], B = legs[b]; const mx = (A[0] + B[0]) / 2, mz = (A[1] + B[1]) / 2; const br = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, Math.hypot(A[0] - B[0], A[1] - B[1])), rust); br.position.set(mx, lvl, mz); br.lookAt(B[0], lvl + 2, B[1]); t.add(br); }
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(9, 0.6, 9), rust); deck.position.y = 15.6; t.add(deck);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(7, 3.4, 7), moss); cab.position.y = 17.6; t.add(cab);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(6, 2.6, 4), rust); roof.position.y = 20.6; roof.rotation.set(0.12, Math.PI / 4, 0.06); t.add(roof);
+    t.position.set(tx, groundH(tx, tz), tz); t.rotation.z = 0.05; g.add(t);
   })();
 
-  // broken electric perimeter fence: leaning posts + three sagging wires
+  // ---- broken electric perimeter fence: leaning posts + three sagging wires ----
   (function fence() {
-    const postGeo = new THREE.BoxGeometry(0.4, 6, 0.4), pts = [];
+    const postGeo = new THREE.CylinderGeometry(0.16, 0.2, 6, 6), pts = [];
     for (let i = 0; i < 11; i++) {
       const x = -38 + i * 7.6, z = -46 + Math.sin(i * 0.6) * 7;
-      const p = new THREE.Mesh(postGeo, rust); p.rotation.z = (i % 4 === 0) ? rand(-0.3, 0.3) : 0; place(p, x, z, 3);
+      const p = new THREE.Mesh(postGeo, rust); p.position.set(x, groundH(x, z) + 3, z); p.rotation.z = (i % 4 === 0) ? rand(-0.35, 0.35) : rand(-0.05, 0.05); g.add(p);
       pts.push([x, groundH(x, z) + 5, z]);
     }
     const wireMat = new THREE.LineBasicMaterial({ color: 0x3a3f3a });
-    for (const yo of [0, -1.6, -3.2]) {
-      const v = []; for (const [x, y, z] of pts) v.push(x, y + yo, z);
-      const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
-      g.add(new THREE.Line(lg, wireMat));
-    }
+    for (const yo of [0, -1.6, -3.2]) { const v = []; for (const [x, y, z] of pts) v.push(x, y + yo + Math.sin(x) * 0.3, z); const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); g.add(new THREE.Line(lg, wireMat)); }
   })();
 
-  // abandoned tour jeep
+  // ---- abandoned tour jeep ----
   (function jeep() {
-    const jx = 18, jz = 16, ry = 0.6, j = new THREE.Group();
-    j.add(new THREE.Mesh(new THREE.BoxGeometry(5, 1.6, 2.4), new THREE.MeshStandardMaterial({ color: 0xb8b29a, roughness: 0.9, flatShading: true })));
-    const cab = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.4, 2.2), new THREE.MeshStandardMaterial({ color: 0x9a3530, roughness: 0.9, flatShading: true }));
-    cab.position.set(-0.4, 1.3, 0); j.add(cab);
-    const wgeo = new THREE.CylinderGeometry(0.7, 0.7, 0.5, 12), wm = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 1 });
+    const jx = 18, jz = 16, j = new THREE.Group();
+    j.add(new THREE.Mesh(new THREE.BoxGeometry(5, 1.5, 2.4), new THREE.MeshStandardMaterial({ color: 0xa7a48f, roughness: 0.95, flatShading: true })));
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.3, 2.2), new THREE.MeshStandardMaterial({ color: 0x8a322c, roughness: 0.95, flatShading: true })); cab.position.set(-0.4, 1.25, 0); j.add(cab);
+    // roll bars
+    const bar = new THREE.CylinderGeometry(0.08, 0.08, 2.4, 6);
+    for (const bx of [-0.6, 0.8]) { const b = new THREE.Mesh(bar, rust); b.rotation.x = Math.PI / 2; b.position.set(bx, 2.1, 0); j.add(b); }
+    const wgeo = new THREE.CylinderGeometry(0.72, 0.72, 0.5, 14), wm = new THREE.MeshStandardMaterial({ color: 0x161616, roughness: 1 });
     for (const [dx, dz] of [[-1.8, -1.1], [1.8, -1.1], [-1.8, 1.1], [1.8, 1.1]]) { const w = new THREE.Mesh(wgeo, wm); w.rotation.x = Math.PI / 2; w.position.set(dx, -0.5, dz); j.add(w); }
-    j.position.set(jx, groundH(jx, jz) + 1.2, jz); j.rotation.y = ry; g.add(j);
+    j.position.set(jx, groundH(jx, jz) + 1.15, jz); j.rotation.set(0.04, 0.6, 0.05); g.add(j);
   })();
 
-  // scattered ruin blocks
-  for (let i = 0; i < 14; i++) {
+  // ---- scattered ruins across the valley: broken columns, wall fragments, rubble ----
+  for (let i = 0; i < 9; i++) {
     const x = rand(-half + 16, half - 16), z = rand(-half + 16, half - 16);
-    if (Math.hypot(x, z) < 14 || Math.hypot(x, z) > 60) continue;   // keep spawn clear, stay off the mountains
-    const s = rand(1.2, 3);
-    const blk = new THREE.Mesh(new THREE.BoxGeometry(s * rand(1, 2), s, s * rand(1, 2)), i % 2 ? mossy : concrete);
-    place(blk, x, z, s * 0.4, rand(0, 6)); blk.rotation.x = rand(-0.18, 0.18); blk.rotation.z = rand(-0.18, 0.18);
+    if (Math.hypot(x, z) < 16 || Math.hypot(x, z) > 60) continue;
+    const r = rand(0, 1);
+    if (r < 0.4) column(x, z, rand(3, 7), true);
+    else if (r < 0.7) brokenWall(x, z, rand(5, 11), rand(2.5, 5), rand(0, 6));
+    else rubble(x, z, rand(2, 4), 14);
   }
 
+  g.userData.gateGrp = gateGrp; g.userData.centreGrp = centreGrp;
   scene.add(g);
+}
+
+// swap the procedural gate/centre for photoreal .glb ruin models once they stream in
+function buildRuinModels() {
+  if (!ruinsGroup) return;
+  for (const [key, grpKey] of [["gate", "gateGrp"], ["centre", "centreGrp"]]) {
+    const r = RUINS[key], tmpl = MODELS[r.url];
+    if (!tmpl) continue;                                  // model missing/failed -> keep procedural
+    const grp = ruinsGroup.userData[grpKey];
+    if (grp && grp.parent) grp.parent.remove(grp);        // drop the procedural fallback
+    const m = fitModel(tmpl.clone(true), r.h, r.yaw);
+    m.position.set(r.x, groundH(r.x, r.z), r.z);
+    scene.add(m);
+  }
 }
 
 // player — real character model if loaded, else amber capsule fallback. Re-callable to swap in the
