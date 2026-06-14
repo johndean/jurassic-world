@@ -76,6 +76,7 @@ const FOLIAGE = {
   tree: "./assets/models/tree.glb",
   fern: "./assets/models/fern.glb",
 };
+const HELI_MODEL = "./assets/models/helicopter.glb";   // realistic evac chopper (streams in; procedural fallback)
 // photoreal hero ruin structures (streamed .glb); empty until generated. {url, x, z, targetH, yaw}
 const RUINS = {
   gate: { url: "./assets/models/ruin_gate.glb", x: 0, z: -56, h: 12, yaw: 0 },
@@ -123,7 +124,7 @@ async function preloadModels() {
   const creatures = [...new Set([PLAYER_MODEL, ...ROLES.map(r => r.model), ...Object.values(SPECIES).map(s => s.modelPath)].filter(Boolean))];
   await Promise.all(creatures.map(async p => { MODELS[p] = await loadModel(p); reskinDinos(p); }));
   if (!playerMixer) buildPlayer();
-  const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.fern].filter(Boolean))];
+  const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.fern, HELI_MODEL].filter(Boolean))];
   await Promise.all(foliage.map(async p => { MODELS[p] = await loadModel(p); }));
   buildFoliage();
   // hero ruin structures (photoreal .glb) — replace the procedural gate/centre once they land
@@ -668,6 +669,7 @@ function bearingTo(ax, az, bx, bz) {
 let hitCooldownVisual = 0, stepPhase = 0;
 function updatePlayer(dt) {
   const P = S.player, cfg = BIOME.player;
+  if (evacCine()) return;   // evac cinematic drives the player (boarding); ignore input
   // intent from keyboard + touch/gamepad (input.mx/mz already set for touch/pad)
   let ix = input.mx, iz = input.mz;
   if (keys.has("KeyW") || keys.has("ArrowUp")) iz -= 1;
@@ -742,6 +744,7 @@ function lerp2angle(a, b) { let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.P
 
 function damagePlayer(amount, bySpecies) {
   const P = S.player; if (!P.alive) return;
+  if (evacCine()) return;   // invulnerable once boarding the chopper / lifting off
   P.hp = Math.max(0, P.hp - amount);
   hitCooldownVisual = 3.0; flash(); Audio.hit();
   if (P.hp <= 0) { P.alive = false; S.killedBy = bySpecies; endRun(false); }
@@ -1098,19 +1101,80 @@ function tryCall() {
   if (!S.extraction.inRange) { toast(STR.reachBeaconFirst); return; }
   S.extraction.called = true; S.player.noise = 1; spawnTimer = 0;
   Audio.beacon(true); Audio.roar(); toast(STR.evacIncoming);
+  startEvac();   // the chopper flies in and hovers at the beacon for the duration of the hold
 }
 function updateExtraction(dt) {
   if (!S.extraction.called) return;
   S.extraction.hold += dt;
   if ((S.extraction.hold | 0) !== (S._lastBeep | 0)) { S._lastBeep = S.extraction.hold; if ((S.extraction.hold | 0) % 3 === 0) Audio.beacon(false); }
-  if (S.extraction.hold >= S.extraction.holdMax) { S.extraction.won = true; endRun(true); }
+  if (S.extraction.hold >= S.extraction.holdMax && !S.extraction.won) {
+    S.extraction.won = true;
+    if (evac) { evac.phase = "boarding"; evac.t = 0; }   // board the hovering chopper, then lift off (cinematic)
+    else endRun(true);
+  }
 }
+
+/* ============================================ helicopter evac cinematic === *
+ * On "call extraction" a real chopper flies in and hovers at the beacon. On a
+ * successful hold the player boards, it lifts off, and the camera rises to an
+ * aerial fly-over of the whole park before the EXTRACTED screen. */
+let evac = null;   // { phase: incoming|hover|boarding|liftoff, t, heli:{group,rotor}, hx, hz, hoverY, done }
+
+function buildHeli() {
+  const g = new THREE.Group();
+  let rotor = null;
+  if (MODELS[HELI_MODEL]) {
+    g.add(fitModel(MODELS[HELI_MODEL].clone(true), 4.6, 0));   // realistic model, ~4.6m tall
+  } else {                                                     // procedural fallback (boxy but functional)
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x49513f, roughness: 0.85, metalness: 0.2, flatShading: true });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x20231e, roughness: 1 });
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(1.5, 3.2, 6, 12), bodyMat); body.rotation.z = Math.PI / 2; body.position.y = 0.6; g.add(body);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(5, 0.5, 0.5), bodyMat); tail.position.set(-3.8, 1.1, 0); g.add(tail);
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.2, 0.4), bodyMat); fin.position.set(-6, 1.5, 0); g.add(fin);
+    for (const sx of [-1, 1]) { const sk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.2, 6), dark); sk.rotation.x = Math.PI / 2; sk.position.set(0.3, -0.9, sx * 1.1); g.add(sk); }
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.8, 6), dark); mast.position.y = 2.4; g.add(mast);
+  }
+  // spinning rotor disc (motion-blur look) — sells a running chopper for model + fallback alike
+  rotor = new THREE.Mesh(new THREE.CircleGeometry(6.8, 36), new THREE.MeshBasicMaterial({ color: 0x0c0e0c, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
+  rotor.rotation.x = -Math.PI / 2; rotor.position.y = 2.7; g.add(rotor);
+  scene.add(g);
+  return { group: g, rotor };
+}
+function startEvac() {
+  if (evac) return;
+  const bx = S.extraction.beacon.x, bz = S.extraction.beacon.z;
+  const heli = buildHeli();
+  heli.group.position.set(bx + 45, 115, bz + 45);          // enters high + far
+  evac = { phase: "incoming", t: 0, heli, hx: bx, hz: bz, hoverY: groundH(bx, bz) + 9, done: false };
+}
+function updateEvac(dt) {
+  if (!evac) return;
+  const g = evac.heli.group; evac.t += dt;
+  if (evac.heli.rotor) evac.heli.rotor.rotation.z += dt * 42;            // spin rotor
+  const bx = evac.hx, bz = evac.hz;
+  if (evac.phase === "incoming") {
+    g.position.lerp(tmp.set(bx + 7, evac.hoverY, bz + 7), Math.min(1, dt * 0.6));
+    if (g.position.distanceTo(tmp.set(bx + 7, evac.hoverY, bz + 7)) < 1.5) evac.phase = "hover";
+  } else if (evac.phase === "hover") {
+    g.position.y = evac.hoverY + Math.sin(evac.t * 1.5) * 0.3;
+  } else if (evac.phase === "boarding") {
+    g.position.y = evac.hoverY + Math.sin(evac.t * 1.5) * 0.3;
+    const P = S.player;                                                   // walk under the chopper, then board
+    P.x += (bx - P.x) * Math.min(1, dt * 2); P.z += (bz - P.z) * Math.min(1, dt * 2); P.gait = "walk";
+    if (playerMesh) playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z);
+    if (evac.t > 1.6) { if (playerMesh) playerMesh.visible = false; evac.phase = "liftoff"; evac.t = 0; Audio.beacon(true); }
+  } else if (evac.phase === "liftoff") {
+    g.position.y += dt * 9; g.position.x += dt * 5; g.position.z -= dt * 2;   // climb + fly away
+    if (evac.t > 5.2 && !evac.done) { evac.done = true; endRun(true); }
+  }
+}
+function clearEvac() { if (evac) { scene.remove(evac.heli.group); evac = null; } }
 
 /* ================================================== run lifecycle ======== */
 function startRun() {
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = [];
-  clearRemotes();
+  clearRemotes(); clearEvac();
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
   Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole });
@@ -1338,6 +1402,13 @@ function flash() { const f = $("flash"); f.style.transition = "none"; f.style.op
 /* ====================================================== camera =========== */
 function updateCamera() {
   const P = S.player;
+  if (evacCine()) {   // evac: rise high and recentre to keep visual over the whole park while the chopper climbs away
+    const g = evac.heli.group, prog = evac.phase === "liftoff" ? Math.min(1, evac.t / 5.2) : 0;
+    camera.position.lerp(tmp.set((evac.hx + 18) * (1 - prog), 26 + prog * 112, (evac.hz + 60) * (1 - prog) + 72 * prog), 0.04);
+    camera.lookAt(g.position.x * (1 - prog), g.position.y * (1 - prog) + 6 * prog, g.position.z * (1 - prog));
+    if (beaconRing) beaconRing.rotation.z += 0.08;
+    return;
+  }
   const tx = P.x, ty = groundH(P.x, P.z) + 1.5, tz = P.z;
   const cp = Math.cos(cam.pitch), d = cam.dist * cp;
   let cx = tx - Math.sin(cam.yaw) * d, cz = tz - Math.cos(cam.yaw) * d, cy = ty + cam.height + Math.sin(cam.pitch) * cam.dist * -1 + cam.dist * cp * 0.0;
@@ -1389,9 +1460,11 @@ function simulate(dt) {
   updateSpawnDirector(dt, S.player);
   updateThreat(dt, S.player);
   updateExtraction(dt);
+  updateEvac(dt);
   Audio.tickHeartbeat(dt, S.player.fear);
   if (Net.on) netTick(dt);
 }
+const evacCine = () => evac && (evac.phase === "boarding" || evac.phase === "liftoff");
 
 /* ============================================== co-op multiplayer ======== *
  * Player-sync: shared room + shared world seed; each player sees the others as
