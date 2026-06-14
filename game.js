@@ -505,8 +505,8 @@ function buildWorld() {
 
   // river: one translucent water plane; the terrain occludes it everywhere except the carved channel
   const water = new THREE.Mesh(new THREE.PlaneGeometry(m.size, m.size),
-    new THREE.MeshStandardMaterial({ color: 0x2f5358, roughness: 0.22, metalness: 0.25, transparent: true, opacity: 0.85 }));
-  water.rotation.x = -Math.PI / 2; water.position.y = -1.1; scene.add(water);
+    new THREE.MeshStandardMaterial({ color: 0x274a50, roughness: 0.18, metalness: 0.3, transparent: true, opacity: 0.9 }));
+  water.rotation.x = -Math.PI / 2; water.position.y = WATER_Y; scene.add(water);
 
   // boundary walls (charcoal slabs) — soft fence of the valley
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x24282a, roughness: 1, flatShading: true });
@@ -1047,14 +1047,17 @@ function pollGamepad() {
 /* ===================================================== ground & helpers === */
 // terrain height: rolling valley floor (>=~0), perimeter mountain ring, and a winding carved river.
 // Everything (ground mesh, foliage, rocks, dinos, player) is placed by this single function.
+const RIVER_HALF = 17;                                             // navigable channel half-width (wide enough for the patrol boat)
+const WATER_Y = -0.55;                                             // river surface height (boat rides on this)
 function riverCenter(x) { return 48 + Math.sin(x * 0.02) * 28; }   // river centerline z(x)
+function riverSlope(x) { return Math.cos(x * 0.02) * 28 * 0.02; }  // d(riverCenter)/dx — used to align the boat to the current
 function groundH(x, z) {
   const r = Math.hypot(x, z);
   let h = 1.8 + Math.sin(x * 0.05) * Math.cos(z * 0.045) * 1.3 + Math.sin(x * 0.13 + z * 0.09) * 0.5;  // rolling hills
   const e = Math.max(0, (r - 70) / 48);
   h += e * e * 32 * (0.75 + 0.25 * Math.sin(x * 0.07) * Math.cos(z * 0.06));   // mountains ring the valley
   const dRiver = Math.abs(z - riverCenter(x));
-  if (dRiver < 11) h -= (1 - dRiver / 11) * 4.0;   // carve the riverbed
+  if (dRiver < RIVER_HALF) { const t = dRiver / RIVER_HALF; h -= (1 - t * t) * 6.0; }   // wide, smooth-banked navigable channel
   return h;
 }
 function dist2(ax, az, bx, bz) { const dx = ax - bx, dz = az - bz; return dx * dx + dz * dz; }
@@ -1860,8 +1863,8 @@ function clearEvac() { if (evac) { scene.remove(evac.heli.group); evac = null; }
  * -> trouble -> MAYDAY -> spin -> crash -> black -> wake at the burning wreck ->
  * mission update -> jungle silence + distant roar -> hand control to the player.
  * Skippable; auto-skips on later runs in the same session (you've seen it). */
-let intro = null, wreckMesh = null, introSeen = false, introProp = null;
-function clearIntroProp() { if (introProp) { scene.remove(introProp); introProp = null; } }   // parked intro vehicle (jeep/boat) left in-world
+let intro = null, wreckMesh = null, introSeen = false, introProp = null, introExtra = [];
+function clearIntroProp() { if (introProp) { scene.remove(introProp); introProp = null; } for (const e of introExtra) scene.remove(e); introExtra = []; }   // parked intro vehicle + props (jeep/boat/dock) left in-world
 const introCine = () => intro !== null;                  // input locked while the intro plays
 const INTRO_CAM_END = 21;                                // after the crash the normal (wreck) camera takes over
 // ── per-mission insertion intros (data-driven; see design/MISSION_INTROS.md) ──
@@ -1891,7 +1894,7 @@ const INTRO_RADIO_JEEP = [   // GHOSTS OF SECTOR 9 — ranger jeep-convoy (chatt
 const INTRO_RADIO_BOAT = [   // OPERATION BLACKOUT — armored river-boat insertion (engineer dispatch, dawn mist)
   { t: 1.0, h: `<span class="rc">GRID CONTROL:</span> Patrol boat's the only way in — the roads are gone. Keep it quiet.`, say: "Patrol boat's the only way in — the roads are gone. Dawn approach, keep it quiet.", voice: { rate: 1.0, pitch: 0.97 }, clip: "boat_approach" },
   { t: 5.0, h: `<span class="rc">GRID CONTROL:</span> Three stations — Alpha, Bravo, Charlie. Every generator you wake draws them in.`, say: "Three stations: Alpha, Bravo, and Charlie. Every generator you wake will draw them right to you.", voice: { rate: 1.0, pitch: 0.98 }, clip: "boat_stations" },
-  { t: 9.0, h: `<span class="rc">GRID CONTROL:</span> Channel's blocked — cut through the old maintenance tunnel. Watch the water.`, say: "Channel's blocked — cut through the old maintenance tunnel. Watch the water.", voice: { rate: 1.05, pitch: 1.0 }, clip: "boat_tunnel" },
+  { t: 9.0, h: `<span class="rc">GRID CONTROL:</span> Eyes on the banks — they own this river now. Keep it slow and quiet.`, say: "Eyes on the banks — they own this river now. Keep it slow, and keep it quiet.", voice: { rate: 1.04, pitch: 1.0 }, clip: "boat_tunnel" },
   { t: 13.0, h: `<span class="rc">GRID CONTROL:</span> Dock ahead. Get the grid back online and get out before they reach you.`, say: "Dock ahead. Get the grid back online, and get out before they reach you.", voice: { rate: 1.04, pitch: 0.99 }, clip: "boat_dock" },
 ];
 const INTRO_RADIO_MONO = [   // THE LAST SAMPLE — abandoned monorail arrival (transit VO → power loss → facility under attack)
@@ -2338,64 +2341,123 @@ function endIntroAtOrigin(msg) {                          // continuous hand-off
 }
 
 /* ── OPERATION BLACKOUT · armored river-boat insertion (dawn mist → tunnel → dock) ── */
-function buildBoat() {                                    // armored riverine patrol boat (bow = local +x)
+function buildBoat() {                                    // detailed armored riverine patrol boat (bow = local +x, rides on the river)
   const b = new THREE.Group();
-  const hullMat = new THREE.MeshStandardMaterial({ color: 0x3f4a3c, roughness: 0.85, metalness: 0.2 });
-  const deckMat = new THREE.MeshStandardMaterial({ color: 0x2c312a, roughness: 0.92, metalness: 0.12 });
-  const trimMat = new THREE.MeshStandardMaterial({ color: 0x20231d, roughness: 0.9, metalness: 0.25 });
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x1b2a2c, roughness: 0.24, metalness: 0.5, transparent: true, opacity: 0.6 });
-  // foreground water patch (rides with the boat; heavy mist hides the rest of the valley)
-  const water = new THREE.Mesh(new THREE.CircleGeometry(17, 40), new THREE.MeshStandardMaterial({ color: 0x1d3a4e, roughness: 0.3, metalness: 0.2, transparent: true, opacity: 0.92 }));
-  water.rotation.x = -Math.PI / 2; water.position.y = -0.25; b.add(water);
-  const hull = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.85, 2.6), hullMat); hull.position.y = 0.35; b.add(hull);
-  const prow = new THREE.Mesh(new THREE.ConeGeometry(1.35, 1.7, 4), hullMat); prow.rotation.z = -Math.PI / 2; prow.rotation.y = Math.PI / 4; prow.position.set(3.95, 0.4, 0); b.add(prow);
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.16, 2.3), deckMat); deck.position.y = 0.8; b.add(deck);
-  for (const sz of [1.2, -1.2]) { const gw = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.55, 0.18), hullMat); gw.position.set(-0.1, 1.05, sz); b.add(gw); }
-  const house = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.3, 2.0), hullMat); house.position.set(-1.9, 1.55, 0); b.add(house);
-  const wglass = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 1.7), glassMat); wglass.position.set(-1.02, 1.78, 0); b.add(wglass);
-  for (const sz of [0.95, -0.95]) { const sg = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 0.05), glassMat); sg.position.set(-1.9, 1.8, sz); b.add(sg); }
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.12, 2.1), trimMat); roof.position.set(-1.9, 2.24, 0); b.add(roof);
-  // bow searchlight (forward = +x = world −z), cuts the tunnel dark
-  const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.16, 12), new THREE.MeshStandardMaterial({ color: 0xfff3d0, emissive: 0xfff3d0, emissiveIntensity: 1.5, roughness: 0.3 }));
-  lamp.rotation.z = Math.PI / 2; lamp.position.set(0.5, 1.75, 0); b.add(lamp);
-  const beam = new THREE.SpotLight(0xfff0c4, 5, 42, 0.5, 0.45, 1.2); beam.position.set(0.6, 1.75, 0); beam.target.position.set(16, 0.6, 0); b.add(beam); b.add(beam.target);
-  const ramp = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.4, 2.0), trimMat); ramp.position.set(2.7, 1.0, 0); b.add(ramp);   // bow ramp (up; drops at dock)
-  for (const px of [-3, -1, 1, 2.6]) for (const sz of [1.2, -1.2]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6), trimMat); post.position.set(px, 1.3, sz); b.add(post); }
+  const hullMat = new THREE.MeshStandardMaterial({ color: 0x3a4636, roughness: 0.8, metalness: 0.25 });
+  const hullDk = new THREE.MeshStandardMaterial({ color: 0x2b3329, roughness: 0.85, metalness: 0.3 });
+  const deckMat = new THREE.MeshStandardMaterial({ color: 0x4a4f44, roughness: 0.92, metalness: 0.15 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0x20231d, roughness: 0.9, metalness: 0.35 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x12201f, roughness: 0.18, metalness: 0.6, transparent: true, opacity: 0.6 });
+  const metalMat = new THREE.MeshStandardMaterial({ color: 0x6a6e68, roughness: 0.5, metalness: 0.7 });
+  // hull: topsides + V-bottom meeting at a keel, armored chine rubrails
+  const topside = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.7, 2.7), hullMat); topside.position.y = 0.5; b.add(topside);
+  for (const s of [1, -1]) { const vb = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.5, 1.5), hullDk); vb.position.set(0, 0.05, s * 0.62); vb.rotation.x = s * 0.5; b.add(vb); }
+  const keel = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.22, 0.3), hullDk); keel.position.y = -0.22; b.add(keel);
+  for (const s of [1, -1]) { const rb = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.12, 0.14), trimMat); rb.position.set(0, 0.78, s * 1.36); b.add(rb); }
+  const prow = new THREE.Mesh(new THREE.ConeGeometry(1.4, 1.9, 4), hullMat); prow.rotation.z = -Math.PI / 2; prow.rotation.y = Math.PI / 4; prow.position.set(4.0, 0.45, 0); b.add(prow);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.16, 2.4), deckMat); deck.position.y = 0.86; b.add(deck);
+  for (const s of [1, -1]) { const gw = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.62, 0.18), hullMat); gw.position.set(-0.1, 1.16, s * 1.22); b.add(gw); }
+  // pilot house (aft) with wrap windows + roof
+  const house = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.4, 2.1), hullMat); house.position.set(-1.7, 1.66, 0); b.add(house);
+  const houseRoof = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 2.25), trimMat); houseRoof.position.set(-1.7, 2.42, 0); b.add(houseRoof);
+  const wf = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 1.8), glassMat); wf.position.set(-0.72, 1.9, 0); b.add(wf);
+  for (const s of [1, -1]) { const ws = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.55, 0.05), glassMat); ws.position.set(-1.7, 1.92, s * 1.02); b.add(ws); }
+  // armored bow ramp (raised; drops at the dock)
+  const ramp = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.5, 2.1), hullMat); ramp.position.set(2.9, 1.05, 0); ramp.rotation.z = 0.12; b.add(ramp);
+  // pintle .50-cal gun mount on the bow deck
+  const mount = new THREE.Group();
+  mount.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.7, 8), metalMat), { position: new THREE.Vector3(0, 0.35, 0) }));
+  mount.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.22, 0.22), trimMat), { position: new THREE.Vector3(0, 0.72, 0) }));
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 8), trimMat); barrel.rotation.z = Math.PI / 2; barrel.position.set(0.7, 0.72, 0); mount.add(barrel);
+  mount.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.7), hullDk), { position: new THREE.Vector3(-0.1, 0.78, 0) }));
+  mount.position.set(1.5, 0.94, 0); b.add(mount);
+  // searchlight on the house roof (real spot, forward)
+  const lampHead = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.18, 14), new THREE.MeshStandardMaterial({ color: 0xfff3d0, emissive: 0xfff3d0, emissiveIntensity: 1.6, roughness: 0.3 }));
+  lampHead.rotation.z = Math.PI / 2; lampHead.position.set(-0.9, 2.6, 0); b.add(lampHead);
+  const beam = new THREE.SpotLight(0xfff0c4, 5, 50, 0.45, 0.5, 1.1); beam.position.set(-0.8, 2.6, 0); beam.target.position.set(20, -0.5, 0); b.add(beam); b.add(beam.target);
+  // antenna whip, life ring, cleats, stern engine + wake foam
+  b.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 2.0, 4), trimMat), { position: new THREE.Vector3(-2.5, 3.0, 0.6) }));
+  const lr = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.09, 8, 16), new THREE.MeshStandardMaterial({ color: 0xd6562f, roughness: 0.8 })); lr.position.set(-2.7, 1.3, 1.0); lr.rotation.y = Math.PI / 2; b.add(lr);
+  for (const px of [3.0, -3.0]) for (const s of [1, -1]) { const cl = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.22, 6), metalMat); cl.position.set(px, 0.97, s * 1.15); b.add(cl); }
+  b.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 1.6), trimMat), { position: new THREE.Vector3(-3.3, 0.9, 0) }));
+  const wake = new THREE.Mesh(new THREE.CircleGeometry(3.4, 24, 0, Math.PI), new THREE.MeshBasicMaterial({ color: 0xcfe0dc, transparent: true, opacity: 0.3, depthWrite: false }));
+  wake.rotation.x = -Math.PI / 2; wake.rotation.z = -Math.PI / 2; wake.position.set(-5.4, -0.18, 0); b.add(wake); b.userData.wake = wake;
   b.userData.beam = beam;
   return b;
 }
+function buildDock(dx) {                                  // a proper jetty: planks on posts spanning channel→bank, perpendicular to the river
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x5b4a36, roughness: 0.95 });
+  const woodDk = new THREE.MeshStandardMaterial({ color: 0x39302a, roughness: 1 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x4a4f4a, roughness: 0.6, metalness: 0.6 });
+  const rc = riverCenter(dx), len = 18, cz = rc + 9.5;     // spans ~rc+0.5 .. rc+18.5
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.28, len), wood));
+  for (let i = 0; i < 11; i++) { const pl = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.3, 0.12), woodDk); pl.position.set(0, 0.01, -len / 2 + 0.6 + i * (len - 1.2) / 10); g.add(pl); }
+  for (let zz = -len / 2 + 1; zz <= len / 2 - 1; zz += 3) for (const px of [-1.55, 1.55]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 4.2, 8), woodDk); post.position.set(px, -2.0, zz); g.add(post); }
+  for (const px of [-1.7, 1.7]) { g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, len), woodDk), { position: new THREE.Vector3(px, 0.7, 0) }));
+    for (let zz = -len / 2 + 1; zz <= len / 2 - 1; zz += 2.4) { const rp = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.7, 0.08), woodDk); rp.position.set(px, 0.35, zz); g.add(rp); } }
+  for (const px of [-1.3, 1.3]) { const bol = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.7, 8), metal); bol.position.set(px, 0.5, -len / 2 + 0.7); g.add(bol); }
+  g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.6, 6), metal), { position: new THREE.Vector3(1.6, 1.3, -len / 2 + 0.7) }));
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), new THREE.MeshStandardMaterial({ color: 0xffe6a8, emissive: 0xffd070, emissiveIntensity: 1.3 })); lamp.position.set(1.6, 2.5, -len / 2 + 0.7); g.add(lamp);
+  g.add(Object.assign(new THREE.PointLight(0xffd9a0, 1.1, 18), { position: new THREE.Vector3(1.6, 2.5, -len / 2 + 0.7) }));
+  for (const c of [[-1, 5.5], [1.1, 6.4]]) { const cr = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.9, 1.0), woodDk); cr.position.set(c[0], 0.6, c[1]); g.add(cr); }
+  g.position.set(dx, 1.4, cz);
+  g.userData.standZ = cz + len / 2 + 1.6;                 // landward end → solid ground
+  return g;
+}
+function positionBoatOnRiver(b, x, y) {                   // sit the boat on the channel centerline, bow aligned to the current
+  const slope = riverSlope(x); b.position.set(x, y, riverCenter(x)); b.rotation.y = Math.atan2(-slope, 1);
+}
+function placeRiverDinos(startX) {                         // stage herbivores on the banks — the Lost World reveal as you motor past
+  const herb = dinos.filter(d => d.alive && d.sp && d.sp.diet !== "carnivore");
+  const spots = [[-42, 15], [-18, -15], [6, 16], [-56, -14], [-30, 14]];
+  for (let i = 0; i < Math.min(herb.length, spots.length); i++) {
+    const d = herb[i], sx = spots[i][0], sz = riverCenter(sx) + spots[i][1];
+    d.x = sx; d.z = sz; if (d.mesh) d.mesh.position.set(sx, groundH(sx, sz), sz);
+  }
+}
 function startIntroBoat() {
-  const b = buildBoat(); const WY = 1.0;
-  b.position.set(0, WY, 64); b.rotation.y = Math.PI / 2;   // bow (+x) → world −z (direction of travel)
-  seatTroopers(b, [[-0.4, 1.15, 0.7], [-0.4, 1.15, -0.7], [1.3, 1.18, 0]], Math.PI / 2, 0.8);
+  const b = buildBoat(); const startX = -64;
+  positionBoatOnRiver(b, startX, WATER_Y);
+  seatTroopers(b, [[-1.7, 1.0, 0.7], [-1.7, 1.0, -0.7], [0.3, 1.06, 0.6], [0.3, 1.06, -0.6]], Math.PI / 2, 0.82);
   scene.add(b); introProp = b;
-  intro = { kind: "boat", t: 0, phase: "river", boat: b, wy: WY, line: -1, shake: 0, camActive: true };
-  introOpen("Jurassic Survival · Power Restoration · Sector grid");
+  intro = { kind: "boat", t: 0, phase: "river", boat: b, bx: startX, dockX: 6, line: -1, shake: 0.04, camActive: true };
+  introOpen("Jurassic Survival · Power Restoration · River insertion");
+  intro._prevFog = scene.fog; scene.fog = new THREE.FogExp2(new THREE.Color(0x8aa0a4), 0.02);   // thick, mystic Lost World haze
+  const dock = buildDock(intro.dockX); scene.add(dock); introExtra.push(dock); intro.dock = dock;
+  placeRiverDinos(startX);
 }
 function updateIntroBoat(dt) {
   if (!intro) return;
   intro.t += dt; const T = intro.t, b = intro.boat, tint = $("introTint"), cap = $("introCap");
   radioStep(INTRO_RADIO_BOAT);
-  if (b) { b.position.y = intro.wy + Math.sin(T * 1.6) * 0.06; b.rotation.z = Math.sin(T * 1.1) * 0.02; }
-  const driveTo = (tz, rate) => { if (b) b.position.z += (tz - b.position.z) * dt * rate; };
-  if (T < 6) {                            // 1 · dawn approach up the canyon
-    intro.phase = "river"; intro.shake = 0.05; driveTo(34, 0.5);
-    tint.style.background = "#3a4a52"; tint.style.opacity = "0.32"; cap.style.opacity = T > 4.5 ? "0" : "1";
-  } else if (T < 10) {                    // 2 · detour through the flooded maintenance tunnel (flickering dark)
-    intro.phase = "tunnel"; intro.shake = 0.06; driveTo(20, 0.55);
-    tint.style.background = "#080b0e"; tint.style.opacity = (0.34 + Math.abs(Math.sin(T * 9)) * 0.32).toFixed(2);
-  } else if (T < 14) {                    // 3 · emerge at the ruined dock
-    intro.phase = "dock"; intro.shake = 0.04; driveTo(9, 1.0);
-    tint.style.background = "#2a3138"; tint.style.opacity = "0.26";
-  } else { if (intro.boat) scene.remove(intro.boat); endIntroBoat(); }
+  const near = intro.dockX - intro.bx, speed = near < 10 ? 3.5 : 7.5;     // ease in to the dock
+  intro.bx = Math.min(intro.dockX, intro.bx + speed * dt);
+  positionBoatOnRiver(b, intro.bx, WATER_Y + Math.sin(T * 1.5) * 0.05);
+  b.rotation.z = Math.sin(T * 1.0) * 0.025;
+  if (b.userData.wake) b.userData.wake.material.opacity = 0.22 + Math.abs(Math.sin(T * 4)) * 0.12;
+  const prog = (intro.bx - (-64)) / (intro.dockX - (-64));
+  tint.style.background = "#5a6e72"; tint.style.opacity = (0.34 - prog * 0.12).toFixed(2);   // mist thins as you arrive
+  cap.style.opacity = T > 4.5 ? "0" : "1";
+  intro.phase = prog > 0.86 ? "dock" : "river";
+  if (intro.bx >= intro.dockX - 0.05) { if (intro.boat) scene.remove(intro.boat); endIntroBoat(); }
 }
 function updateIntroCameraBoat() {
   const b = intro.boat; if (!b) return;
-  camera.position.lerp(tmp.set(b.position.x - 1.5, b.position.y + 2.2, b.position.z + 6.5), 0.06);
-  camera.lookAt(b.position.x + 2.5, b.position.y + 1.1, b.position.z - 8);
+  const slope = riverSlope(intro.bx), inv = 1 / Math.hypot(1, slope), vx = inv, vz = slope * inv;   // unit travel dir
+  camera.position.lerp(tmp.set(b.position.x - vx * 8.5, b.position.y + 3.1, b.position.z - vz * 8.5), 0.06);
+  camera.lookAt(b.position.x + vx * 6, b.position.y + 1.1, b.position.z + vz * 6);
   if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
 }
-function endIntroBoat() { introProp = null; endIntroAtOrigin("POWER RESTORATION · restart the stations — reach the objective marker"); }
+function endIntroBoat() {
+  introProp = null;
+  if (intro && intro._prevFog !== undefined) scene.fog = intro._prevFog;
+  const dx = intro.dockX, sz = intro.dock ? intro.dock.userData.standZ : riverCenter(dx) + 19;
+  const P = S.player; P.x = dx; P.z = sz; P.yaw = -Math.PI / 2;   // step off onto the dock, facing the valley/objective
+  cam.yaw = -Math.PI / 2; cam.pitch = -0.05; camera.up.set(0, 1, 0);
+  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
+  finishIntroCommon("POWER RESTORATION · restart the stations — reach the objective marker");
+}
 
 /* ── THE LAST SAMPLE · abandoned monorail arrival (transit → power loss → besieged facility) ── */
 function buildMonorail() {                                // interior-open tram car (front = local +x)
@@ -2517,7 +2579,7 @@ function beginCanopy(tx, tz) {   // hand off from the pre-jump cinematic into th
   if (introProp) { scene.remove(introProp); introProp = null; }
   intro.bay = null; intro.deck = null;
   intro.tx = tx; intro.tz = tz;
-  intro.cx = tx - 46; intro.cz = tz - 46; intro.cy = 112;                 // start high & off-target so you must steer
+  intro.cx = tx - 42; intro.cz = tz - 42; intro.cy = 102;                 // start high & off-target so you must steer
   intro.heading = Math.atan2(tx - intro.cx, tz - intro.cz);
   intro.vdesc = 7; intro.ct = 0; intro.phase = "canopy"; intro.shake = 0.015; intro._canopyLine = false;
   intro.chute = buildParachute(); scene.add(intro.chute);
@@ -2535,9 +2597,9 @@ function updateCanopyPhase(dt) {
   const s = steerXZ();
   intro.heading += s.x * dt * 1.25;                       // steer left / right
   const flare = s.z > 0.2, dive = s.z < -0.2;
-  const fwd = flare ? 3.5 : dive ? 15 : 9;
-  intro.vdesc = flare ? 2.6 : dive ? 13 : 7;
-  intro.cx += (Math.sin(intro.heading) * fwd + 2.0) * dt;  // forward + steady wind drift (+x)
+  const fwd = flare ? 3.5 : dive ? 14 : 8.5;
+  intro.vdesc = flare ? 2.2 : dive ? 11 : 6;
+  intro.cx += (Math.sin(intro.heading) * fwd + 1.2) * dt;  // forward + gentle wind drift (+x)
   intro.cz += (Math.cos(intro.heading) * fwd) * dt;
   intro.cy -= intro.vdesc * dt;
   const half = BIOME.map.size / 2 - 6; intro.cx = clamp(intro.cx, -half, half); intro.cz = clamp(intro.cz, -half, half);
@@ -2552,8 +2614,8 @@ function updateCanopyPhase(dt) {
 }
 function updateCanopyCamera() {
   const a = intro.heading, gy = groundH(intro.cx, intro.cz), py = Math.max(gy + 0.9, intro.cy);
-  camera.position.lerp(tmp.set(intro.cx - Math.sin(a) * 9, py + 4.5, intro.cz - Math.cos(a) * 9), 0.1);
-  camera.lookAt(intro.cx + Math.sin(a) * 5, py - 0.5, intro.cz + Math.cos(a) * 5);
+  camera.position.lerp(tmp.set(intro.cx - Math.sin(a) * 10.5, py + 5.2, intro.cz - Math.cos(a) * 10.5), 0.09);
+  camera.lookAt(intro.cx + Math.sin(a) * 5, py - 0.8, intro.cz + Math.cos(a) * 5);
   if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
 }
 function landCanopy(hard) {
@@ -2634,7 +2696,7 @@ function skipIntro() {
   if (!intro) return;
   if (intro.heli) scene.remove(intro.heli.group);
   if (intro.kind === "jeep") { endIntroJeep(); return; }
-  if (intro.kind === "boat") { if (intro.boat) scene.remove(intro.boat); endIntroBoat(); return; }
+  if (intro.kind === "boat") { if (intro.boat) scene.remove(intro.boat); endIntroBoat(); return; }   // endIntroBoat restores fog
   if (intro.kind === "monorail") { if (intro.car) scene.remove(intro.car); endIntroMonorail(); return; }
   if (intro.kind === "halo" || intro.kind === "airship") {
     if (intro.bay) scene.remove(intro.bay); if (intro.deck) scene.remove(intro.deck);
