@@ -242,6 +242,13 @@
     .dd-name{font-size:22px;} }
   /* character / role select */
   .cs-label{color:#8a978f;font-size:11px;letter-spacing:.22em;margin:4px 0 10px;text-transform:uppercase;}
+  .mission-select{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:680px;margin:0 auto 18px;}
+  .mission-card{flex:1 1 280px;max-width:320px;text-align:left;background:rgba(10,14,13,.55);border:1px solid var(--hud-line);
+    border-radius:7px;padding:12px 14px;cursor:pointer;transition:.14s;-webkit-tap-highlight-color:transparent;}
+  .mission-card:hover,.mission-card.sel{border-color:#e0772f;background:rgba(224,119,47,.12);}
+  .mission-card .mc-name{font-size:14px;font-weight:800;letter-spacing:.05em;color:#e7eee9;}
+  .mission-card .mc-tag{font-size:9px;letter-spacing:.16em;color:#e0772f;margin:3px 0 6px;text-transform:uppercase;}
+  .mission-card .mc-desc{font-size:11px;line-height:1.5;color:#9aa69d;}
   .char-select{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;max-width:740px;margin:0 auto 20px;}
   .char-card{width:106px;background:rgba(10,14,13,.55);border:1px solid var(--hud-line);border-radius:6px;
     overflow:hidden;cursor:pointer;transition:.15s;opacity:.62;}
@@ -543,6 +550,8 @@
   <div class="accent" id="sSub"></div>
   <p id="sBlurb"></p>
   <div class="how" id="sHow"></div>
+  <div class="cs-label">Select mission</div>
+  <div class="mission-select" id="missionSelect"></div>
   <div class="cs-label">Select your specialist</div>
   <div class="char-select" id="charSelect"></div>
   <div class="mp" id="mpPanel">

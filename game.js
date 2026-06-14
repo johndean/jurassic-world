@@ -110,6 +110,45 @@ function initCharSelect() {
     if (MODELS[curPlayerModel()]) buildPlayer();   // live-preview the chosen avatar if loaded
   }));
 }
+
+/* ============================================ missions (data-driven) ===== *
+ * Additive: pick a mission on the homepage; its steps drive the top-left
+ * objective panel. Both end in extraction — free movement throughout. */
+const DNA_GOAL = 3;
+const beaconDistM = () => Math.round(Math.sqrt(dist2(S.player.x, S.player.z, S.extraction.beacon.x, S.extraction.beacon.z)));
+const MISSIONS = {
+  evac: {
+    id: "evac", name: "EVACUATION", tag: "FREE-FOR-ALL · BASIC",
+    short: "Reach the beacon, call the evac, survive the hold.",
+    blurb: "One survivor. A foggy valley that hears every step. Reach the beacon, call the evac, and live through the hold while the apex closes in.",
+    sub: () => STR.objReach + " · " + beaconDistM() + " " + STR.km,
+    steps: [
+      { l: () => STR.objLocate, done: () => S._everInRange },
+      { l: () => STR.objCall, done: () => S.extraction.won },
+    ],
+  },
+  dna: {
+    id: "dna", name: "DNA SAMPLE COLLECTION", tag: "FIELD SCIENCE",
+    short: "Tranq / trap & sample live dinosaurs, then evac.",
+    blurb: "Recover live dinosaur DNA. Use the watchtowers and binoculars to hunt safely — tranq or trap a target, draw a blood sample, then reach the beacon and evac. Extraction unlocks once the samples are secured.",
+    sub: () => dnaSamples >= DNA_GOAL ? "DNA secured · reach the beacon · " + beaconDistM() + " " + STR.km : `Samples ${dnaSamples}/${DNA_GOAL} · climb a tower, glass (B), tranq (4) & sample (6)`,
+    steps: [
+      { l: () => `Collect DNA samples  (${dnaSamples}/${DNA_GOAL})`, done: () => dnaSamples >= DNA_GOAL },
+      { l: () => "Reach the beacon & extract", done: () => S.extraction.won },
+    ],
+  },
+};
+let selectedMission = MISSIONS.evac;
+function initMissionSelect() {
+  const host = $("missionSelect"); if (!host) return;
+  const keys = Object.keys(MISSIONS);
+  host.innerHTML = keys.map((k, i) => { const m = MISSIONS[k]; return `<div class="mission-card${i === 0 ? " sel" : ""}" data-k="${k}"><div class="mc-name">${m.name}</div><div class="mc-tag">${m.tag}</div><div class="mc-desc">${m.short}</div></div>`; }).join("");
+  host.querySelectorAll(".mission-card").forEach(card => card.addEventListener("click", () => {
+    selectedMission = MISSIONS[card.dataset.k];
+    host.querySelectorAll(".mission-card").forEach(c => c.classList.toggle("sel", c === card));
+    const b = $("sBlurb"); if (b) b.textContent = selectedMission.blurb;
+  }));
+}
 const GRACE_S = 7;   // predators ignore the player for the first seconds of a run (anti-spawn-camp)
 const _gltfLoader = new GLTFLoader();
 function loadModel(path) {
@@ -182,6 +221,7 @@ async function boot() {
   initAudio();
   buildStaticHUD();
   showStart();
+  initMissionSelect();
   initCharSelect();
   initLobby();
   requestAnimationFrame(frame);
@@ -1152,7 +1192,8 @@ function useTool() {
     if (a.drawn) { toast(a.sp.displayName + " · already sampled"); return; }
     t.cd = t.cdMax; a.drawn = true; dnaSamples++; dnaSpecies.add(a.sp.id); identified.add(a.sp.id);
     Audio.beacon(false); fxReact(a, "✚", "#9fe08a"); flash();
-    toast(`DNA SAMPLE · ${a.sp.displayName}  (${dnaSamples})`);
+    if (selectedMission.id === "dna" && dnaSamples >= DNA_GOAL && dnaSamples - 1 < DNA_GOAL) { Audio.win(); toast(`DNA SECURED (${DNA_GOAL}/${DNA_GOAL}) — reach the beacon & extract`); }
+    else toast(`DNA SAMPLE · ${a.sp.displayName}  (${dnaSamples}${selectedMission.id === "dna" ? "/" + DNA_GOAL : ""})`);
   }
 }
 function fxTracer(x1, y1, z1, x2, y2, z2) {   // brief dart/round tracer line
@@ -1433,6 +1474,7 @@ function updateThreat(dt, P) {
 /* ================================================== extraction loop ====== */
 function tryCall() {
   if (S.phase !== "playing" || S.extraction.called) return;
+  if (selectedMission.id === "dna" && dnaSamples < DNA_GOAL) { toast(`Secure the DNA first · ${dnaSamples}/${DNA_GOAL} samples`); return; }
   if (!S.extraction.inRange) { toast(STR.reachBeaconFirst); return; }
   S.extraction.called = true; S.player.noise = 1; spawnTimer = 0;
   Audio.beacon(true); Audio.roar(); toast(STR.evacIncoming);
@@ -1874,13 +1916,11 @@ function hpColor(hp) { return hp <= 0 ? "var(--hud-dead)" : hp < 35 ? "var(--hud
 
 function updateHUD() {
   const P = S.player;
-  // objectives
-  $("objSub").textContent = STR.objReach + " · " + Math.round(Math.sqrt(dist2(P.x, P.z, S.extraction.beacon.x, S.extraction.beacon.z))) + " " + STR.km;
-  const objs = [
-    { l: STR.objLocate, done: S._everInRange },
-    { l: STR.objCall, done: S.extraction.won },
-  ];
-  $("objList").innerHTML = objs.map(o => `<li class="${o.done ? "done" : ""}"><span class="obj-check">${o.done ? "◆" : "◇"}</span>${o.l}</li>`).join("");
+  // objectives — driven by the selected mission
+  const M = selectedMission;
+  $("objTitle").textContent = M.name;
+  $("objSub").textContent = typeof M.sub === "function" ? M.sub() : M.sub;
+  $("objList").innerHTML = M.steps.map(o => { const done = o.done(); const l = typeof o.l === "function" ? o.l() : o.l; return `<li class="${done ? "done" : ""}"><span class="obj-check">${done ? "◆" : "◇"}</span>${l}</li>`; }).join("");
 
   // compass
   const heading = ((-cam.yaw / DEG) % 360 + 360) % 360;
@@ -2216,7 +2256,7 @@ function initLobby() {
 /* ====================================================== screens ========== */
 function showStart() {
   $("sTitle").textContent = STR.title; $("sSub").textContent = STR.subtitle;
-  $("sBlurb").textContent = "One survivor. A foggy valley that hears every step. Reach the beacon, call the evac, and live through the hold while the apex closes in.";
+  $("sBlurb").textContent = selectedMission.blurb;
   $("sHow").innerHTML = (isTouch ? STR.howto_touch : STR.howto_desktop) + "<br>" + STR.howto_gamepad;
   $("startBtn").textContent = STR.start;
 }
