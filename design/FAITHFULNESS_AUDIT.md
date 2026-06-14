@@ -94,7 +94,13 @@ finale it currently plays as one more reach/interact/extract chain with bigger n
   "hold the line" is now a real 45s assault with a HUD countdown + alert marker.
 - ✅ **#4 sequenced extract waves** — `extract` takes `waves:[...]`; FALLEN OUTPOST is now Carnotaurus **then**
   T-Rex (next apex inbound once the first is cleared).
-- ⏳ #5 (Indominus finale + endings) and the LOW/MED polish items remain.
+- ✅ **#5 EXTINCTION finale** — Indominus Rex boss encounter (relentless hunter you can't out-fight),
+  Pteranodon swarm wheeling overhead, and **three branching endings** chosen by reaching a pad:
+  CONTAIN (A, unlocks after surviving 38s → paddock seals it), FLOOD THE LAGOON (B, Mosasaurus set-piece
+  drags it under → bittersweet), RUN (C, escape alone → dark). New apex species added (indominus/
+  mosasaurus/pteranodon). Death during the hunt = lose.
+- ⏳ Remaining LOW/MED polish: role-system reconciliation, dynamic weather/events, item objects, building
+  collision, co-op progress/dino sync. (Indominus uses a greybox until a .glb model is added.)
 
 ## Severity-ranked fix list (recommended order)
 

@@ -238,8 +238,8 @@ Object.assign(MISSIONS, {
       { t: "reach", l: "Activate sector emergency systems", x: -88, z: -20, r: 7, site: "generator" },
       { t: "interact", l: "Unlock the evacuation routes", x: -88, z: -20, r: 7, site: "generator" },
       { t: "defend", l: "Defend the Command Center — hold the line", x: 0, z: -86, r: 9, site: "command", dur: 45, species: "velociraptor", n: 3, every: 7 },
-      { t: "interact", l: "ACTIVATE EXTINCTION PROTOCOL", atBeacon: true, r: 7, starts: "evac" },
-      { t: "extract", l: "Reach the final helicopter — apexes converge", species: "trex" },
+      { t: "interact", l: "ACTIVATE EXTINCTION PROTOCOL", x: 0, z: -86, r: 8, site: "command" },
+      { t: "boss", l: "INDOMINUS REX — survive, then choose how this ends", x: 0, z: -86, r: 9 },
     ],
   },
 });
@@ -271,7 +271,7 @@ function applyPhaseMarker() {
   if (!ph) { setObjMarker(null); return; }
   if (ph.t === "interact") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0x8fb8c4, "interact"); }
   else if (ph.t === "reach") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0x8fb8c4); }
-  else if (ph.t === "defend") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0xd6562f); }   // hold-the-line marker (alert)
+  else if (ph.t === "defend" || ph.t === "boss") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0xd6562f); }   // hold-the-line / boss marker (alert)
   else if (ph.t === "extract") setObjMarker(S.extraction.beacon.x, S.extraction.beacon.z, 0xe0772f);
   else setObjMarker(null);
 }
@@ -361,6 +361,10 @@ function updateMission(dt) {
     MC.defendT -= dt; MC.spawnAcc += dt;
     if (MC.spawnAcc >= (ph.every || 8)) { MC.spawnAcc = 0; spawnDrawn(ph.species || "deinonychus", P); }
     if (MC.defendT <= 0 && dist2(P.x, P.z, x, z) < ((ph.r || 9) + 6) * ((ph.r || 9) + 6)) done = true;   // survived + held the position
+  }
+  else if (ph.t === "boss") {   // EXTINCTION finale — Indominus encounter + branching endings (resolves the run itself)
+    if (!MC.started) { MC.started = true; startBoss(); }
+    updateBoss(dt);
   }
   else if (ph.t === "extract") {
     if (!MC.started) {
@@ -994,6 +998,117 @@ function updateSurvivor(dt) {                             // slumped/waving idle
     m.position.set(survivor.x, groundH(survivor.x, survivor.z) + 0.02, survivor.z);
   }
   if (survivor.halo) { survivor.halo.rotation.z += dt * 1.5; survivor.halo.position.y = 2.3 + Math.sin(S.t * 3) * 0.08; }
+}
+
+/* ================= EXTINCTION PROTOCOL finale: Indominus boss + apex set-pieces + branching endings ===== *
+ * A boss ENCOUNTER faithful to the survival design (no DPS race): the Indominus hunts you relentlessly while
+ * Pteranodons wheel overhead. You can't out-fight it — you decide how it ends by reaching one of three pads:
+ *   CONTAIN (A, "all rescued" — unlocks after you survive 35s) · FLOOD THE LAGOON (B, Mosasaurus takes it,
+ *   bittersweet) · RUN (C, escape alone, dark). Death during the hunt = lose. */
+let boss = null;
+function clearBoss() { if (boss) { for (const p of boss.props) scene.remove(p); boss = null; } }
+function buildPterosaur() {
+  const g = new THREE.Group(), mat = _mm(0x7a6a55, 0.9);
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.9, 4, 8), mat); body.rotation.z = Math.PI / 2; g.add(body);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.7, 8), mat); head.rotation.z = -Math.PI / 2; head.position.set(0.85, 0, 0); g.add(head);
+  const crest = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.5, 4), mat); crest.rotation.z = Math.PI / 2; crest.position.set(0.6, 0.18, 0); g.add(crest);
+  const wgeo = new THREE.BoxGeometry(0.7, 0.04, 2.6);
+  const wl = new THREE.Mesh(wgeo, mat); wl.position.set(0, 0, 1.4); g.add(wl);
+  const wr = new THREE.Mesh(wgeo, mat); wr.position.set(0, 0, -1.4); g.add(wr);
+  g.userData.wl = wl; g.userData.wr = wr; return g;
+}
+function buildPteranodonSwarm(cx, cz) {
+  const g = new THREE.Group(), birds = [];
+  for (let i = 0; i < 6; i++) { const m = buildPterosaur(); const b = { mesh: m, ang: i / 6 * 6.28, r: rand(20, 34), alt: rand(24, 34), spd: rand(0.25, 0.45) * (i % 2 ? 1 : -1), ph: rand(0, 6.28) }; g.add(m); birds.push(b); }
+  g.userData.birds = birds; scene.add(g); return g;
+}
+function updatePteranodons(dt) {
+  if (!boss || !boss.ptero) return;
+  for (const b of boss.ptero.userData.birds) {
+    b.ang += dt * b.spd;
+    b.mesh.position.set(boss.cx + Math.cos(b.ang) * b.r, b.alt + Math.sin(S.t * 1.5 + b.ph) * 1.5, boss.cz + Math.sin(b.ang) * b.r);
+    b.mesh.rotation.y = -b.ang + Math.PI / 2;
+    const flap = Math.sin(S.t * 6 + b.ph) * 0.5; b.mesh.userData.wl.rotation.x = flap; b.mesh.userData.wr.rotation.x = -flap;
+  }
+}
+function buildMosasaurus() {
+  const g = new THREE.Group(), mat = _mm(0x37474a, 0.5, 0.2);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 0.5, 9, 12), mat); body.rotation.z = Math.PI / 2; g.add(body);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(1.3, 3.2, 12), mat); head.rotation.z = -Math.PI / 2; head.position.set(5.6, 0, 0); g.add(head);
+  const jaw = new THREE.Mesh(new THREE.ConeGeometry(1.05, 2.6, 10), mat); jaw.rotation.z = -Math.PI / 2; jaw.position.set(5.3, -0.5, 0); g.add(jaw);
+  for (const s of [1, -1]) { const fin = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.2, 1.1), mat); fin.position.set(1.4, -0.7, s * 1.5); fin.rotation.y = s * 0.4; g.add(fin); }
+  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.8, 0.2), mat), { position: new THREE.Vector3(-5, 0, 0) }));   // tail fluke
+  scene.add(g); return { group: g };
+}
+function buildContainmentWalls(cx, cz) {
+  const g = new THREE.Group(); g.position.set(cx, -9, cz); scene.add(g);
+  const mat = _mm(0x4a4f4a, 0.7, 0.5), R = 13;
+  for (const [dx, dz, w, rot] of [[0, R, 2 * R, 0], [0, -R, 2 * R, 0], [R, 0, 2 * R, Math.PI / 2], [-R, 0, 2 * R, Math.PI / 2]]) {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(w, 11, 0.8), mat); wall.position.set(dx, 5.5, dz); wall.rotation.y = rot; g.add(wall);
+  }
+  return g;
+}
+function buildEndingPads(cx, cz) {
+  const g = new THREE.Group(); scene.add(g);
+  const defs = [["contain", cx - 9, cz + 7, 0x6fae6b, "CONTAIN"], ["lagoon", cx, cz + 11, 0x5b9fd6, "FLOOD THE LAGOON"], ["run", cx + 9, cz + 7, 0xc9772f, "RUN FOR THE HELI"]];
+  const pads = [];
+  for (const [kind, x, z, col, label] of defs) {
+    const gy = groundH(x, z);
+    const pad = new THREE.Mesh(new THREE.CircleGeometry(2.0, 28), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+    pad.rotation.x = -Math.PI / 2; pad.position.set(x, gy + 0.12, z); g.add(pad);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 10, 8), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.22, depthWrite: false })); beam.position.set(x, gy + 5, z); g.add(beam);
+    const tag = makeNameTag(label); tag.scale.set(3.0, 0.7, 1); tag.position.set(x, gy + 2.7, z); g.add(tag);
+    pads.push({ kind, x, z, pad, beam, tag });
+  }
+  g.userData.pads = pads; return g;
+}
+function startBoss() {
+  const cx = 0, cz = -86;
+  boss = { stage: "arrival", t: 0, cx, cz, chosen: null, outcomeT: 0, outcomeDur: 4, props: [], _cReady: false };
+  S.player.noise = 1; spawnTimer = 0; Audio.roar(); flash();
+  const half = BIOME.map.size / 2 - 8;
+  const rex = spawnDino("indominus", clamp(cx + 34, -half, half), clamp(cz + 30, -half, half));
+  rex.bb.hasTarget = true; rex.bb.lastSeenX = S.player.x; rex.bb.lastSeenZ = S.player.z; rex.bb.homeX = S.player.x; rex.bb.homeZ = S.player.z;
+  dinos.push(rex); boss.rex = rex;
+  boss.ptero = buildPteranodonSwarm(cx, cz); boss.props.push(boss.ptero);
+  boss.pads = buildEndingPads(cx, cz); boss.props.push(boss.pads);
+  toast("⚠ INDOMINUS REX — CONTAINMENT FAILED");
+}
+function commitEnding(kind) {
+  if (boss.chosen) return;
+  boss.chosen = kind; boss.stage = "outcome"; boss.outcomeT = 0;
+  if (kind === "contain") { boss.outcomeDur = 4.5; boss.walls = buildContainmentWalls(boss.cx, boss.cz); boss.props.push(boss.walls); Audio.crash(); toast("PADDOCK SEALING — ALL SURVIVORS EVACUATING"); }
+  else if (kind === "lagoon") { boss.outcomeDur = 5.2; boss.mosa = buildMosasaurus(); boss.props.push(boss.mosa.group); Audio.roar(); toast("THE LAGOON GATE OPENS…"); }
+  else { boss.outcomeDur = 3.4; Audio.beacon(true); toast("YOU RUN FOR THE HELICOPTER — LEAVE IT ALL BEHIND"); }
+}
+function runOutcome(dt) {
+  const k = boss.outcomeT, rex = boss.rex;
+  if (boss.chosen === "contain") {
+    if (rex && rex.alive) { rex.x += (boss.cx - rex.x) * Math.min(1, dt * 2.2); rex.z += (boss.cz - rex.z) * Math.min(1, dt * 2.2); rex.bb.scared = 99; rex.state = "Retreat"; }
+    if (boss.walls) boss.walls.position.y = Math.min(0, -9 + k * 4.5);
+  } else if (boss.chosen === "lagoon" && boss.mosa) {
+    const g = boss.mosa.group, tx = rex ? rex.x : boss.cx, tz = rex ? rex.z : boss.cz;
+    if (k < 2) { g.position.set(tx + 7, -12 + k * 10, tz); g.rotation.y = -Math.PI / 2; }
+    else { g.position.x += (tx - g.position.x) * Math.min(1, dt * 3); g.position.z += (tz - g.position.z) * Math.min(1, dt * 3); g.position.y += (-13 - g.position.y) * Math.min(1, dt * 1.6); if (rex && rex.alive) { rex.mesh.position.y -= dt * 6; if (k > 3.4) killDino(rex); } }
+  }
+}
+function updateBoss(dt) {
+  if (!boss) return;
+  boss.t += dt;
+  if (boss.rex && boss.rex.alive && boss.stage !== "outcome") { boss.rex.bb.hasTarget = true; boss.rex.bb.lastSeenX = S.player.x; boss.rex.bb.lastSeenZ = S.player.z; }
+  updatePteranodons(dt);
+  if (boss.stage === "arrival") { if (boss.t > 3) { boss.stage = "hunt"; toast("SURVIVE — reach a pad to decide how this ends"); } }
+  else if (boss.stage === "hunt") {
+    const containReady = boss.t > 38;
+    if (containReady && !boss._cReady) { boss._cReady = true; toast("CONTAINMENT ONLINE — the CONTAIN pad is live"); }
+    if (boss.pads) for (const p of boss.pads.userData.pads) { const locked = p.kind === "contain" && !containReady; p.pad.material.opacity = locked ? 0.12 : (0.45 + Math.abs(Math.sin(S.t * 3)) * 0.3); p.beam.visible = !locked; p.tag.material.opacity = locked ? 0.3 : 1; }
+    let chosen = null;
+    if (boss.pads) for (const p of boss.pads.userData.pads) { if (p.kind === "contain" && !containReady) continue; if (dist2(S.player.x, S.player.z, p.x, p.z) < 2.4 * 2.4) chosen = p.kind; }
+    if (chosen) commitEnding(chosen);
+  } else if (boss.stage === "outcome") {
+    boss.outcomeT += dt; runOutcome(dt);
+    if (boss.outcomeT > boss.outcomeDur) { const map = { contain: "A", lagoon: "B", run: "C" }; endRun(true, map[boss.chosen] || "C"); }
+  }
 }
 function playerFloorY(x, z) {   // player's floor: tower platform / zipline cable / terrain
   const P = S.player;
@@ -2898,7 +3013,7 @@ function skipIntro() {
 function startRun() {
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = [];
-  clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField(); clearIntroProp(); clearMissionSites(); preloadRadio();
+  clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField(); clearIntroProp(); clearMissionSites(); clearBoss(); preloadRadio();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
@@ -2934,14 +3049,19 @@ function startRun() {
   try { startIntro(); }                                                       // play the opening crash cinematic, then hand off to "playing"
   catch (e) { console.error("startIntro", e); S.phase = "playing"; if (playerMesh) playerMesh.visible = true; $("intro").classList.add("hidden"); $("hud").style.display = ""; Audio.ambient(true); if (!isTouch) lockPointer(); }
 }
-function endRun(won) {
+const ENDINGS = {   // EXTINCTION PROTOCOL branching finales
+  A: { cls: "win", title: "CONTAINMENT HOLDS", body: "The paddock slammed shut on the Indominus. Every survivor reached the evac. Island Alpha is locked down — for tonight." },
+  B: { cls: "win", title: "INTO THE DEEP", body: "You opened the lagoon. The Mosasaurus took the Indominus under in a single strike and the water went still. You flew out alive — but the island belongs to them now." },
+  C: { cls: "lose", title: "YOU GOT OUT", body: "You ran. The last helicopter cleared the trees as containment failed behind you. You survived — but nothing else did, and the cargo is loose." },
+};
+function endRun(won, ending) {
   if (S.phase !== "playing") return;
   S.phase = won ? "won" : "lost";
   Audio.ambient(false); won ? Audio.win() : Audio.lose();
   if (pointerLocked) document.exitPointerLock();
   const t = $("endTitle"), b = $("endBody");
-  t.textContent = won ? STR.winTitle : STR.loseTitle; t.className = won ? "win" : "lose";
-  b.textContent = won ? STR.winBody : (STR.loseBody + (S.killedBy ? `  (${STR.caught} ${S.killedBy})` : ""));
+  if (ending && ENDINGS[ending]) { const e = ENDINGS[ending]; t.textContent = e.title; t.className = e.cls; b.textContent = e.body; }
+  else { t.textContent = won ? STR.winTitle : STR.loseTitle; t.className = won ? "win" : "lose"; b.textContent = won ? STR.winBody : (STR.loseBody + (S.killedBy ? `  (${STR.caught} ${S.killedBy})` : "")); }
   $("endScreen").classList.remove("hidden");
 }
 
@@ -3032,7 +3152,7 @@ function updateHUD() {
   if (M.phases && MC) {                                   // campaign mission: phase chain
     const cur = M.phases[MC.idx];
     let sub = cur ? (typeof cur.l === "function" ? cur.l() : cur.l) : "Mission complete — extract";
-    if (cur && (cur.t === "reach" || cur.t === "interact" || cur.t === "defend" || cur.t === "extract")) { const [sx, sz] = cur.t === "extract" ? [S.extraction.beacon.x, S.extraction.beacon.z] : phaseSite(cur); sub += " · " + Math.round(Math.sqrt(dist2(P.x, P.z, sx, sz))) + " " + STR.km; }
+    if (cur && (cur.t === "reach" || cur.t === "interact" || cur.t === "defend" || cur.t === "boss" || cur.t === "extract")) { const [sx, sz] = cur.t === "extract" ? [S.extraction.beacon.x, S.extraction.beacon.z] : phaseSite(cur); sub += " · " + Math.round(Math.sqrt(dist2(P.x, P.z, sx, sz))) + " " + STR.km; }
     if (cur && cur.t === "defend" && MC.defendT != null && MC.defendT > 0) sub += " · HOLD " + Math.ceil(MC.defendT) + "s";
     $("objSub").textContent = sub;
     $("objList").innerHTML = M.phases.map((p, i) => { const l = typeof p.l === "function" ? p.l() : p.l; const mk = i < MC.idx ? "◆" : (i === MC.idx ? "▸" : "◇"); return `<li class="${i < MC.idx ? "done" : (i === MC.idx ? "cur" : "")}"><span class="obj-check">${mk}</span>${l}</li>`; }).join("");

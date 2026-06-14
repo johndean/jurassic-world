@@ -1,1580 +1,1733 @@
 {
-  "_note": "SpeciesProfile rows. AI reads ONLY this. New dinosaur = new row + (v2) new .glb. No gameplay/AI code per species.",
-  "species": [
-    {
-      "id": "parasaurolophus",
-      "displayName": "Parasaurolophus",
-      "diet": "herbivore",
-      "role": "grazer",
-      "archetype": "herd-grazer",
-      "size": {
-        "lengthM": 9.5,
-        "massKg": 2500,
-        "eyeHeightM": 2.6
-      },
-      "move": {
-        "walk": 2.2,
-        "run": 9.5,
-        "turnRate": 160
-      },
-      "senses": {
-        "sightRangeM": 45,
-        "sightFovDeg": 230,
-        "hearingRangeM": 40
-      },
-      "combat": {
-        "damage": 0,
-        "attackRangeM": 0,
-        "attackCooldownS": 0,
-        "health": 220
-      },
-      "behavior": {
-        "aggression": 0,
-        "territoryRadiusM": 60,
-        "social": "herd",
-        "fleeHealthPct": 1,
-        "fleeFromPredatorM": 38
-      },
-      "modelPath": "./assets/models/parasaurolophus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "graze",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#7d837c",
-        "bodyL": 2.6,
-        "bodyW": 1,
-        "bodyH": 1.1,
-        "standH": 3,
-        "crest": true
-      }
-    },
-    {
-      "id": "deinonychus",
-      "displayName": "Deinonychus",
-      "diet": "carnivore",
-      "role": "pack",
-      "archetype": "pack-hunter",
-      "size": {
-        "lengthM": 3.4,
-        "massKg": 73,
-        "eyeHeightM": 1
-      },
-      "move": {
-        "walk": 2.6,
-        "run": 12.5,
-        "turnRate": 320
-      },
-      "senses": {
-        "sightRangeM": 55,
-        "sightFovDeg": 150,
-        "hearingRangeM": 50
-      },
-      "combat": {
-        "damage": 9,
-        "attackRangeM": 2,
-        "attackCooldownS": 1.1,
-        "health": 60
-      },
-      "behavior": {
-        "aggression": 0.7,
-        "territoryRadiusM": 120,
-        "social": "pack",
-        "packRoles": [
-          "lead",
-          "flank",
-          "harry"
-        ],
-        "fleeHealthPct": 0.25
-      },
-      "modelPath": "./assets/models/deinonychus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#3a3d3c",
-        "bodyL": 1.1,
-        "bodyW": 0.45,
-        "bodyH": 0.55,
-        "standH": 1.4,
-        "crest": false
-      }
-    },
-    {
-      "id": "trex",
-      "displayName": "Tyrannosaurus Rex",
-      "diet": "carnivore",
-      "role": "apex",
-      "archetype": "apex",
-      "size": {
-        "lengthM": 12.5,
-        "massKg": 8000,
-        "eyeHeightM": 4
-      },
-      "move": {
-        "walk": 2.8,
-        "run": 10.5,
-        "turnRate": 110
-      },
-      "senses": {
-        "sightRangeM": 70,
-        "sightFovDeg": 130,
-        "hearingRangeM": 110
-      },
-      "combat": {
-        "damage": 55,
-        "attackRangeM": 4.5,
-        "attackCooldownS": 1.8,
-        "health": 600
-      },
-      "behavior": {
-        "aggression": 0.55,
-        "territoryRadiusM": 220,
-        "social": "solitary",
-        "fleeHealthPct": 0,
-        "noiseDrawWeight": 1
-      },
-      "modelPath": "./assets/models/trex.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "roar",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#2b2d2e",
-        "bodyL": 3.4,
-        "bodyW": 1.2,
-        "bodyH": 1.7,
-        "standH": 4.6,
-        "crest": false
-      }
-    },
-    {
-      "id": "velociraptor",
-      "displayName": "Velociraptor",
-      "diet": "carnivore",
-      "role": "pack",
-      "archetype": "pack-hunter",
-      "size": {
-        "lengthM": 2,
-        "massKg": 15,
-        "eyeHeightM": 0.7
-      },
-      "move": {
-        "walk": 2.8,
-        "run": 10.5,
-        "turnRate": 340
-      },
-      "senses": {
-        "sightRangeM": 60,
-        "sightFovDeg": 150,
-        "hearingRangeM": 55
-      },
-      "combat": {
-        "damage": 7,
-        "attackRangeM": 1.8,
-        "attackCooldownS": 1,
-        "health": 45
-      },
-      "behavior": {
-        "aggression": 0.75,
-        "territoryRadiusM": 120,
-        "social": "pack",
-        "packRoles": [
-          "lead",
-          "flank",
-          "harry"
-        ],
-        "fleeHealthPct": 0.2
-      },
-      "modelPath": "./assets/models/velociraptor.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#43463f",
-        "bodyL": 0.9,
-        "bodyW": 0.4,
-        "bodyH": 0.45,
-        "standH": 1,
-        "crest": false
-      }
-    },
-    {
-      "id": "carnotaurus",
-      "displayName": "Carnotaurus",
-      "diet": "carnivore",
-      "role": "pursuit",
-      "archetype": "pursuit",
-      "size": {
-        "lengthM": 8,
-        "massKg": 1500,
-        "eyeHeightM": 2.8
-      },
-      "move": {
-        "walk": 2.8,
-        "run": 13.5,
-        "turnRate": 150
-      },
-      "senses": {
-        "sightRangeM": 65,
-        "sightFovDeg": 140,
-        "hearingRangeM": 70
-      },
-      "combat": {
-        "damage": 35,
-        "attackRangeM": 3.2,
-        "attackCooldownS": 1.4,
-        "health": 320
-      },
-      "behavior": {
-        "aggression": 0.6,
-        "territoryRadiusM": 160,
-        "social": "solitary",
-        "fleeHealthPct": 0.1
-      },
-      "modelPath": "./assets/models/carnotaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#3a3d36",
-        "bodyL": 2.6,
-        "bodyW": 1,
-        "bodyH": 1.3,
-        "standH": 3,
-        "crest": false
-      }
-    },
-    {
-      "id": "spinosaurus",
-      "displayName": "Spinosaurus",
-      "diet": "carnivore",
-      "role": "apex",
-      "archetype": "water",
-      "size": {
-        "lengthM": 15,
-        "massKg": 7000,
-        "eyeHeightM": 4.2
-      },
-      "move": {
-        "walk": 2.6,
-        "run": 9.5,
-        "turnRate": 95
-      },
-      "senses": {
-        "sightRangeM": 70,
-        "sightFovDeg": 135,
-        "hearingRangeM": 95
-      },
-      "combat": {
-        "damage": 50,
-        "attackRangeM": 4.5,
-        "attackCooldownS": 1.7,
-        "health": 560
-      },
-      "behavior": {
-        "aggression": 0.5,
-        "territoryRadiusM": 200,
-        "social": "solitary",
-        "fleeHealthPct": 0,
-        "noiseDrawWeight": 0.9
-      },
-      "modelPath": "./assets/models/spinosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "roar",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#2f3330",
-        "bodyL": 3.5,
-        "bodyW": 1.1,
-        "bodyH": 1.6,
-        "standH": 5.5,
-        "crest": false
-      }
-    },
-    {
-      "id": "triceratops",
-      "displayName": "Triceratops",
-      "diet": "herbivore",
-      "role": "grazer",
-      "archetype": "herd-grazer-armored",
-      "size": {
-        "lengthM": 9,
-        "massKg": 9000,
-        "eyeHeightM": 2.5
-      },
-      "move": {
-        "walk": 2,
-        "run": 8,
-        "turnRate": 140
-      },
-      "senses": {
-        "sightRangeM": 45,
-        "sightFovDeg": 250,
-        "hearingRangeM": 50
-      },
-      "combat": {
-        "damage": 40,
-        "attackRangeM": 3,
-        "attackCooldownS": 1.5,
-        "health": 700
-      },
-      "behavior": {
-        "aggression": 0,
-        "territoryRadiusM": 80,
-        "social": "herd",
-        "fleeHealthPct": 0.4,
-        "fleeFromPredatorM": 30
-      },
-      "modelPath": "./assets/models/triceratops.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "graze",
-        "charge",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#5a5e52",
-        "bodyL": 2.4,
-        "bodyW": 1.2,
-        "bodyH": 1.2,
-        "standH": 3,
-        "crest": false,
-        "frill": true
-      }
-    },
-    {
-      "id": "troodon",
-      "displayName": "Troodon",
-      "diet": "carnivore",
-      "role": "pack",
-      "archetype": "pack-hunter",
-      "size": {
-        "lengthM": 2.4,
-        "massKg": 50,
-        "eyeHeightM": 0.9
-      },
-      "move": {
-        "walk": 2.7,
-        "run": 11.5,
-        "turnRate": 330
-      },
-      "senses": {
-        "sightRangeM": 60,
-        "sightFovDeg": 160,
-        "hearingRangeM": 55
-      },
-      "combat": {
-        "damage": 7,
-        "attackRangeM": 1.8,
-        "attackCooldownS": 1,
-        "health": 50
-      },
-      "behavior": {
-        "aggression": 0.7,
-        "territoryRadiusM": 110,
-        "social": "pack",
-        "fleeHealthPct": 0.25,
-        "packRoles": [
-          "lead",
-          "flank",
-          "harry"
-        ]
-      },
-      "modelPath": "./assets/models/troodon.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#46473a",
-        "bodyL": 0.65,
-        "bodyW": 0.29,
-        "bodyH": 0.36,
-        "standH": 1.01,
-        "crest": false
-      }
-    },
-    {
-      "id": "atrociraptor",
-      "displayName": "Atrociraptor",
-      "diet": "carnivore",
-      "role": "pack",
-      "archetype": "pack-hunter",
-      "size": {
-        "lengthM": 3,
-        "massKg": 70,
-        "eyeHeightM": 1
-      },
-      "move": {
-        "walk": 2.8,
-        "run": 12,
-        "turnRate": 330
-      },
-      "senses": {
-        "sightRangeM": 58,
-        "sightFovDeg": 150,
-        "hearingRangeM": 52
-      },
-      "combat": {
-        "damage": 8,
-        "attackRangeM": 1.9,
-        "attackCooldownS": 1.05,
-        "health": 58
-      },
-      "behavior": {
-        "aggression": 0.78,
-        "territoryRadiusM": 120,
-        "social": "pack",
-        "fleeHealthPct": 0.22,
-        "packRoles": [
-          "lead",
-          "flank",
-          "harry"
-        ]
-      },
-      "modelPath": "./assets/models/atrociraptor.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#5a4632",
-        "bodyL": 0.81,
-        "bodyW": 0.36,
-        "bodyH": 0.45,
-        "standH": 1.12,
-        "crest": false
-      }
-    },
-    {
-      "id": "pyroraptor",
-      "displayName": "Pyroraptor",
-      "diet": "carnivore",
-      "role": "pack",
-      "archetype": "pack-hunter",
-      "size": {
-        "lengthM": 2.5,
-        "massKg": 55,
-        "eyeHeightM": 0.9
-      },
-      "move": {
-        "walk": 2.8,
-        "run": 11.8,
-        "turnRate": 335
-      },
-      "senses": {
-        "sightRangeM": 58,
-        "sightFovDeg": 150,
-        "hearingRangeM": 52
-      },
-      "combat": {
-        "damage": 7,
-        "attackRangeM": 1.8,
-        "attackCooldownS": 1,
-        "health": 52
-      },
-      "behavior": {
-        "aggression": 0.76,
-        "territoryRadiusM": 115,
-        "social": "pack",
-        "fleeHealthPct": 0.22,
-        "packRoles": [
-          "lead",
-          "flank",
-          "harry"
-        ]
-      },
-      "modelPath": "./assets/models/pyroraptor.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#7a3a26",
-        "bodyL": 0.68,
-        "bodyW": 0.3,
-        "bodyH": 0.38,
-        "standH": 1.01,
-        "crest": false
-      }
-    },
-    {
-      "id": "dilophosaurus",
-      "displayName": "Dilophosaurus",
-      "diet": "carnivore",
-      "role": "ambush",
-      "archetype": "ambush",
-      "size": {
-        "lengthM": 6,
-        "massKg": 400,
-        "eyeHeightM": 2
-      },
-      "move": {
-        "walk": 2.6,
-        "run": 11,
-        "turnRate": 200
-      },
-      "senses": {
-        "sightRangeM": 60,
-        "sightFovDeg": 150,
-        "hearingRangeM": 60
-      },
-      "combat": {
-        "damage": 22,
-        "attackRangeM": 2.6,
-        "attackCooldownS": 1.3,
-        "health": 170
-      },
-      "behavior": {
-        "aggression": 0.6,
-        "territoryRadiusM": 140,
-        "social": "solitary",
-        "fleeHealthPct": 0.2,
-        "fleeFromPredatorM": 0
-      },
-      "modelPath": "./assets/models/dilophosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#3f5238",
-        "bodyL": 1.62,
-        "bodyW": 0.72,
-        "bodyH": 0.9,
-        "standH": 2.24,
-        "crest": true
-      }
-    },
-    {
-      "id": "majungasaurus",
-      "displayName": "Majungasaurus",
-      "diet": "carnivore",
-      "role": "ambush",
-      "archetype": "ambush",
-      "size": {
-        "lengthM": 6.5,
-        "massKg": 1100,
-        "eyeHeightM": 2.4
-      },
-      "move": {
-        "walk": 2.7,
-        "run": 11.5,
-        "turnRate": 160
-      },
-      "senses": {
-        "sightRangeM": 62,
-        "sightFovDeg": 140,
-        "hearingRangeM": 65
-      },
-      "combat": {
-        "damage": 30,
-        "attackRangeM": 3,
-        "attackCooldownS": 1.4,
-        "health": 300
-      },
-      "behavior": {
-        "aggression": 0.62,
-        "territoryRadiusM": 150,
-        "social": "solitary",
-        "fleeHealthPct": 0.15
-      },
-      "modelPath": "./assets/models/majungasaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#4a4236",
-        "bodyL": 1.76,
-        "bodyW": 0.78,
-        "bodyH": 0.97,
-        "standH": 2.69,
-        "crest": false
-      }
-    },
-    {
-      "id": "cryolophosaurus",
-      "displayName": "Cryolophosaurus",
-      "diet": "carnivore",
-      "role": "pursuit",
-      "archetype": "pursuit",
-      "size": {
-        "lengthM": 6.5,
-        "massKg": 500,
-        "eyeHeightM": 2.4
-      },
-      "move": {
-        "walk": 2.8,
-        "run": 12.5,
-        "turnRate": 160
-      },
-      "senses": {
-        "sightRangeM": 64,
-        "sightFovDeg": 140,
-        "hearingRangeM": 68
-      },
-      "combat": {
-        "damage": 28,
-        "attackRangeM": 3,
-        "attackCooldownS": 1.35,
-        "health": 260
-      },
-      "behavior": {
-        "aggression": 0.6,
-        "territoryRadiusM": 150,
-        "social": "solitary",
-        "fleeHealthPct": 0.12
-      },
-      "modelPath": "./assets/models/cryolophosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#42504a",
-        "bodyL": 1.76,
-        "bodyW": 0.78,
-        "bodyH": 0.97,
-        "standH": 2.69,
-        "crest": true
-      }
-    },
-    {
-      "id": "monolophosaurus",
-      "displayName": "Monolophosaurus",
-      "diet": "carnivore",
-      "role": "pursuit",
-      "archetype": "pursuit",
-      "size": {
-        "lengthM": 5.5,
-        "massKg": 475,
-        "eyeHeightM": 2.2
-      },
-      "move": {
-        "walk": 2.8,
-        "run": 12.8,
-        "turnRate": 165
-      },
-      "senses": {
-        "sightRangeM": 62,
-        "sightFovDeg": 140,
-        "hearingRangeM": 66
-      },
-      "combat": {
-        "damage": 26,
-        "attackRangeM": 2.8,
-        "attackCooldownS": 1.3,
-        "health": 240
-      },
-      "behavior": {
-        "aggression": 0.6,
-        "territoryRadiusM": 150,
-        "social": "solitary",
-        "fleeHealthPct": 0.12
-      },
-      "modelPath": "./assets/models/monolophosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#4d4a36",
-        "bodyL": 1.49,
-        "bodyW": 0.66,
-        "bodyH": 0.82,
-        "standH": 2.46,
-        "crest": true
-      }
-    },
-    {
-      "id": "ceratosaurus",
-      "displayName": "Ceratosaurus",
-      "diet": "carnivore",
-      "role": "pursuit",
-      "archetype": "pursuit",
-      "size": {
-        "lengthM": 6,
-        "massKg": 800,
-        "eyeHeightM": 2.5
-      },
-      "move": {
-        "walk": 2.8,
-        "run": 12.5,
-        "turnRate": 155
-      },
-      "senses": {
-        "sightRangeM": 64,
-        "sightFovDeg": 140,
-        "hearingRangeM": 70
-      },
-      "combat": {
-        "damage": 30,
-        "attackRangeM": 3.1,
-        "attackCooldownS": 1.35,
-        "health": 300
-      },
-      "behavior": {
-        "aggression": 0.62,
-        "territoryRadiusM": 160,
-        "social": "solitary",
-        "fleeHealthPct": 0.1
-      },
-      "modelPath": "./assets/models/ceratosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#5a3f30",
-        "bodyL": 1.62,
-        "bodyW": 0.72,
-        "bodyH": 0.9,
-        "standH": 2.8,
-        "crest": false
-      }
-    },
-    {
-      "id": "rugops",
-      "displayName": "Rugops",
-      "diet": "carnivore",
-      "role": "pursuit",
-      "archetype": "pursuit",
-      "size": {
-        "lengthM": 5.5,
-        "massKg": 750,
-        "eyeHeightM": 2.3
-      },
-      "move": {
-        "walk": 2.7,
-        "run": 12,
-        "turnRate": 150
-      },
-      "senses": {
-        "sightRangeM": 62,
-        "sightFovDeg": 145,
-        "hearingRangeM": 68
-      },
-      "combat": {
-        "damage": 24,
-        "attackRangeM": 2.8,
-        "attackCooldownS": 1.35,
-        "health": 250
-      },
-      "behavior": {
-        "aggression": 0.5,
-        "territoryRadiusM": 150,
-        "social": "solitary",
-        "fleeHealthPct": 0.18
-      },
-      "modelPath": "./assets/models/rugops.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#544a3c",
-        "bodyL": 1.49,
-        "bodyW": 0.66,
-        "bodyH": 0.82,
-        "standH": 2.58,
-        "crest": false
-      }
-    },
-    {
-      "id": "megalosaurus",
-      "displayName": "Megalosaurus",
-      "diet": "carnivore",
-      "role": "pursuit",
-      "archetype": "pursuit",
-      "size": {
-        "lengthM": 7,
-        "massKg": 1000,
-        "eyeHeightM": 2.7
-      },
-      "move": {
-        "walk": 2.8,
-        "run": 12,
-        "turnRate": 150
-      },
-      "senses": {
-        "sightRangeM": 66,
-        "sightFovDeg": 140,
-        "hearingRangeM": 72
-      },
-      "combat": {
-        "damage": 34,
-        "attackRangeM": 3.2,
-        "attackCooldownS": 1.4,
-        "health": 330
-      },
-      "behavior": {
-        "aggression": 0.62,
-        "territoryRadiusM": 165,
-        "social": "solitary",
-        "fleeHealthPct": 0.1
-      },
-      "modelPath": "./assets/models/megalosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#46423a",
-        "bodyL": 1.89,
-        "bodyW": 0.84,
-        "bodyH": 1.05,
-        "standH": 3.02,
-        "crest": false
-      }
-    },
-    {
-      "id": "allosaurus",
-      "displayName": "Allosaurus",
-      "diet": "carnivore",
-      "role": "pursuit",
-      "archetype": "pursuit",
-      "size": {
-        "lengthM": 9.5,
-        "massKg": 2300,
-        "eyeHeightM": 3.2
-      },
-      "move": {
-        "walk": 2.9,
-        "run": 13,
-        "turnRate": 135
-      },
-      "senses": {
-        "sightRangeM": 68,
-        "sightFovDeg": 135,
-        "hearingRangeM": 80
-      },
-      "combat": {
-        "damage": 42,
-        "attackRangeM": 3.6,
-        "attackCooldownS": 1.5,
-        "health": 420
-      },
-      "behavior": {
-        "aggression": 0.64,
-        "territoryRadiusM": 180,
-        "social": "solitary",
-        "fleeHealthPct": 0.05
-      },
-      "modelPath": "./assets/models/allosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#4a4034",
-        "bodyL": 2.57,
-        "bodyW": 1.14,
-        "bodyH": 1.43,
-        "standH": 3.58,
-        "crest": false
-      }
-    },
-    {
-      "id": "yangchuanosaurus",
-      "displayName": "Yangchuanosaurus",
-      "diet": "carnivore",
-      "role": "pursuit",
-      "archetype": "pursuit",
-      "size": {
-        "lengthM": 10,
-        "massKg": 3000,
-        "eyeHeightM": 3.4
-      },
-      "move": {
-        "walk": 2.8,
-        "run": 12,
-        "turnRate": 130
-      },
-      "senses": {
-        "sightRangeM": 68,
-        "sightFovDeg": 135,
-        "hearingRangeM": 82
-      },
-      "combat": {
-        "damage": 44,
-        "attackRangeM": 3.8,
-        "attackCooldownS": 1.55,
-        "health": 450
-      },
-      "behavior": {
-        "aggression": 0.62,
-        "territoryRadiusM": 185,
-        "social": "solitary",
-        "fleeHealthPct": 0.05
-      },
-      "modelPath": "./assets/models/yangchuanosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#52473a",
-        "bodyL": 2.7,
-        "bodyW": 1.2,
-        "bodyH": 1.5,
-        "standH": 3.81,
-        "crest": false
-      }
-    },
-    {
-      "id": "baryonyx",
-      "displayName": "Baryonyx",
-      "diet": "carnivore",
-      "role": "water",
-      "archetype": "water",
-      "size": {
-        "lengthM": 8.5,
-        "massKg": 1700,
-        "eyeHeightM": 2.8
-      },
-      "move": {
-        "walk": 2.7,
-        "run": 11,
-        "turnRate": 120
-      },
-      "senses": {
-        "sightRangeM": 66,
-        "sightFovDeg": 140,
-        "hearingRangeM": 80
-      },
-      "combat": {
-        "damage": 36,
-        "attackRangeM": 3.4,
-        "attackCooldownS": 1.45,
-        "health": 360
-      },
-      "behavior": {
-        "aggression": 0.55,
-        "territoryRadiusM": 170,
-        "social": "solitary",
-        "fleeHealthPct": 0.08
-      },
-      "modelPath": "./assets/models/baryonyx.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#3a4a4a",
-        "bodyL": 2.29,
-        "bodyW": 1.02,
-        "bodyH": 1.27,
-        "standH": 3.14,
-        "crest": false
-      }
-    },
-    {
-      "id": "suchomimus",
-      "displayName": "Suchomimus",
-      "diet": "carnivore",
-      "role": "water",
-      "archetype": "water",
-      "size": {
-        "lengthM": 11,
-        "massKg": 3500,
-        "eyeHeightM": 3.2
-      },
-      "move": {
-        "walk": 2.6,
-        "run": 10.5,
-        "turnRate": 110
-      },
-      "senses": {
-        "sightRangeM": 68,
-        "sightFovDeg": 140,
-        "hearingRangeM": 85
-      },
-      "combat": {
-        "damage": 40,
-        "attackRangeM": 3.8,
-        "attackCooldownS": 1.5,
-        "health": 420
-      },
-      "behavior": {
-        "aggression": 0.55,
-        "territoryRadiusM": 180,
-        "social": "solitary",
-        "fleeHealthPct": 0.05
-      },
-      "modelPath": "./assets/models/suchomimus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#36464e",
-        "bodyL": 2.97,
-        "bodyW": 1.32,
-        "bodyH": 1.65,
-        "standH": 3.58,
-        "crest": false
-      }
-    },
-    {
-      "id": "giganotosaurus",
-      "displayName": "Giganotosaurus",
-      "diet": "carnivore",
-      "role": "apex",
-      "archetype": "apex",
-      "size": {
-        "lengthM": 13,
-        "massKg": 8200,
-        "eyeHeightM": 4.1
-      },
-      "move": {
-        "walk": 2.8,
-        "run": 11,
-        "turnRate": 110
-      },
-      "senses": {
-        "sightRangeM": 72,
-        "sightFovDeg": 130,
-        "hearingRangeM": 105
-      },
-      "combat": {
-        "damage": 58,
-        "attackRangeM": 4.6,
-        "attackCooldownS": 1.8,
-        "health": 620
-      },
-      "behavior": {
-        "aggression": 0.58,
-        "territoryRadiusM": 230,
-        "social": "solitary",
-        "fleeHealthPct": 0,
-        "noiseDrawWeight": 1
-      },
-      "modelPath": "./assets/models/giganotosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "attack",
-        "roar",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#33332e",
-        "bodyL": 3.51,
-        "bodyW": 1.56,
-        "bodyH": 1.95,
-        "standH": 4.59,
-        "crest": false
-      }
-    },
-    {
-      "id": "gallimimus",
-      "displayName": "Gallimimus",
-      "diet": "herbivore",
-      "role": "grazer",
-      "archetype": "small-herbivore",
-      "size": {
-        "lengthM": 6,
-        "massKg": 440,
-        "eyeHeightM": 2.2
-      },
-      "move": {
-        "walk": 2.6,
-        "run": 14,
-        "turnRate": 300
-      },
-      "senses": {
-        "sightRangeM": 50,
-        "sightFovDeg": 300,
-        "hearingRangeM": 55
-      },
-      "combat": {
-        "damage": 0,
-        "attackRangeM": 0,
-        "attackCooldownS": 0,
-        "health": 120
-      },
-      "behavior": {
-        "aggression": 0,
-        "territoryRadiusM": 50,
-        "social": "herd",
-        "fleeHealthPct": 1,
-        "fleeFromPredatorM": 42
-      },
-      "modelPath": "./assets/models/gallimimus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "graze",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#7a7468",
-        "bodyL": 1.62,
-        "bodyW": 0.72,
-        "bodyH": 0.9,
-        "standH": 2.46,
-        "crest": false
-      }
-    },
-    {
-      "id": "dryosaurus",
-      "displayName": "Dryosaurus",
-      "diet": "herbivore",
-      "role": "grazer",
-      "archetype": "small-herbivore",
-      "size": {
-        "lengthM": 3,
-        "massKg": 90,
-        "eyeHeightM": 1.3
-      },
-      "move": {
-        "walk": 2.4,
-        "run": 12.5,
-        "turnRate": 300
-      },
-      "senses": {
-        "sightRangeM": 45,
-        "sightFovDeg": 280,
-        "hearingRangeM": 45
-      },
-      "combat": {
-        "damage": 0,
-        "attackRangeM": 0,
-        "attackCooldownS": 0,
-        "health": 80
-      },
-      "behavior": {
-        "aggression": 0,
-        "territoryRadiusM": 45,
-        "social": "herd",
-        "fleeHealthPct": 1,
-        "fleeFromPredatorM": 38
-      },
-      "modelPath": "./assets/models/dryosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "graze",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#6f7560",
-        "bodyL": 0.81,
-        "bodyW": 0.36,
-        "bodyH": 0.45,
-        "standH": 1.46,
-        "crest": false
-      }
-    },
-    {
-      "id": "hypsilophodon",
-      "displayName": "Hypsilophodon",
-      "diet": "herbivore",
-      "role": "grazer",
-      "archetype": "small-herbivore",
-      "size": {
-        "lengthM": 2,
-        "massKg": 55,
-        "eyeHeightM": 0.9
-      },
-      "move": {
-        "walk": 2.4,
-        "run": 12,
-        "turnRate": 310
-      },
-      "senses": {
-        "sightRangeM": 42,
-        "sightFovDeg": 280,
-        "hearingRangeM": 42
-      },
-      "combat": {
-        "damage": 0,
-        "attackRangeM": 0,
-        "attackCooldownS": 0,
-        "health": 60
-      },
-      "behavior": {
-        "aggression": 0,
-        "territoryRadiusM": 40,
-        "social": "herd",
-        "fleeHealthPct": 1,
-        "fleeFromPredatorM": 36
-      },
-      "modelPath": "./assets/models/hypsilophodon.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "graze",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#737a62",
-        "bodyL": 0.54,
-        "bodyW": 0.24,
-        "bodyH": 0.3,
-        "standH": 1.01,
-        "crest": false
-      }
-    },
-    {
-      "id": "corythosaurus",
-      "displayName": "Corythosaurus",
-      "diet": "herbivore",
-      "role": "grazer",
-      "archetype": "herd-grazer",
-      "size": {
-        "lengthM": 9,
-        "massKg": 3000,
-        "eyeHeightM": 2.7
-      },
-      "move": {
-        "walk": 2.2,
-        "run": 9.5,
-        "turnRate": 160
-      },
-      "senses": {
-        "sightRangeM": 46,
-        "sightFovDeg": 230,
-        "hearingRangeM": 42
-      },
-      "combat": {
-        "damage": 0,
-        "attackRangeM": 0,
-        "attackCooldownS": 0,
-        "health": 240
-      },
-      "behavior": {
-        "aggression": 0,
-        "territoryRadiusM": 60,
-        "social": "herd",
-        "fleeHealthPct": 1,
-        "fleeFromPredatorM": 38
-      },
-      "modelPath": "./assets/models/corythosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "graze",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#6a7a72",
-        "bodyL": 2.43,
-        "bodyW": 1.08,
-        "bodyH": 1.35,
-        "standH": 3.02,
-        "crest": true
-      }
-    },
-    {
-      "id": "iguanodon",
-      "displayName": "Iguanodon",
-      "diet": "herbivore",
-      "role": "grazer",
-      "archetype": "herd-grazer",
-      "size": {
-        "lengthM": 10,
-        "massKg": 3500,
-        "eyeHeightM": 2.8
-      },
-      "move": {
-        "walk": 2.2,
-        "run": 9,
-        "turnRate": 150
-      },
-      "senses": {
-        "sightRangeM": 46,
-        "sightFovDeg": 220,
-        "hearingRangeM": 44
-      },
-      "combat": {
-        "damage": 18,
-        "attackRangeM": 2.2,
-        "attackCooldownS": 1.6,
-        "health": 300
-      },
-      "behavior": {
-        "aggression": 0.1,
-        "territoryRadiusM": 70,
-        "social": "herd",
-        "fleeHealthPct": 0.6,
-        "fleeFromPredatorM": 34
-      },
-      "modelPath": "./assets/models/iguanodon.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "graze",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#74766a",
-        "bodyL": 2.7,
-        "bodyW": 1.2,
-        "bodyH": 1.5,
-        "standH": 3.14,
-        "crest": false
-      }
-    },
-    {
-      "id": "pachyrhinosaurus",
-      "displayName": "Pachyrhinosaurus",
-      "diet": "herbivore",
-      "role": "grazer",
-      "archetype": "herd-grazer-armored",
-      "size": {
-        "lengthM": 6.5,
-        "massKg": 4000,
-        "eyeHeightM": 2
-      },
-      "move": {
-        "walk": 2,
-        "run": 8.5,
-        "turnRate": 140
-      },
-      "senses": {
-        "sightRangeM": 44,
-        "sightFovDeg": 250,
-        "hearingRangeM": 48
-      },
-      "combat": {
-        "damage": 34,
-        "attackRangeM": 2.8,
-        "attackCooldownS": 1.5,
-        "health": 520
-      },
-      "behavior": {
-        "aggression": 0,
-        "territoryRadiusM": 75,
-        "social": "herd",
-        "fleeHealthPct": 0.4,
-        "fleeFromPredatorM": 30
-      },
-      "modelPath": "./assets/models/pachyrhinosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "graze",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#5e6356",
-        "bodyL": 1.76,
-        "bodyW": 0.78,
-        "bodyH": 0.97,
-        "standH": 2.24,
-        "crest": false,
-        "frill": true
-      }
-    },
-    {
-      "id": "stegosaurus",
-      "displayName": "Stegosaurus",
-      "diet": "herbivore",
-      "role": "grazer",
-      "archetype": "herd-grazer-armored",
-      "size": {
-        "lengthM": 9,
-        "massKg": 5500,
-        "eyeHeightM": 2.3
-      },
-      "move": {
-        "walk": 1.9,
-        "run": 7.5,
-        "turnRate": 130
-      },
-      "senses": {
-        "sightRangeM": 42,
-        "sightFovDeg": 230,
-        "hearingRangeM": 46
-      },
-      "combat": {
-        "damage": 45,
-        "attackRangeM": 3.2,
-        "attackCooldownS": 1.6,
-        "health": 640
-      },
-      "behavior": {
-        "aggression": 0,
-        "territoryRadiusM": 80,
-        "social": "herd",
-        "fleeHealthPct": 0.4,
-        "fleeFromPredatorM": 28
-      },
-      "modelPath": "./assets/models/stegosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "graze",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#566052",
-        "bodyL": 2.43,
-        "bodyW": 1.08,
-        "bodyH": 1.35,
-        "standH": 2.58,
-        "crest": false
-      }
-    },
-    {
-      "id": "ankylosaurus",
-      "displayName": "Ankylosaurus",
-      "diet": "herbivore",
-      "role": "grazer",
-      "archetype": "herd-grazer-armored",
-      "size": {
-        "lengthM": 8,
-        "massKg": 6000,
-        "eyeHeightM": 1.7
-      },
-      "move": {
-        "walk": 1.8,
-        "run": 7,
-        "turnRate": 125
-      },
-      "senses": {
-        "sightRangeM": 40,
-        "sightFovDeg": 220,
-        "hearingRangeM": 46
-      },
-      "combat": {
-        "damage": 50,
-        "attackRangeM": 3,
-        "attackCooldownS": 1.7,
-        "health": 720
-      },
-      "behavior": {
-        "aggression": 0,
-        "territoryRadiusM": 80,
-        "social": "herd",
-        "fleeHealthPct": 0.35,
-        "fleeFromPredatorM": 26
-      },
-      "modelPath": "./assets/models/ankylosaurus.glb",
-      "animSet": [
-        "idle",
-        "walk",
-        "run",
-        "graze",
-        "stagger",
-        "die"
-      ],
-      "greybox": {
-        "color": "#4e5448",
-        "bodyL": 2.16,
-        "bodyW": 0.96,
-        "bodyH": 1.2,
-        "standH": 1.9,
-        "crest": false
-      }
-    }
-  ]
+ "_note": "SpeciesProfile rows. AI reads ONLY this. New dinosaur = new row + (v2) new .glb. No gameplay/AI code per species.",
+ "species": [
+  {
+   "id": "parasaurolophus",
+   "displayName": "Parasaurolophus",
+   "diet": "herbivore",
+   "role": "grazer",
+   "archetype": "herd-grazer",
+   "size": {
+    "lengthM": 9.5,
+    "massKg": 2500,
+    "eyeHeightM": 2.6
+   },
+   "move": {
+    "walk": 2.2,
+    "run": 9.5,
+    "turnRate": 160
+   },
+   "senses": {
+    "sightRangeM": 45,
+    "sightFovDeg": 230,
+    "hearingRangeM": 40
+   },
+   "combat": {
+    "damage": 0,
+    "attackRangeM": 0,
+    "attackCooldownS": 0,
+    "health": 220
+   },
+   "behavior": {
+    "aggression": 0,
+    "territoryRadiusM": 60,
+    "social": "herd",
+    "fleeHealthPct": 1,
+    "fleeFromPredatorM": 38
+   },
+   "modelPath": "./assets/models/parasaurolophus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "graze",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#7d837c",
+    "bodyL": 2.6,
+    "bodyW": 1,
+    "bodyH": 1.1,
+    "standH": 3,
+    "crest": true
+   }
+  },
+  {
+   "id": "deinonychus",
+   "displayName": "Deinonychus",
+   "diet": "carnivore",
+   "role": "pack",
+   "archetype": "pack-hunter",
+   "size": {
+    "lengthM": 3.4,
+    "massKg": 73,
+    "eyeHeightM": 1
+   },
+   "move": {
+    "walk": 2.6,
+    "run": 12.5,
+    "turnRate": 320
+   },
+   "senses": {
+    "sightRangeM": 55,
+    "sightFovDeg": 150,
+    "hearingRangeM": 50
+   },
+   "combat": {
+    "damage": 9,
+    "attackRangeM": 2,
+    "attackCooldownS": 1.1,
+    "health": 60
+   },
+   "behavior": {
+    "aggression": 0.7,
+    "territoryRadiusM": 120,
+    "social": "pack",
+    "packRoles": [
+     "lead",
+     "flank",
+     "harry"
+    ],
+    "fleeHealthPct": 0.25
+   },
+   "modelPath": "./assets/models/deinonychus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#3a3d3c",
+    "bodyL": 1.1,
+    "bodyW": 0.45,
+    "bodyH": 0.55,
+    "standH": 1.4,
+    "crest": false
+   }
+  },
+  {
+   "id": "trex",
+   "displayName": "Tyrannosaurus Rex",
+   "diet": "carnivore",
+   "role": "apex",
+   "archetype": "apex",
+   "size": {
+    "lengthM": 12.5,
+    "massKg": 8000,
+    "eyeHeightM": 4
+   },
+   "move": {
+    "walk": 2.8,
+    "run": 10.5,
+    "turnRate": 110
+   },
+   "senses": {
+    "sightRangeM": 70,
+    "sightFovDeg": 130,
+    "hearingRangeM": 110
+   },
+   "combat": {
+    "damage": 55,
+    "attackRangeM": 4.5,
+    "attackCooldownS": 1.8,
+    "health": 600
+   },
+   "behavior": {
+    "aggression": 0.55,
+    "territoryRadiusM": 220,
+    "social": "solitary",
+    "fleeHealthPct": 0,
+    "noiseDrawWeight": 1
+   },
+   "modelPath": "./assets/models/trex.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "roar",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#2b2d2e",
+    "bodyL": 3.4,
+    "bodyW": 1.2,
+    "bodyH": 1.7,
+    "standH": 4.6,
+    "crest": false
+   }
+  },
+  {
+   "id": "velociraptor",
+   "displayName": "Velociraptor",
+   "diet": "carnivore",
+   "role": "pack",
+   "archetype": "pack-hunter",
+   "size": {
+    "lengthM": 2,
+    "massKg": 15,
+    "eyeHeightM": 0.7
+   },
+   "move": {
+    "walk": 2.8,
+    "run": 10.5,
+    "turnRate": 340
+   },
+   "senses": {
+    "sightRangeM": 60,
+    "sightFovDeg": 150,
+    "hearingRangeM": 55
+   },
+   "combat": {
+    "damage": 7,
+    "attackRangeM": 1.8,
+    "attackCooldownS": 1,
+    "health": 45
+   },
+   "behavior": {
+    "aggression": 0.75,
+    "territoryRadiusM": 120,
+    "social": "pack",
+    "packRoles": [
+     "lead",
+     "flank",
+     "harry"
+    ],
+    "fleeHealthPct": 0.2
+   },
+   "modelPath": "./assets/models/velociraptor.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#43463f",
+    "bodyL": 0.9,
+    "bodyW": 0.4,
+    "bodyH": 0.45,
+    "standH": 1,
+    "crest": false
+   }
+  },
+  {
+   "id": "carnotaurus",
+   "displayName": "Carnotaurus",
+   "diet": "carnivore",
+   "role": "pursuit",
+   "archetype": "pursuit",
+   "size": {
+    "lengthM": 8,
+    "massKg": 1500,
+    "eyeHeightM": 2.8
+   },
+   "move": {
+    "walk": 2.8,
+    "run": 13.5,
+    "turnRate": 150
+   },
+   "senses": {
+    "sightRangeM": 65,
+    "sightFovDeg": 140,
+    "hearingRangeM": 70
+   },
+   "combat": {
+    "damage": 35,
+    "attackRangeM": 3.2,
+    "attackCooldownS": 1.4,
+    "health": 320
+   },
+   "behavior": {
+    "aggression": 0.6,
+    "territoryRadiusM": 160,
+    "social": "solitary",
+    "fleeHealthPct": 0.1
+   },
+   "modelPath": "./assets/models/carnotaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#3a3d36",
+    "bodyL": 2.6,
+    "bodyW": 1,
+    "bodyH": 1.3,
+    "standH": 3,
+    "crest": false
+   }
+  },
+  {
+   "id": "spinosaurus",
+   "displayName": "Spinosaurus",
+   "diet": "carnivore",
+   "role": "apex",
+   "archetype": "water",
+   "size": {
+    "lengthM": 15,
+    "massKg": 7000,
+    "eyeHeightM": 4.2
+   },
+   "move": {
+    "walk": 2.6,
+    "run": 9.5,
+    "turnRate": 95
+   },
+   "senses": {
+    "sightRangeM": 70,
+    "sightFovDeg": 135,
+    "hearingRangeM": 95
+   },
+   "combat": {
+    "damage": 50,
+    "attackRangeM": 4.5,
+    "attackCooldownS": 1.7,
+    "health": 560
+   },
+   "behavior": {
+    "aggression": 0.5,
+    "territoryRadiusM": 200,
+    "social": "solitary",
+    "fleeHealthPct": 0,
+    "noiseDrawWeight": 0.9
+   },
+   "modelPath": "./assets/models/spinosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "roar",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#2f3330",
+    "bodyL": 3.5,
+    "bodyW": 1.1,
+    "bodyH": 1.6,
+    "standH": 5.5,
+    "crest": false
+   }
+  },
+  {
+   "id": "triceratops",
+   "displayName": "Triceratops",
+   "diet": "herbivore",
+   "role": "grazer",
+   "archetype": "herd-grazer-armored",
+   "size": {
+    "lengthM": 9,
+    "massKg": 9000,
+    "eyeHeightM": 2.5
+   },
+   "move": {
+    "walk": 2,
+    "run": 8,
+    "turnRate": 140
+   },
+   "senses": {
+    "sightRangeM": 45,
+    "sightFovDeg": 250,
+    "hearingRangeM": 50
+   },
+   "combat": {
+    "damage": 40,
+    "attackRangeM": 3,
+    "attackCooldownS": 1.5,
+    "health": 700
+   },
+   "behavior": {
+    "aggression": 0,
+    "territoryRadiusM": 80,
+    "social": "herd",
+    "fleeHealthPct": 0.4,
+    "fleeFromPredatorM": 30
+   },
+   "modelPath": "./assets/models/triceratops.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "graze",
+    "charge",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#5a5e52",
+    "bodyL": 2.4,
+    "bodyW": 1.2,
+    "bodyH": 1.2,
+    "standH": 3,
+    "crest": false,
+    "frill": true
+   }
+  },
+  {
+   "id": "troodon",
+   "displayName": "Troodon",
+   "diet": "carnivore",
+   "role": "pack",
+   "archetype": "pack-hunter",
+   "size": {
+    "lengthM": 2.4,
+    "massKg": 50,
+    "eyeHeightM": 0.9
+   },
+   "move": {
+    "walk": 2.7,
+    "run": 11.5,
+    "turnRate": 330
+   },
+   "senses": {
+    "sightRangeM": 60,
+    "sightFovDeg": 160,
+    "hearingRangeM": 55
+   },
+   "combat": {
+    "damage": 7,
+    "attackRangeM": 1.8,
+    "attackCooldownS": 1,
+    "health": 50
+   },
+   "behavior": {
+    "aggression": 0.7,
+    "territoryRadiusM": 110,
+    "social": "pack",
+    "fleeHealthPct": 0.25,
+    "packRoles": [
+     "lead",
+     "flank",
+     "harry"
+    ]
+   },
+   "modelPath": "./assets/models/troodon.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#46473a",
+    "bodyL": 0.65,
+    "bodyW": 0.29,
+    "bodyH": 0.36,
+    "standH": 1.01,
+    "crest": false
+   }
+  },
+  {
+   "id": "atrociraptor",
+   "displayName": "Atrociraptor",
+   "diet": "carnivore",
+   "role": "pack",
+   "archetype": "pack-hunter",
+   "size": {
+    "lengthM": 3,
+    "massKg": 70,
+    "eyeHeightM": 1
+   },
+   "move": {
+    "walk": 2.8,
+    "run": 12,
+    "turnRate": 330
+   },
+   "senses": {
+    "sightRangeM": 58,
+    "sightFovDeg": 150,
+    "hearingRangeM": 52
+   },
+   "combat": {
+    "damage": 8,
+    "attackRangeM": 1.9,
+    "attackCooldownS": 1.05,
+    "health": 58
+   },
+   "behavior": {
+    "aggression": 0.78,
+    "territoryRadiusM": 120,
+    "social": "pack",
+    "fleeHealthPct": 0.22,
+    "packRoles": [
+     "lead",
+     "flank",
+     "harry"
+    ]
+   },
+   "modelPath": "./assets/models/atrociraptor.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#5a4632",
+    "bodyL": 0.81,
+    "bodyW": 0.36,
+    "bodyH": 0.45,
+    "standH": 1.12,
+    "crest": false
+   }
+  },
+  {
+   "id": "pyroraptor",
+   "displayName": "Pyroraptor",
+   "diet": "carnivore",
+   "role": "pack",
+   "archetype": "pack-hunter",
+   "size": {
+    "lengthM": 2.5,
+    "massKg": 55,
+    "eyeHeightM": 0.9
+   },
+   "move": {
+    "walk": 2.8,
+    "run": 11.8,
+    "turnRate": 335
+   },
+   "senses": {
+    "sightRangeM": 58,
+    "sightFovDeg": 150,
+    "hearingRangeM": 52
+   },
+   "combat": {
+    "damage": 7,
+    "attackRangeM": 1.8,
+    "attackCooldownS": 1,
+    "health": 52
+   },
+   "behavior": {
+    "aggression": 0.76,
+    "territoryRadiusM": 115,
+    "social": "pack",
+    "fleeHealthPct": 0.22,
+    "packRoles": [
+     "lead",
+     "flank",
+     "harry"
+    ]
+   },
+   "modelPath": "./assets/models/pyroraptor.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#7a3a26",
+    "bodyL": 0.68,
+    "bodyW": 0.3,
+    "bodyH": 0.38,
+    "standH": 1.01,
+    "crest": false
+   }
+  },
+  {
+   "id": "dilophosaurus",
+   "displayName": "Dilophosaurus",
+   "diet": "carnivore",
+   "role": "ambush",
+   "archetype": "ambush",
+   "size": {
+    "lengthM": 6,
+    "massKg": 400,
+    "eyeHeightM": 2
+   },
+   "move": {
+    "walk": 2.6,
+    "run": 11,
+    "turnRate": 200
+   },
+   "senses": {
+    "sightRangeM": 60,
+    "sightFovDeg": 150,
+    "hearingRangeM": 60
+   },
+   "combat": {
+    "damage": 22,
+    "attackRangeM": 2.6,
+    "attackCooldownS": 1.3,
+    "health": 170
+   },
+   "behavior": {
+    "aggression": 0.6,
+    "territoryRadiusM": 140,
+    "social": "solitary",
+    "fleeHealthPct": 0.2,
+    "fleeFromPredatorM": 0
+   },
+   "modelPath": "./assets/models/dilophosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#3f5238",
+    "bodyL": 1.62,
+    "bodyW": 0.72,
+    "bodyH": 0.9,
+    "standH": 2.24,
+    "crest": true
+   }
+  },
+  {
+   "id": "majungasaurus",
+   "displayName": "Majungasaurus",
+   "diet": "carnivore",
+   "role": "ambush",
+   "archetype": "ambush",
+   "size": {
+    "lengthM": 6.5,
+    "massKg": 1100,
+    "eyeHeightM": 2.4
+   },
+   "move": {
+    "walk": 2.7,
+    "run": 11.5,
+    "turnRate": 160
+   },
+   "senses": {
+    "sightRangeM": 62,
+    "sightFovDeg": 140,
+    "hearingRangeM": 65
+   },
+   "combat": {
+    "damage": 30,
+    "attackRangeM": 3,
+    "attackCooldownS": 1.4,
+    "health": 300
+   },
+   "behavior": {
+    "aggression": 0.62,
+    "territoryRadiusM": 150,
+    "social": "solitary",
+    "fleeHealthPct": 0.15
+   },
+   "modelPath": "./assets/models/majungasaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#4a4236",
+    "bodyL": 1.76,
+    "bodyW": 0.78,
+    "bodyH": 0.97,
+    "standH": 2.69,
+    "crest": false
+   }
+  },
+  {
+   "id": "cryolophosaurus",
+   "displayName": "Cryolophosaurus",
+   "diet": "carnivore",
+   "role": "pursuit",
+   "archetype": "pursuit",
+   "size": {
+    "lengthM": 6.5,
+    "massKg": 500,
+    "eyeHeightM": 2.4
+   },
+   "move": {
+    "walk": 2.8,
+    "run": 12.5,
+    "turnRate": 160
+   },
+   "senses": {
+    "sightRangeM": 64,
+    "sightFovDeg": 140,
+    "hearingRangeM": 68
+   },
+   "combat": {
+    "damage": 28,
+    "attackRangeM": 3,
+    "attackCooldownS": 1.35,
+    "health": 260
+   },
+   "behavior": {
+    "aggression": 0.6,
+    "territoryRadiusM": 150,
+    "social": "solitary",
+    "fleeHealthPct": 0.12
+   },
+   "modelPath": "./assets/models/cryolophosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#42504a",
+    "bodyL": 1.76,
+    "bodyW": 0.78,
+    "bodyH": 0.97,
+    "standH": 2.69,
+    "crest": true
+   }
+  },
+  {
+   "id": "monolophosaurus",
+   "displayName": "Monolophosaurus",
+   "diet": "carnivore",
+   "role": "pursuit",
+   "archetype": "pursuit",
+   "size": {
+    "lengthM": 5.5,
+    "massKg": 475,
+    "eyeHeightM": 2.2
+   },
+   "move": {
+    "walk": 2.8,
+    "run": 12.8,
+    "turnRate": 165
+   },
+   "senses": {
+    "sightRangeM": 62,
+    "sightFovDeg": 140,
+    "hearingRangeM": 66
+   },
+   "combat": {
+    "damage": 26,
+    "attackRangeM": 2.8,
+    "attackCooldownS": 1.3,
+    "health": 240
+   },
+   "behavior": {
+    "aggression": 0.6,
+    "territoryRadiusM": 150,
+    "social": "solitary",
+    "fleeHealthPct": 0.12
+   },
+   "modelPath": "./assets/models/monolophosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#4d4a36",
+    "bodyL": 1.49,
+    "bodyW": 0.66,
+    "bodyH": 0.82,
+    "standH": 2.46,
+    "crest": true
+   }
+  },
+  {
+   "id": "ceratosaurus",
+   "displayName": "Ceratosaurus",
+   "diet": "carnivore",
+   "role": "pursuit",
+   "archetype": "pursuit",
+   "size": {
+    "lengthM": 6,
+    "massKg": 800,
+    "eyeHeightM": 2.5
+   },
+   "move": {
+    "walk": 2.8,
+    "run": 12.5,
+    "turnRate": 155
+   },
+   "senses": {
+    "sightRangeM": 64,
+    "sightFovDeg": 140,
+    "hearingRangeM": 70
+   },
+   "combat": {
+    "damage": 30,
+    "attackRangeM": 3.1,
+    "attackCooldownS": 1.35,
+    "health": 300
+   },
+   "behavior": {
+    "aggression": 0.62,
+    "territoryRadiusM": 160,
+    "social": "solitary",
+    "fleeHealthPct": 0.1
+   },
+   "modelPath": "./assets/models/ceratosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#5a3f30",
+    "bodyL": 1.62,
+    "bodyW": 0.72,
+    "bodyH": 0.9,
+    "standH": 2.8,
+    "crest": false
+   }
+  },
+  {
+   "id": "rugops",
+   "displayName": "Rugops",
+   "diet": "carnivore",
+   "role": "pursuit",
+   "archetype": "pursuit",
+   "size": {
+    "lengthM": 5.5,
+    "massKg": 750,
+    "eyeHeightM": 2.3
+   },
+   "move": {
+    "walk": 2.7,
+    "run": 12,
+    "turnRate": 150
+   },
+   "senses": {
+    "sightRangeM": 62,
+    "sightFovDeg": 145,
+    "hearingRangeM": 68
+   },
+   "combat": {
+    "damage": 24,
+    "attackRangeM": 2.8,
+    "attackCooldownS": 1.35,
+    "health": 250
+   },
+   "behavior": {
+    "aggression": 0.5,
+    "territoryRadiusM": 150,
+    "social": "solitary",
+    "fleeHealthPct": 0.18
+   },
+   "modelPath": "./assets/models/rugops.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#544a3c",
+    "bodyL": 1.49,
+    "bodyW": 0.66,
+    "bodyH": 0.82,
+    "standH": 2.58,
+    "crest": false
+   }
+  },
+  {
+   "id": "megalosaurus",
+   "displayName": "Megalosaurus",
+   "diet": "carnivore",
+   "role": "pursuit",
+   "archetype": "pursuit",
+   "size": {
+    "lengthM": 7,
+    "massKg": 1000,
+    "eyeHeightM": 2.7
+   },
+   "move": {
+    "walk": 2.8,
+    "run": 12,
+    "turnRate": 150
+   },
+   "senses": {
+    "sightRangeM": 66,
+    "sightFovDeg": 140,
+    "hearingRangeM": 72
+   },
+   "combat": {
+    "damage": 34,
+    "attackRangeM": 3.2,
+    "attackCooldownS": 1.4,
+    "health": 330
+   },
+   "behavior": {
+    "aggression": 0.62,
+    "territoryRadiusM": 165,
+    "social": "solitary",
+    "fleeHealthPct": 0.1
+   },
+   "modelPath": "./assets/models/megalosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#46423a",
+    "bodyL": 1.89,
+    "bodyW": 0.84,
+    "bodyH": 1.05,
+    "standH": 3.02,
+    "crest": false
+   }
+  },
+  {
+   "id": "allosaurus",
+   "displayName": "Allosaurus",
+   "diet": "carnivore",
+   "role": "pursuit",
+   "archetype": "pursuit",
+   "size": {
+    "lengthM": 9.5,
+    "massKg": 2300,
+    "eyeHeightM": 3.2
+   },
+   "move": {
+    "walk": 2.9,
+    "run": 13,
+    "turnRate": 135
+   },
+   "senses": {
+    "sightRangeM": 68,
+    "sightFovDeg": 135,
+    "hearingRangeM": 80
+   },
+   "combat": {
+    "damage": 42,
+    "attackRangeM": 3.6,
+    "attackCooldownS": 1.5,
+    "health": 420
+   },
+   "behavior": {
+    "aggression": 0.64,
+    "territoryRadiusM": 180,
+    "social": "solitary",
+    "fleeHealthPct": 0.05
+   },
+   "modelPath": "./assets/models/allosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#4a4034",
+    "bodyL": 2.57,
+    "bodyW": 1.14,
+    "bodyH": 1.43,
+    "standH": 3.58,
+    "crest": false
+   }
+  },
+  {
+   "id": "yangchuanosaurus",
+   "displayName": "Yangchuanosaurus",
+   "diet": "carnivore",
+   "role": "pursuit",
+   "archetype": "pursuit",
+   "size": {
+    "lengthM": 10,
+    "massKg": 3000,
+    "eyeHeightM": 3.4
+   },
+   "move": {
+    "walk": 2.8,
+    "run": 12,
+    "turnRate": 130
+   },
+   "senses": {
+    "sightRangeM": 68,
+    "sightFovDeg": 135,
+    "hearingRangeM": 82
+   },
+   "combat": {
+    "damage": 44,
+    "attackRangeM": 3.8,
+    "attackCooldownS": 1.55,
+    "health": 450
+   },
+   "behavior": {
+    "aggression": 0.62,
+    "territoryRadiusM": 185,
+    "social": "solitary",
+    "fleeHealthPct": 0.05
+   },
+   "modelPath": "./assets/models/yangchuanosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#52473a",
+    "bodyL": 2.7,
+    "bodyW": 1.2,
+    "bodyH": 1.5,
+    "standH": 3.81,
+    "crest": false
+   }
+  },
+  {
+   "id": "baryonyx",
+   "displayName": "Baryonyx",
+   "diet": "carnivore",
+   "role": "water",
+   "archetype": "water",
+   "size": {
+    "lengthM": 8.5,
+    "massKg": 1700,
+    "eyeHeightM": 2.8
+   },
+   "move": {
+    "walk": 2.7,
+    "run": 11,
+    "turnRate": 120
+   },
+   "senses": {
+    "sightRangeM": 66,
+    "sightFovDeg": 140,
+    "hearingRangeM": 80
+   },
+   "combat": {
+    "damage": 36,
+    "attackRangeM": 3.4,
+    "attackCooldownS": 1.45,
+    "health": 360
+   },
+   "behavior": {
+    "aggression": 0.55,
+    "territoryRadiusM": 170,
+    "social": "solitary",
+    "fleeHealthPct": 0.08
+   },
+   "modelPath": "./assets/models/baryonyx.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#3a4a4a",
+    "bodyL": 2.29,
+    "bodyW": 1.02,
+    "bodyH": 1.27,
+    "standH": 3.14,
+    "crest": false
+   }
+  },
+  {
+   "id": "suchomimus",
+   "displayName": "Suchomimus",
+   "diet": "carnivore",
+   "role": "water",
+   "archetype": "water",
+   "size": {
+    "lengthM": 11,
+    "massKg": 3500,
+    "eyeHeightM": 3.2
+   },
+   "move": {
+    "walk": 2.6,
+    "run": 10.5,
+    "turnRate": 110
+   },
+   "senses": {
+    "sightRangeM": 68,
+    "sightFovDeg": 140,
+    "hearingRangeM": 85
+   },
+   "combat": {
+    "damage": 40,
+    "attackRangeM": 3.8,
+    "attackCooldownS": 1.5,
+    "health": 420
+   },
+   "behavior": {
+    "aggression": 0.55,
+    "territoryRadiusM": 180,
+    "social": "solitary",
+    "fleeHealthPct": 0.05
+   },
+   "modelPath": "./assets/models/suchomimus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#36464e",
+    "bodyL": 2.97,
+    "bodyW": 1.32,
+    "bodyH": 1.65,
+    "standH": 3.58,
+    "crest": false
+   }
+  },
+  {
+   "id": "giganotosaurus",
+   "displayName": "Giganotosaurus",
+   "diet": "carnivore",
+   "role": "apex",
+   "archetype": "apex",
+   "size": {
+    "lengthM": 13,
+    "massKg": 8200,
+    "eyeHeightM": 4.1
+   },
+   "move": {
+    "walk": 2.8,
+    "run": 11,
+    "turnRate": 110
+   },
+   "senses": {
+    "sightRangeM": 72,
+    "sightFovDeg": 130,
+    "hearingRangeM": 105
+   },
+   "combat": {
+    "damage": 58,
+    "attackRangeM": 4.6,
+    "attackCooldownS": 1.8,
+    "health": 620
+   },
+   "behavior": {
+    "aggression": 0.58,
+    "territoryRadiusM": 230,
+    "social": "solitary",
+    "fleeHealthPct": 0,
+    "noiseDrawWeight": 1
+   },
+   "modelPath": "./assets/models/giganotosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "roar",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#33332e",
+    "bodyL": 3.51,
+    "bodyW": 1.56,
+    "bodyH": 1.95,
+    "standH": 4.59,
+    "crest": false
+   }
+  },
+  {
+   "id": "gallimimus",
+   "displayName": "Gallimimus",
+   "diet": "herbivore",
+   "role": "grazer",
+   "archetype": "small-herbivore",
+   "size": {
+    "lengthM": 6,
+    "massKg": 440,
+    "eyeHeightM": 2.2
+   },
+   "move": {
+    "walk": 2.6,
+    "run": 14,
+    "turnRate": 300
+   },
+   "senses": {
+    "sightRangeM": 50,
+    "sightFovDeg": 300,
+    "hearingRangeM": 55
+   },
+   "combat": {
+    "damage": 0,
+    "attackRangeM": 0,
+    "attackCooldownS": 0,
+    "health": 120
+   },
+   "behavior": {
+    "aggression": 0,
+    "territoryRadiusM": 50,
+    "social": "herd",
+    "fleeHealthPct": 1,
+    "fleeFromPredatorM": 42
+   },
+   "modelPath": "./assets/models/gallimimus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "graze",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#7a7468",
+    "bodyL": 1.62,
+    "bodyW": 0.72,
+    "bodyH": 0.9,
+    "standH": 2.46,
+    "crest": false
+   }
+  },
+  {
+   "id": "dryosaurus",
+   "displayName": "Dryosaurus",
+   "diet": "herbivore",
+   "role": "grazer",
+   "archetype": "small-herbivore",
+   "size": {
+    "lengthM": 3,
+    "massKg": 90,
+    "eyeHeightM": 1.3
+   },
+   "move": {
+    "walk": 2.4,
+    "run": 12.5,
+    "turnRate": 300
+   },
+   "senses": {
+    "sightRangeM": 45,
+    "sightFovDeg": 280,
+    "hearingRangeM": 45
+   },
+   "combat": {
+    "damage": 0,
+    "attackRangeM": 0,
+    "attackCooldownS": 0,
+    "health": 80
+   },
+   "behavior": {
+    "aggression": 0,
+    "territoryRadiusM": 45,
+    "social": "herd",
+    "fleeHealthPct": 1,
+    "fleeFromPredatorM": 38
+   },
+   "modelPath": "./assets/models/dryosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "graze",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#6f7560",
+    "bodyL": 0.81,
+    "bodyW": 0.36,
+    "bodyH": 0.45,
+    "standH": 1.46,
+    "crest": false
+   }
+  },
+  {
+   "id": "hypsilophodon",
+   "displayName": "Hypsilophodon",
+   "diet": "herbivore",
+   "role": "grazer",
+   "archetype": "small-herbivore",
+   "size": {
+    "lengthM": 2,
+    "massKg": 55,
+    "eyeHeightM": 0.9
+   },
+   "move": {
+    "walk": 2.4,
+    "run": 12,
+    "turnRate": 310
+   },
+   "senses": {
+    "sightRangeM": 42,
+    "sightFovDeg": 280,
+    "hearingRangeM": 42
+   },
+   "combat": {
+    "damage": 0,
+    "attackRangeM": 0,
+    "attackCooldownS": 0,
+    "health": 60
+   },
+   "behavior": {
+    "aggression": 0,
+    "territoryRadiusM": 40,
+    "social": "herd",
+    "fleeHealthPct": 1,
+    "fleeFromPredatorM": 36
+   },
+   "modelPath": "./assets/models/hypsilophodon.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "graze",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#737a62",
+    "bodyL": 0.54,
+    "bodyW": 0.24,
+    "bodyH": 0.3,
+    "standH": 1.01,
+    "crest": false
+   }
+  },
+  {
+   "id": "corythosaurus",
+   "displayName": "Corythosaurus",
+   "diet": "herbivore",
+   "role": "grazer",
+   "archetype": "herd-grazer",
+   "size": {
+    "lengthM": 9,
+    "massKg": 3000,
+    "eyeHeightM": 2.7
+   },
+   "move": {
+    "walk": 2.2,
+    "run": 9.5,
+    "turnRate": 160
+   },
+   "senses": {
+    "sightRangeM": 46,
+    "sightFovDeg": 230,
+    "hearingRangeM": 42
+   },
+   "combat": {
+    "damage": 0,
+    "attackRangeM": 0,
+    "attackCooldownS": 0,
+    "health": 240
+   },
+   "behavior": {
+    "aggression": 0,
+    "territoryRadiusM": 60,
+    "social": "herd",
+    "fleeHealthPct": 1,
+    "fleeFromPredatorM": 38
+   },
+   "modelPath": "./assets/models/corythosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "graze",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#6a7a72",
+    "bodyL": 2.43,
+    "bodyW": 1.08,
+    "bodyH": 1.35,
+    "standH": 3.02,
+    "crest": true
+   }
+  },
+  {
+   "id": "iguanodon",
+   "displayName": "Iguanodon",
+   "diet": "herbivore",
+   "role": "grazer",
+   "archetype": "herd-grazer",
+   "size": {
+    "lengthM": 10,
+    "massKg": 3500,
+    "eyeHeightM": 2.8
+   },
+   "move": {
+    "walk": 2.2,
+    "run": 9,
+    "turnRate": 150
+   },
+   "senses": {
+    "sightRangeM": 46,
+    "sightFovDeg": 220,
+    "hearingRangeM": 44
+   },
+   "combat": {
+    "damage": 18,
+    "attackRangeM": 2.2,
+    "attackCooldownS": 1.6,
+    "health": 300
+   },
+   "behavior": {
+    "aggression": 0.1,
+    "territoryRadiusM": 70,
+    "social": "herd",
+    "fleeHealthPct": 0.6,
+    "fleeFromPredatorM": 34
+   },
+   "modelPath": "./assets/models/iguanodon.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "graze",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#74766a",
+    "bodyL": 2.7,
+    "bodyW": 1.2,
+    "bodyH": 1.5,
+    "standH": 3.14,
+    "crest": false
+   }
+  },
+  {
+   "id": "pachyrhinosaurus",
+   "displayName": "Pachyrhinosaurus",
+   "diet": "herbivore",
+   "role": "grazer",
+   "archetype": "herd-grazer-armored",
+   "size": {
+    "lengthM": 6.5,
+    "massKg": 4000,
+    "eyeHeightM": 2
+   },
+   "move": {
+    "walk": 2,
+    "run": 8.5,
+    "turnRate": 140
+   },
+   "senses": {
+    "sightRangeM": 44,
+    "sightFovDeg": 250,
+    "hearingRangeM": 48
+   },
+   "combat": {
+    "damage": 34,
+    "attackRangeM": 2.8,
+    "attackCooldownS": 1.5,
+    "health": 520
+   },
+   "behavior": {
+    "aggression": 0,
+    "territoryRadiusM": 75,
+    "social": "herd",
+    "fleeHealthPct": 0.4,
+    "fleeFromPredatorM": 30
+   },
+   "modelPath": "./assets/models/pachyrhinosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "graze",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#5e6356",
+    "bodyL": 1.76,
+    "bodyW": 0.78,
+    "bodyH": 0.97,
+    "standH": 2.24,
+    "crest": false,
+    "frill": true
+   }
+  },
+  {
+   "id": "stegosaurus",
+   "displayName": "Stegosaurus",
+   "diet": "herbivore",
+   "role": "grazer",
+   "archetype": "herd-grazer-armored",
+   "size": {
+    "lengthM": 9,
+    "massKg": 5500,
+    "eyeHeightM": 2.3
+   },
+   "move": {
+    "walk": 1.9,
+    "run": 7.5,
+    "turnRate": 130
+   },
+   "senses": {
+    "sightRangeM": 42,
+    "sightFovDeg": 230,
+    "hearingRangeM": 46
+   },
+   "combat": {
+    "damage": 45,
+    "attackRangeM": 3.2,
+    "attackCooldownS": 1.6,
+    "health": 640
+   },
+   "behavior": {
+    "aggression": 0,
+    "territoryRadiusM": 80,
+    "social": "herd",
+    "fleeHealthPct": 0.4,
+    "fleeFromPredatorM": 28
+   },
+   "modelPath": "./assets/models/stegosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "graze",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#566052",
+    "bodyL": 2.43,
+    "bodyW": 1.08,
+    "bodyH": 1.35,
+    "standH": 2.58,
+    "crest": false
+   }
+  },
+  {
+   "id": "ankylosaurus",
+   "displayName": "Ankylosaurus",
+   "diet": "herbivore",
+   "role": "grazer",
+   "archetype": "herd-grazer-armored",
+   "size": {
+    "lengthM": 8,
+    "massKg": 6000,
+    "eyeHeightM": 1.7
+   },
+   "move": {
+    "walk": 1.8,
+    "run": 7,
+    "turnRate": 125
+   },
+   "senses": {
+    "sightRangeM": 40,
+    "sightFovDeg": 220,
+    "hearingRangeM": 46
+   },
+   "combat": {
+    "damage": 50,
+    "attackRangeM": 3,
+    "attackCooldownS": 1.7,
+    "health": 720
+   },
+   "behavior": {
+    "aggression": 0,
+    "territoryRadiusM": 80,
+    "social": "herd",
+    "fleeHealthPct": 0.35,
+    "fleeFromPredatorM": 26
+   },
+   "modelPath": "./assets/models/ankylosaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "graze",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#4e5448",
+    "bodyL": 2.16,
+    "bodyW": 0.96,
+    "bodyH": 1.2,
+    "standH": 1.9,
+    "crest": false
+   }
+  },
+  {
+   "id": "indominus",
+   "displayName": "Indominus Rex",
+   "diet": "carnivore",
+   "role": "apex",
+   "archetype": "apex",
+   "size": {
+    "lengthM": 15.2,
+    "massKg": 9000,
+    "eyeHeightM": 5
+   },
+   "move": {
+    "walk": 3.2,
+    "run": 11.5,
+    "turnRate": 120
+   },
+   "senses": {
+    "sightRangeM": 95,
+    "sightFovDeg": 160,
+    "hearingRangeM": 140
+   },
+   "combat": {
+    "damage": 70,
+    "attackRangeM": 5.2,
+    "attackCooldownS": 1.5,
+    "health": 1600
+   },
+   "behavior": {
+    "aggression": 0.95,
+    "territoryRadiusM": 300,
+    "social": "solitary",
+    "fleeHealthPct": 0,
+    "noiseDrawWeight": 1.5
+   },
+   "modelPath": "./assets/models/indominus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "roar",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#8c8f88",
+    "bodyL": 4.2,
+    "bodyW": 1.4,
+    "bodyH": 2.0,
+    "standH": 5.4,
+    "crest": true
+   }
+  },
+  {
+   "id": "mosasaurus",
+   "displayName": "Mosasaurus",
+   "diet": "carnivore",
+   "role": "apex",
+   "archetype": "apex",
+   "size": {
+    "lengthM": 17,
+    "massKg": 15000,
+    "eyeHeightM": 3
+   },
+   "move": {
+    "walk": 1.0,
+    "run": 12,
+    "turnRate": 90
+   },
+   "senses": {
+    "sightRangeM": 80,
+    "sightFovDeg": 140,
+    "hearingRangeM": 120
+   },
+   "combat": {
+    "damage": 120,
+    "attackRangeM": 7,
+    "attackCooldownS": 3,
+    "health": 3000
+   },
+   "behavior": {
+    "aggression": 0.9,
+    "territoryRadiusM": 200,
+    "social": "solitary",
+    "fleeHealthPct": 0,
+    "noiseDrawWeight": 1
+   },
+   "modelPath": "./assets/models/mosasaurus.glb",
+   "animSet": [
+    "idle",
+    "swim",
+    "lunge",
+    "roar"
+   ],
+   "greybox": {
+    "color": "#37474a",
+    "bodyL": 7,
+    "bodyW": 2.2,
+    "bodyH": 2.4,
+    "standH": 3.0,
+    "crest": false
+   }
+  },
+  {
+   "id": "pteranodon",
+   "displayName": "Pteranodon",
+   "diet": "carnivore",
+   "role": "flier",
+   "archetype": "apex",
+   "size": {
+    "lengthM": 6,
+    "massKg": 25,
+    "eyeHeightM": 2
+   },
+   "move": {
+    "walk": 2,
+    "run": 18,
+    "turnRate": 160
+   },
+   "senses": {
+    "sightRangeM": 120,
+    "sightFovDeg": 180,
+    "hearingRangeM": 90
+   },
+   "combat": {
+    "damage": 18,
+    "attackRangeM": 2.5,
+    "attackCooldownS": 2,
+    "health": 70
+   },
+   "behavior": {
+    "aggression": 0.6,
+    "territoryRadiusM": 260,
+    "social": "flock",
+    "fleeHealthPct": 0.3,
+    "noiseDrawWeight": 0.5
+   },
+   "modelPath": "./assets/models/pteranodon.glb",
+   "animSet": [
+    "glide",
+    "flap",
+    "dive",
+    "screech"
+   ],
+   "greybox": {
+    "color": "#7a6a55",
+    "bodyL": 1.6,
+    "bodyW": 0.6,
+    "bodyH": 0.6,
+    "standH": 1.3,
+    "crest": true
+   }
+  }
+ ]
 }
