@@ -1039,6 +1039,12 @@ function updatePlayer(dt) {
   if (P.onTower) {   // stay on the platform (railed) — interact (E / CALL) to zip down
     const t = P.onTower, b = t.half - 0.45;
     P.x = clamp(P.x, t.x - b, t.x + b); P.z = clamp(P.z, t.z - b, t.z + b);
+  } else if (!P.zip) {   // watchtowers: step onto the ladder to auto-climb; otherwise you can't walk through the structure
+    for (const t of TOWERS) {
+      if (dist2(P.x, P.z, t.x, t.z + t.half) < 2.4 * 2.4) { climbTower(t); break; }   // at the ladder → go up
+      const dx = P.x - t.x, dz = P.z - t.z, d = Math.hypot(dx, dz) || 1, rr = t.half + 0.15;
+      if (d < rr) { P.x = t.x + dx / d * rr; P.z = t.z + dz / d * rr; }               // solid: push out of the legs
+    }
   }
 
   // posture per gait: running pitches the torso forward into the stride (the single walk clip sped up
