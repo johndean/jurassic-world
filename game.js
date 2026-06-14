@@ -122,10 +122,13 @@ function loadModel(path) {
 // re-skins its already-spawned grey-box instances the instant it lands. The big foliage-tree
 // .glb files (~30 MB) load last so they never gate the creature skins behind them.
 async function preloadModels() {
+  // HELI is in the priority wave: it's the FIRST thing seen (the crash intro), so the realistic Huey
+  // must be ready before any creature/foliage — otherwise the intro falls back to the boxy chopper.
+  if (HELI_MODEL) loadModel(HELI_MODEL).then(m => { MODELS[HELI_MODEL] = m; stripHeliRotor(m); });
   const creatures = [...new Set([PLAYER_MODEL, ...ROLES.map(r => r.model), ...Object.values(SPECIES).map(s => s.modelPath)].filter(Boolean))];
   await Promise.all(creatures.map(async p => { MODELS[p] = await loadModel(p); reskinDinos(p); }));
   if (!playerMixer) buildPlayer();
-  const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.fern, HELI_MODEL].filter(Boolean))];
+  const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.fern].filter(Boolean))];
   await Promise.all(foliage.map(async p => { MODELS[p] = await loadModel(p); }));
   buildFoliage();
   // hero ruin structures (photoreal .glb) — replace the procedural gate/centre once they land
@@ -1250,6 +1253,26 @@ function updateExtraction(dt) {
  * screen. Phases: incoming → landing → grounded → boarding → climbing → liftoff. */
 let evac = null;   // { phase, t, heli:{group,rotor,tailRotor}, hx,hz, lx,lz, groundY, done }
 
+// The helicopter .glb is a SINGLE merged mesh with its main-rotor blades baked into the body, so they
+// can't be spun as a separate node. buildHeli() adds its own spinning rotor; to avoid TWO sets of blades
+// (one static, one moving) we collapse the baked main-rotor blade vertices into the mast. Per the GLB
+// vertex histogram those blades are the only geometry that is both high (y>6000) and far out in XZ
+// (radius>14000); the fuselage/mast up there stays well under r=14000, so this targets blades only.
+// Positions are quantized SHORT (KHR_mesh_quantization) → the attribute array is an Int16Array.
+function stripHeliRotor(root) {
+  if (!root) return;
+  root.traverse(o => {
+    const g = o.geometry; if (!g || !g.attributes || !g.attributes.position) return;
+    const p = g.attributes.position, arr = p.array, n = p.count;
+    if (!(arr instanceof Int16Array)) return;
+    const isBlade = i => arr[i * 3 + 1] > 6000 && Math.hypot(arr[i * 3], arr[i * 3 + 2]) > 14000;
+    let hit = 0; for (let i = 0; i < n; i++) if (isBlade(i)) hit++;
+    if (hit < 200 || hit > n * 0.4) return;   // safety: heuristic looks wrong → leave the model untouched
+    for (let i = 0; i < n; i++) if (isBlade(i)) { arr[i * 3] = 0; arr[i * 3 + 1] = 7000; arr[i * 3 + 2] = 0; }
+    p.needsUpdate = true; if (g.computeBoundingSphere) g.computeBoundingSphere(); if (g.computeBoundingBox) g.computeBoundingBox();
+  });
+}
+
 function buildHeli() {
   const g = new THREE.Group();
   let topY = 3.4, len = 12, tailRotor = null;
@@ -1282,7 +1305,7 @@ function buildHeli() {
     g.add(tailRotor);
   }
   scene.add(g);
-  return { group: g, rotor, tailRotor };
+  return { group: g, rotor, tailRotor, real: !!MODELS[HELI_MODEL] };
 }
 function startEvac() {
   if (evac) return;
@@ -1338,13 +1361,22 @@ let intro = null, wreckMesh = null, introSeen = false;
 const introCine = () => intro !== null;                  // input locked while the intro plays
 const INTRO_CAM_END = 21;                                // after the crash the normal (wreck) camera takes over
 const INTRO_RADIO = [
-  { t: 1.2, h: `<span class="rc">RANGER-6:</span> Entering Alpha airspace. Stay sharp.` },
-  { t: 7.0, h: `<span class="rc">RANGER-6:</span> Thermal readings high… lost contact with Outpost Seven.` },
-  { t: 11.5, h: `<span class="rc">PILOT:</span> Mayday — losing navigation, controls unresponsive!` },
-  { t: 15.5, h: `<span class="rc">PILOT:</span> She's spinning — BRACE! BRACE!` },
+  { t: 1.2, h: `<span class="rc">RANGER-6:</span> Entering Alpha airspace. Stay sharp.`, say: "Ranger Six, entering Alpha airspace. Stay sharp." },
+  { t: 7.0, h: `<span class="rc">RANGER-6:</span> Thermal readings high… lost contact with Outpost Seven.`, say: "Thermal readings are high. We've lost contact with Outpost Seven." },
+  { t: 11.5, h: `<span class="rc">PILOT:</span> Mayday — losing navigation, controls unresponsive!`, say: "Mayday, mayday! Losing navigation — controls unresponsive!" },
+  { t: 15.5, h: `<span class="rc">PILOT:</span> She's spinning — BRACE! BRACE!`, say: "She's spinning! Brace! Brace! Brace!" },
   { t: 22.8, h: `…ringing… muffled voices… you come to in the wreck.` },
   { t: 32.5, h: `The jungle has gone silent. Something heard the crash.` },
 ];
+function speakRadio(text) {   // actual spoken radio voice via the Web Speech API (no assets/credits)
+  try {
+    const ss = window.speechSynthesis; if (!ss) return;
+    const u = new SpeechSynthesisUtterance(text); u.rate = 1.06; u.pitch = 0.85; u.volume = 1;
+    const v = ss.getVoices(); const pick = v.find(x => /en[-_]/i.test(x.lang) && /male|david|daniel|fred|alex/i.test(x.name)) || v.find(x => /en[-_]/i.test(x.lang));
+    if (pick) u.voice = pick;
+    ss.speak(u);
+  } catch (e) {}
+}
 
 function buildWreck(x, z) {
   const heli = buildHeli();                              // reuse the chopper, scorched + canted as wreckage
@@ -1369,6 +1401,33 @@ function placeAtWreck() {                                 // stand the survivor 
   cam.yaw = P.yaw; cam.pitch = -0.12; camera.up.set(0, 1, 0);
   if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
 }
+function makeTrooper(color) {                              // simple seated squad figure (reliable — no model load race)
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.1 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x26261f, roughness: 0.6 });
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.46, 4, 8), mat); torso.position.y = 0.55; torso.rotation.x = 0.18; g.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), dark); head.position.set(0, 0.98, 0.04); g.add(head);
+  const lap = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.46), mat); lap.position.set(0, 0.32, 0.26); g.add(lap);           // thighs (seated)
+  for (const sx of [-1, 1]) { const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.42, 6), dark); shin.position.set(sx * 0.12, 0.12, 0.46); g.add(shin); }
+  return g;
+}
+function buildRiders(group) {                             // show the player(s) riding in the open door
+  const n = Math.min(5, Net.on ? (remotePlayers.size + 1) : 1);
+  const colors = [0x5a6b3f, 0x4a5236, 0x6b6f4a, 0x47513f, 0x595b40];
+  for (let i = 0; i < n; i++) {
+    const t = makeTrooper(colors[i % colors.length]);
+    const x = n === 1 ? 0.1 : -1.05 + (i / (n - 1)) * 2.1;
+    t.position.set(x, 1.12, 1.55); group.add(t);          // seated at the +Z side door, facing out toward the camera
+  }
+  const pilot = makeTrooper(0x3a3f30); pilot.position.set(1.9, 1.35, -0.3); pilot.rotation.y = -0.6; group.add(pilot);
+}
+function upgradeIntroHeli() {                             // swap the boxy fallback for the realistic Huey the instant it loads
+  if (!intro || intro.crashed || !intro.heli || intro.heli.real || !MODELS[HELI_MODEL]) return;
+  const old = intro.heli.group, pos = old.position.clone(), rot = old.rotation.clone();
+  scene.remove(old);
+  const heli = buildHeli(); heli.group.position.copy(pos); heli.group.rotation.copy(rot);
+  buildRiders(heli.group); intro.heli = heli;
+}
 function startIntro() {
   const wx = 6, wz = 4;
   if (introSeen) {   // already watched this session → drop straight into the world at the wreck
@@ -1378,6 +1437,7 @@ function startIntro() {
   }
   Audio.rotor(true);
   const heli = buildHeli(); heli.group.position.set(60, 150, 120);
+  buildRiders(heli.group);                                // the squad rides in the open door
   intro = { t: 0, phase: "flight", heli, line: -1, shake: 0, crashed: false, camActive: true, wx, wz };
   if (playerMesh) playerMesh.visible = false;
   ["introTint", "introVig", "introBlack", "introRadio", "introBig"].forEach(k => { const e = $(k); if (e) e.style.opacity = "0"; });
@@ -1390,9 +1450,13 @@ function startIntro() {
 }
 function updateIntro(dt) {
   if (!intro) return;
+  upgradeIntroHeli();                                     // promote fallback → realistic Huey the moment it's available
   intro.t += dt; const T = intro.t, g = intro.heli ? intro.heli.group : null;
   const tint = $("introTint"), big = $("introBig"), cap = $("introCap");
-  if (intro.line + 1 < INTRO_RADIO.length && T >= INTRO_RADIO[intro.line + 1].t) { intro.line++; const r = $("introRadio"); r.innerHTML = INTRO_RADIO[intro.line].h; r.style.opacity = "1"; }
+  if (intro.line + 1 < INTRO_RADIO.length && T >= INTRO_RADIO[intro.line + 1].t) {
+    intro.line++; const e = INTRO_RADIO[intro.line]; const r = $("introRadio"); r.innerHTML = e.h; r.style.opacity = "1";
+    if (e.say) { Audio.squelch(); speakRadio(e.say); }    // actual spoken radio / mayday
+  }
   if (g && !intro.crashed && intro.heli.rotor) { intro.heli.rotor.rotation.y += dt * 30; if (intro.heli.tailRotor) intro.heli.tailRotor.rotation.x += dt * 60; }
 
   if (T < 6.5) {                          // 1 · deployment flight
@@ -1456,6 +1520,8 @@ function updateIntroCamera() {
 }
 function endIntro() {
   introSeen = true; intro = null;
+  try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
+  Audio.rotor(false);
   $("intro").classList.add("hidden"); $("introMission").classList.remove("show");
   ["introTint", "introVig", "introBlack", "introRadio", "introCap", "introBig"].forEach(k => { const e = $(k); if (e) e.style.opacity = "0"; });
   camera.up.set(0, 1, 0); $("hud").style.display = "";
@@ -1565,16 +1631,20 @@ const Audio = (() => {
     win() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => blip(f, 0.4, "triangle", 0.18), i * 130)); },
     lose() { [196, 165, 131, 98].forEach((f, i) => setTimeout(() => blip(f, 0.5, "sawtooth", 0.16), i * 160)); },
     // ---- opening crash-intro cues ----
-    rotor(on) {   // persistent helicopter engine + rotor thrum (fades out for the crash)
+    rotor(on) {   // layered helicopter: engine hum + rhythmic blade-slap "whump" + rotor-wash air
       ensure(); if (!ctx) return;
       if (on && !rotGain) {
         rotGain = ctx.createGain(); rotGain.gain.value = 0.0; rotGain.connect(ctx.destination);
-        const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 260; f.connect(rotGain);
-        [30, 44, 60].forEach(fr => { const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = fr; o.connect(f); o.start(); });
-        const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 11; lg.gain.value = 90; lfo.connect(lg).connect(f.frequency); lfo.start();
+        const pulse = ctx.createGain(); pulse.gain.value = 0.6; pulse.connect(rotGain);              // blade-slap tremolo node
+        const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 320; f.connect(pulse);
+        [28, 42, 56].forEach(fr => { const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = fr; o.connect(f); o.start(); });
+        const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 11; lg.gain.value = 80; lfo.connect(lg).connect(f.frequency); lfo.start();
+        const slap = ctx.createOscillator(), sd = ctx.createGain(); slap.type = "triangle"; slap.frequency.value = 9.5; sd.gain.value = 0.5; slap.connect(sd).connect(pulse.gain); slap.start();  // ~9.5 Hz whump-whump
+        const nb = ctx.createBufferSource(); const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; nb.buffer = buf; nb.loop = true; const nf = ctx.createBiquadFilter(); nf.type = "bandpass"; nf.frequency.value = 850; nf.Q.value = 0.7; const ng = ctx.createGain(); ng.gain.value = 0.3; nb.connect(nf).connect(ng).connect(pulse); nb.start();   // rotor-wash air
       }
-      if (rotGain) rotGain.gain.setTargetAtTime(on ? 0.12 : 0.0, ctx.currentTime, on ? 0.6 : 0.25);
+      if (rotGain) rotGain.gain.setTargetAtTime(on ? 0.16 : 0.0, ctx.currentTime, on ? 0.6 : 0.25);
     },
+    squelch() { noise(0.12, 0.12, 2600); blip(1500, 0.05, "square", 0.05); },   // radio crackle before a voice line
     alarm() { blip(1180, 0.16, "square", 0.14); setTimeout(() => blip(1180, 0.16, "square", 0.14), 220); },
     crash() { ensure(); noise(0.7, 0.5, 500); blip(64, 0.9, "sawtooth", 0.34, 28); setTimeout(() => noise(1.4, 0.12, 240), 120); },
   };
