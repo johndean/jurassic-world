@@ -38,6 +38,7 @@ const canvas = $("c");
 // ---- data, loaded at boot (data-driven content; no per-species code)
 let SPECIES = {};      // id -> profile (with resolved .arch attached at boot)
 let ARCHETYPES = {};   // archetype name -> behavior profile (data/archetypes.json)
+let CODEX = {};        // id -> field-guide content (data/codex.json)
 let BIOME = null;
 
 // Map the legacy per-species `role` enum onto archetypes, so a species missing
@@ -161,12 +162,14 @@ const cam = { yaw: 0, pitch: -0.18, dist: 7.2, height: 2.4 };
 
 /* ---------------------------------------------------------------- boot ---- */
 async function boot() {
-  const [sp, bi, ar] = await Promise.all([
+  const [sp, bi, ar, cx] = await Promise.all([
     fetch("./data/species.json").then(r => r.json()),
     fetch("./data/biome.alpha.json").then(r => r.json()),
     fetch("./data/archetypes.json").then(r => r.json()).catch(() => ({ archetypes: {} })),
+    fetch("./data/codex.json").then(r => r.json()).catch(() => ({ codex: {} })),
   ]);
   ARCHETYPES = ar.archetypes || {};
+  CODEX = cx.codex || {};
   sp.species.forEach(s => { s.arch = resolveArchetype(s); SPECIES[s.id] = s; });
   BIOME = bi;
 
@@ -1574,6 +1577,52 @@ function showStart() {
   $("sHow").innerHTML = (isTouch ? STR.howto_touch : STR.howto_desktop) + "<br>" + STR.howto_gamepad;
   $("startBtn").textContent = STR.start;
 }
+/* ====================================================== field guide ====== */
+let dexBuilt = false, dexMax = null;
+function buildFieldGuide() {
+  const grid = $("dexGrid"); if (!grid) return;
+  const list = Object.values(SPECIES);
+  dexMax = { run: 0, len: 0, mass: 0, hp: 0, dmg: 1, sight: 0 };
+  list.forEach(s => { dexMax.run = Math.max(dexMax.run, s.move.run); dexMax.len = Math.max(dexMax.len, s.size.lengthM); dexMax.mass = Math.max(dexMax.mass, s.size.massKg); dexMax.hp = Math.max(dexMax.hp, s.combat.health); dexMax.dmg = Math.max(dexMax.dmg, s.combat.damage); dexMax.sight = Math.max(dexMax.sight, s.senses.sightRangeM); });
+  const order = list.slice().sort((a, b) => a.diet === b.diet ? b.size.lengthM - a.size.lengthM : (a.diet === "carnivore" ? -1 : 1));
+  grid.innerHTML = order.map(s => `<button class="dex-card ${s.diet === "carnivore" ? "pred" : "herb"}" data-id="${s.id}">
+    <img src="./assets/codex/${s.id}.webp" loading="lazy" onerror="this.style.visibility='hidden'">
+    <div class="dc-name">${s.displayName}</div><div class="dc-tag">${s.diet === "carnivore" ? "PREDATOR" : "HERBIVORE"} · ${s.archetype}</div></button>`).join("");
+  grid.querySelectorAll(".dex-card").forEach(c => c.addEventListener("click", () => {
+    grid.querySelectorAll(".dex-card").forEach(x => x.classList.toggle("sel", x === c));
+    renderDex(c.dataset.id);
+  }));
+  if (order[0]) { renderDex(order[0].id); grid.firstElementChild?.classList.add("sel"); }
+  dexBuilt = true;
+}
+function dexBar(label, val, max, unit) {
+  const pct = Math.max(3, Math.min(100, (val / (max || 1)) * 100));
+  return `<div class="dx-stat"><span>${label}</span><div class="dx-bar"><i style="width:${pct.toFixed(0)}%"></i></div><b>${val}${unit || ""}</b></div>`;
+}
+function renderDex(id) {
+  const s = SPECIES[id], c = CODEX[id] || {}, carn = s.diet === "carnivore";
+  $("dexDetail").innerHTML = `
+    <div class="dd-head ${carn ? "pred" : "herb"}"><div class="dd-name">${s.displayName}</div>
+      <div class="dd-sub">${carn ? "PREDATOR" : "HERBIVORE"} · ${s.archetype} · ${c.era || ""}</div></div>
+    <img class="dd-img" src="./assets/codex/${id}.webp" onerror="this.style.display='none'">
+    <p class="dd-facts">${c.facts || ""}</p>
+    <div class="dd-stats">
+      ${dexBar("LENGTH", s.size.lengthM, dexMax.len, " m")}
+      ${dexBar("MASS", s.size.massKg, dexMax.mass, " kg")}
+      ${dexBar("RUN SPEED", s.move.run, dexMax.run, " m/s")}
+      ${dexBar("HEALTH", s.combat.health, dexMax.hp, "")}
+      ${dexBar("ATTACK", s.combat.damage, dexMax.dmg, "")}
+      ${dexBar("SIGHT", s.senses.sightRangeM, dexMax.sight, " m")}
+    </div>
+    <div class="dd-cols">
+      <div class="dd-col str"><h4>STRENGTHS</h4><ul>${(c.strengths || []).map(x => `<li>${x}</li>`).join("")}</ul></div>
+      <div class="dd-col weak"><h4>WEAKNESSES</h4><ul>${(c.weaknesses || []).map(x => `<li>${x}</li>`).join("")}</ul></div>
+    </div>
+    <div class="dd-survive"><h4>${carn ? "HOW TO SURVIVE IT" : "HANDLING"}</h4><p>${c.survival || ""}</p></div>`;
+}
+$("guideBtn").addEventListener("click", () => { if (!dexBuilt) buildFieldGuide(); $("codex").classList.add("on"); });
+$("dexClose").addEventListener("click", () => $("codex").classList.remove("on"));
+
 $("startBtn").addEventListener("click", () => { Audio.init(); startRun(); if (!isTouch) canvas.requestPointerLock(); });
 $("againBtn").addEventListener("click", () => { startRun(); if (!isTouch) canvas.requestPointerLock(); });
 $("againBtn").textContent = STR.again;
