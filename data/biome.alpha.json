@@ -1,213 +1,218 @@
 {
-  "id": "biome.alpha",
-  "displayName": "Island Alpha — Foggy Jungle Valley",
-  "map": {
-    "size": 240,
-    "fogColor": "#9aa6ad",
-    "fogNear": 14,
-    "fogFar": 78,
-    "groundColor": "#5c625e",
-    "skyColor": "#aab4b8"
-  },
-  "scatter": {
-    "trees": 150,
-    "rocks": 60
-  },
-  "spawnDirector": {
-    "maxActiveAI": 14,
-    "activeRadiusM": 95,
-    "comment": "Dinos beyond activeRadius downgrade to background drift (no perception/BT). N supports 50-100 in v2.",
-    "roster": [
-      {
-        "species": "parasaurolophus",
-        "target": 4,
-        "respawn": true
-      },
-      {
-        "species": "corythosaurus",
-        "target": 3,
-        "respawn": true
-      },
-      {
-        "species": "iguanodon",
-        "target": 2,
-        "respawn": true
-      },
-      {
-        "species": "gallimimus",
-        "target": 4,
-        "respawn": true
-      },
-      {
-        "species": "dryosaurus",
-        "target": 4,
-        "respawn": true
-      },
-      {
-        "species": "hypsilophodon",
-        "target": 4,
-        "respawn": true
-      },
-      {
-        "species": "triceratops",
-        "target": 2,
-        "respawn": true
-      },
-      {
-        "species": "pachyrhinosaurus",
-        "target": 2,
-        "respawn": true
-      },
-      {
-        "species": "stegosaurus",
-        "target": 2,
-        "respawn": true
-      },
-      {
-        "species": "ankylosaurus",
-        "target": 2,
-        "respawn": true
-      },
-      {
-        "species": "deinonychus",
-        "target": 2,
-        "respawn": true,
-        "pack": true
-      },
-      {
-        "species": "velociraptor",
-        "target": 2,
-        "respawn": true,
-        "pack": true
-      },
-      {
-        "species": "troodon",
-        "target": 1,
-        "respawn": true,
-        "pack": true
-      },
-      {
-        "species": "atrociraptor",
-        "target": 1,
-        "respawn": true,
-        "pack": true
-      },
-      {
-        "species": "pyroraptor",
-        "target": 1,
-        "respawn": true,
-        "pack": true
-      },
-      {
-        "species": "carnotaurus",
-        "target": 1,
-        "respawn": true
-      },
-      {
-        "species": "dilophosaurus",
-        "target": 1,
-        "respawn": true
-      },
-      {
-        "species": "majungasaurus",
-        "target": 1,
-        "respawn": true
-      },
-      {
-        "species": "cryolophosaurus",
-        "target": 1,
-        "respawn": true
-      },
-      {
-        "species": "monolophosaurus",
-        "target": 1,
-        "respawn": true
-      },
-      {
-        "species": "ceratosaurus",
-        "target": 1,
-        "respawn": true
-      },
-      {
-        "species": "rugops",
-        "target": 1,
-        "respawn": true
-      },
-      {
-        "species": "megalosaurus",
-        "target": 1,
-        "respawn": true
-      },
-      {
-        "species": "allosaurus",
-        "target": 1,
-        "respawn": true
-      },
-      {
-        "species": "yangchuanosaurus",
-        "target": 1,
-        "respawn": true
-      },
-      {
-        "species": "baryonyx",
-        "target": 1,
-        "respawn": true
-      },
-      {
-        "species": "suchomimus",
-        "target": 1,
-        "respawn": true
-      },
-      {
-        "species": "spinosaurus",
-        "target": 1,
-        "respawn": false
-      },
-      {
-        "species": "trex",
-        "target": 1,
-        "respawn": false
-      },
-      {
-        "species": "giganotosaurus",
-        "target": 1,
-        "respawn": false
-      }
-    ],
-    "escalation": {
-      "comment": "When extraction is called, raise pressure on these axes per second of hold.",
-      "deinonychusBonusAtMax": 3,
-      "trexAggroBonus": 0.4,
-      "spawnIntervalS": 9
-    }
-  },
-  "extraction": {
-    "holdSeconds": 75,
-    "callNoiseSpike": 1,
-    "beaconPickRingM": [
-      70,
-      95
-    ]
-  },
-  "player": {
-    "health": 100,
-    "stamina": 100,
-    "walkSpeed": 4.2,
-    "runSpeed": 7.4,
-    "crouchSpeed": 1.9,
-    "staminaDrainPerS": 22,
-    "staminaRegenPerS": 16,
-    "healthRegenPerS": 2.4,
-    "noise": {
-      "crouch": 0.05,
-      "walk": 0.4,
-      "run": 1,
-      "idle": 0,
-      "call": 1
-    },
-    "_schemaSeams": "TODO v2: hunger, thirst, temperature, disease — present in schema, not simulated.",
-    "hydration": 100,
-    "hunger": 100,
-    "temperature": 100
+ "id": "biome.alpha",
+ "displayName": "Island Alpha \u2014 Foggy Jungle Valley",
+ "map": {
+  "size": 240,
+  "fogColor": "#9aa6ad",
+  "fogNear": 14,
+  "fogFar": 78,
+  "groundColor": "#5c625e",
+  "skyColor": "#aab4b8"
+ },
+ "scatter": {
+  "trees": 150,
+  "rocks": 60
+ },
+ "spawnDirector": {
+  "maxActiveAI": 14,
+  "activeRadiusM": 95,
+  "comment": "Dinos beyond activeRadius downgrade to background drift (no perception/BT). N supports 50-100 in v2.",
+  "roster": [
+   {
+    "species": "parasaurolophus",
+    "target": 4,
+    "respawn": true
+   },
+   {
+    "species": "corythosaurus",
+    "target": 3,
+    "respawn": true
+   },
+   {
+    "species": "iguanodon",
+    "target": 2,
+    "respawn": true
+   },
+   {
+    "species": "gallimimus",
+    "target": 4,
+    "respawn": true
+   },
+   {
+    "species": "dryosaurus",
+    "target": 4,
+    "respawn": true
+   },
+   {
+    "species": "hypsilophodon",
+    "target": 4,
+    "respawn": true
+   },
+   {
+    "species": "triceratops",
+    "target": 2,
+    "respawn": true
+   },
+   {
+    "species": "pachyrhinosaurus",
+    "target": 2,
+    "respawn": true
+   },
+   {
+    "species": "stegosaurus",
+    "target": 2,
+    "respawn": true
+   },
+   {
+    "species": "ankylosaurus",
+    "target": 2,
+    "respawn": true
+   },
+   {
+    "species": "deinonychus",
+    "target": 2,
+    "respawn": true,
+    "pack": true
+   },
+   {
+    "species": "velociraptor",
+    "target": 2,
+    "respawn": true,
+    "pack": true
+   },
+   {
+    "species": "troodon",
+    "target": 1,
+    "respawn": true,
+    "pack": true
+   },
+   {
+    "species": "atrociraptor",
+    "target": 1,
+    "respawn": true,
+    "pack": true
+   },
+   {
+    "species": "pyroraptor",
+    "target": 1,
+    "respawn": true,
+    "pack": true
+   },
+   {
+    "species": "carnotaurus",
+    "target": 1,
+    "respawn": true
+   },
+   {
+    "species": "dilophosaurus",
+    "target": 1,
+    "respawn": true
+   },
+   {
+    "species": "majungasaurus",
+    "target": 1,
+    "respawn": true
+   },
+   {
+    "species": "cryolophosaurus",
+    "target": 1,
+    "respawn": true
+   },
+   {
+    "species": "monolophosaurus",
+    "target": 1,
+    "respawn": true
+   },
+   {
+    "species": "ceratosaurus",
+    "target": 1,
+    "respawn": true
+   },
+   {
+    "species": "rugops",
+    "target": 1,
+    "respawn": true
+   },
+   {
+    "species": "megalosaurus",
+    "target": 1,
+    "respawn": true
+   },
+   {
+    "species": "allosaurus",
+    "target": 1,
+    "respawn": true
+   },
+   {
+    "species": "yangchuanosaurus",
+    "target": 1,
+    "respawn": true
+   },
+   {
+    "species": "baryonyx",
+    "target": 1,
+    "respawn": true
+   },
+   {
+    "species": "suchomimus",
+    "target": 1,
+    "respawn": true
+   },
+   {
+    "species": "spinosaurus",
+    "target": 1,
+    "respawn": false
+   },
+   {
+    "species": "trex",
+    "target": 1,
+    "respawn": false
+   },
+   {
+    "species": "giganotosaurus",
+    "target": 1,
+    "respawn": false
+   },
+   {
+    "species": "ultimasaurus",
+    "target": 1,
+    "respawn": false
+   }
+  ],
+  "escalation": {
+   "comment": "When extraction is called, raise pressure on these axes per second of hold.",
+   "deinonychusBonusAtMax": 3,
+   "trexAggroBonus": 0.4,
+   "spawnIntervalS": 9
   }
+ },
+ "extraction": {
+  "holdSeconds": 75,
+  "callNoiseSpike": 1,
+  "beaconPickRingM": [
+   70,
+   95
+  ]
+ },
+ "player": {
+  "health": 100,
+  "stamina": 100,
+  "walkSpeed": 4.2,
+  "runSpeed": 7.4,
+  "crouchSpeed": 1.9,
+  "staminaDrainPerS": 22,
+  "staminaRegenPerS": 16,
+  "healthRegenPerS": 2.4,
+  "noise": {
+   "crouch": 0.05,
+   "walk": 0.4,
+   "run": 1,
+   "idle": 0,
+   "call": 1
+  },
+  "_schemaSeams": "TODO v2: hunger, thirst, temperature, disease \u2014 present in schema, not simulated.",
+  "hydration": 100,
+  "hunger": 100,
+  "temperature": 100
+ }
 }

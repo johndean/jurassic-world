@@ -415,6 +415,22 @@
     "Scattered by flares and loud noise"
    ],
    "survival": "Get under cover when the flock wheels overhead. Open ground is their kill zone; tree canopy, towers and roofs break their dive."
+  },
+  "ultimasaurus": {
+   "era": "Engineered \u00b7 InGen black-site hybrid",
+   "facts": "A forbidden four-way chimera \u2014 Tyrannosaurus jaws, a Triceratops horned shield, Velociraptor cunning and long grasping arms, and a Kentrosaurus thagomizer. The apex of apexes: no natural predator, and no off-switch.",
+   "strengths": [
+    "Crushing Tyrannosaurus bite",
+    "Black-horned, spiked frill that shrugs off frontal attacks",
+    "Long usable raptor arms that grab and pin",
+    "A 360\u00b0 spiked tail mace that thrashes anything behind it",
+    "Relentless \u2014 it never breaks off the hunt"
+   ],
+   "weaknesses": [
+    "Enormous noise signature \u2014 it hears you from across the island",
+    "Single-minded once locked on; terrain that breaks line of sight buys time"
+   ],
+   "survival": "Do not fight it. Break contact: put solid ruins or a watchtower between you, cut your noise, and route to extraction. Flares barely faze it \u2014 the beacon safe zone is your only reprieve."
   }
  }
 }

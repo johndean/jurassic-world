@@ -1728,6 +1728,60 @@
     "standH": 1.3,
     "crest": true
    }
+  },
+  {
+   "id": "ultimasaurus",
+   "displayName": "Ultimasaurus",
+   "diet": "carnivore",
+   "role": "apex",
+   "archetype": "apex",
+   "size": {
+    "lengthM": 16,
+    "massKg": 11000,
+    "eyeHeightM": 5.2
+   },
+   "move": {
+    "walk": 3.3,
+    "run": 12,
+    "turnRate": 125
+   },
+   "senses": {
+    "sightRangeM": 100,
+    "sightFovDeg": 165,
+    "hearingRangeM": 150
+   },
+   "combat": {
+    "damage": 85,
+    "attackRangeM": 5.4,
+    "attackCooldownS": 1.4,
+    "health": 2200
+   },
+   "behavior": {
+    "aggression": 0.98,
+    "territoryRadiusM": 320,
+    "social": "solitary",
+    "fleeHealthPct": 0,
+    "noiseDrawWeight": 1.8,
+    "packRoles": []
+   },
+   "modelPath": "./assets/models/ultimasaurus.glb",
+   "animSet": [
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "roar",
+    "stagger",
+    "die"
+   ],
+   "greybox": {
+    "color": "#1a1416",
+    "bodyL": 4.4,
+    "bodyW": 1.5,
+    "bodyH": 2.1,
+    "standH": 5.6,
+    "crest": true
+   }
   }
  ]
 }
