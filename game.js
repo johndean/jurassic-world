@@ -1866,7 +1866,7 @@ const introCine = () => intro !== null;                  // input locked while t
 const INTRO_CAM_END = 21;                                // after the crash the normal (wreck) camera takes over
 // ── per-mission insertion intros (data-driven; see design/MISSION_INTROS.md) ──
 // default insertion is the helicopter crash ("crash"); a mission id here overrides it.
-const INTRO_KIND = { dna: "research", ghosts: "jeep" };   // future: blackout:boat, last_sample:monorail, fallen_outpost:halo, extinction:airship
+const INTRO_KIND = { dna: "research", ghosts: "jeep", blackout: "boat", last_sample: "monorail" };   // future: fallen_outpost:halo, extinction:airship
 const introKind = () => (selectedMission && INTRO_KIND[selectedMission.id]) || "crash";
 const INTRO_RADIO = [
   { t: 1.2, h: `<span class="rc">RANGER-6:</span> Entering Alpha airspace. Stay sharp.`, say: "Ranger Six, entering Alpha airspace. Stay sharp.", voice: { rate: 1.0, pitch: 0.98 }, clip: "ranger_enter" },
@@ -1887,6 +1887,18 @@ const INTRO_RADIO_JEEP = [   // GHOSTS OF SECTOR 9 — ranger jeep-convoy (chatt
   { t: 5.0, h: `<span class="rc">RANGER-2:</span> Last ping was the old checkpoint. We're almost on it.`, say: "Last ping was the old checkpoint. We're almost on it.", voice: { rate: 1.04, pitch: 1.02 }, clip: "ranger2_ping" },
   { t: 8.5, h: `<span class="rc">CONVOY LEAD:</span> …checkpoint's wrecked. Gate's torn clean off. Eyes up, everybody.`, say: "The checkpoint's wrecked. Gate's torn clean off — eyes up, everybody!", voice: { rate: 1.18, pitch: 1.08 }, clip: "convoy_wrecked" },
   { t: 12.0, h: `<span class="rc">CONVOY LEAD:</span> Tracks lead into the trees — wheels stop here. On foot from now.`, say: "Tracks lead into the trees. Wheels stop here. On foot from now.", voice: { rate: 1.06, pitch: 1.0 }, clip: "convoy_tracks" },
+];
+const INTRO_RADIO_BOAT = [   // OPERATION BLACKOUT — armored river-boat insertion (engineer dispatch, dawn mist)
+  { t: 1.0, h: `<span class="rc">GRID CONTROL:</span> Patrol boat's the only way in — the roads are gone. Keep it quiet.`, say: "Patrol boat's the only way in — the roads are gone. Dawn approach, keep it quiet.", voice: { rate: 1.0, pitch: 0.97 }, clip: "boat_approach" },
+  { t: 5.0, h: `<span class="rc">GRID CONTROL:</span> Three stations — Alpha, Bravo, Charlie. Every generator you wake draws them in.`, say: "Three stations: Alpha, Bravo, and Charlie. Every generator you wake will draw them right to you.", voice: { rate: 1.0, pitch: 0.98 }, clip: "boat_stations" },
+  { t: 9.0, h: `<span class="rc">GRID CONTROL:</span> Channel's blocked — cut through the old maintenance tunnel. Watch the water.`, say: "Channel's blocked — cut through the old maintenance tunnel. Watch the water.", voice: { rate: 1.05, pitch: 1.0 }, clip: "boat_tunnel" },
+  { t: 13.0, h: `<span class="rc">GRID CONTROL:</span> Dock ahead. Get the grid back online and get out before they reach you.`, say: "Dock ahead. Get the grid back online, and get out before they reach you.", voice: { rate: 1.04, pitch: 0.99 }, clip: "boat_dock" },
+];
+const INTRO_RADIO_MONO = [   // THE LAST SAMPLE — abandoned monorail arrival (transit VO → power loss → facility under attack)
+  { t: 1.0, h: `<span class="rc">TRANSIT:</span> Sector 4 transit. Final service. Please remain seated.`, say: "Sector four transit. Final service. Please remain seated.", voice: { rate: 0.98, pitch: 1.02 }, clip: "mono_transit" },
+  { t: 6.0, h: `<span class="rc">TRANSIT:</span> Warning — primary power failure. Switching to emergency cells.`, say: "Warning. Primary power failure. Switching to emergency cells.", voice: { rate: 0.98, pitch: 1.0 }, clip: "mono_power" },
+  { t: 8.8, h: `<span class="rc">DR. SOTO:</span> That's the last sample in the cold vault. Restore the car's power, get to the platform.`, say: "That's the last sample, in the cold vault. Restore the car's power and get to the platform.", voice: { rate: 1.0, pitch: 1.0 }, clip: "mono_restore" },
+  { t: 12.5, h: `<span class="rc">TRANSIT:</span> Facility under attack. Containment compromised. Doors opening.`, say: "Facility under attack. Containment compromised. Doors opening.", voice: { rate: 1.06, pitch: 1.04 }, clip: "mono_doors" },
 ];
 // Spoken radio via the Web Speech API. Quality is bounded by the OS voices, so we aggressively prefer
 // natural / neural / online voices (Chrome's "Google US English", macOS premium) over the built-in
@@ -1930,7 +1942,7 @@ try { if (window.speechSynthesis) { window.speechSynthesis.onvoiceschanged = () 
 const RADIO_DIR = "./assets/audio/intro/";
 const _radioClips = {};
 function radioClip(name) { if (!_radioClips[name]) { const a = new Audio(RADIO_DIR + name + ".m4a"); a.preload = "auto"; a.volume = 0.95; _radioClips[name] = a; } return _radioClips[name]; }
-function preloadRadio() { ["pilot_mayday","pilot_brace","ranger_enter","ranger_thermal","soto_cleared","soto_alive","soto_samples","pilot_skids","convoy_sector","ranger2_ping","convoy_wrecked","convoy_tracks"].forEach(radioClip); }
+function preloadRadio() { ["pilot_mayday","pilot_brace","ranger_enter","ranger_thermal","soto_cleared","soto_alive","soto_samples","pilot_skids","convoy_sector","ranger2_ping","convoy_wrecked","convoy_tracks","boat_approach","boat_stations","boat_tunnel","boat_dock","mono_transit","mono_power","mono_restore","mono_doors"].forEach(radioClip); }
 function stopRadioClips() { for (const k in _radioClips) { try { _radioClips[k].pause(); _radioClips[k].currentTime = 0; } catch (e) {} } }
 function playRadio(e) {   // e = { say, voice, clip }
   if (e && e.clip) {
@@ -1993,6 +2005,8 @@ function startIntro() {                                   // dispatch to the act
   const k = introKind();
   if (k === "research") return startIntroResearch();
   if (k === "jeep") return startIntroJeep();
+  if (k === "boat") return startIntroBoat();
+  if (k === "monorail") return startIntroMonorail();
   return startIntroCrash();
 }
 function startIntroCrash() {
@@ -2014,6 +2028,8 @@ function updateIntro(dt) {
   if (!intro) return;
   if (intro.kind === "research") return updateIntroResearch(dt);
   if (intro.kind === "jeep") return updateIntroJeep(dt);
+  if (intro.kind === "boat") return updateIntroBoat(dt);
+  if (intro.kind === "monorail") return updateIntroMonorail(dt);
   return updateIntroCrash(dt);
 }
 function updateIntroCrash(dt) {
@@ -2076,6 +2092,8 @@ function updateIntroCamera() {
   if (!intro) return;
   if (intro.kind === "research") return updateIntroCameraResearch();
   if (intro.kind === "jeep") return updateIntroCameraJeep();
+  if (intro.kind === "boat") return updateIntroCameraBoat();
+  if (intro.kind === "monorail") return updateIntroCameraMonorail();
   return updateIntroCameraCrash();
 }
 function updateIntroCameraCrash() {
@@ -2270,6 +2288,158 @@ function endIntroJeep() {                                 // step out beside the
   if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
   finishIntroCommon("INVESTIGATION · follow the tracks — reach the objective marker");
 }
+
+/* ── shared intro helpers (used by the boat & monorail cinematics) ── */
+function introOpen(cap) {                                 // common DOM setup for a non-crash insertion intro
+  if (playerMesh) playerMesh.visible = false;
+  ["introTint", "introVig", "introBlack", "introRadio", "introBig"].forEach(k => { const e = $(k); if (e) e.style.opacity = "0"; });
+  $("introMission").classList.remove("show");
+  $("intro").classList.remove("hidden");
+  $("introCap").textContent = cap; $("introCap").style.opacity = "1";
+  $("hud").style.display = "none";
+  S.phase = "intro";
+}
+function radioStep(arr) {                                 // advance the radio line for the active intro
+  if (intro.line + 1 < arr.length && intro.t >= arr[intro.line + 1].t) {
+    intro.line++; const e = arr[intro.line]; const r = $("introRadio"); r.innerHTML = e.h; r.style.opacity = "1";
+    if (e.say || e.clip) { Audio.squelch(); playRadio(e); }
+  }
+}
+function seatTroopers(group, seats, faceYaw, scale) {     // place the squad inside any vehicle, clearly crewed
+  const cols = [0x4a5236, 0x595b40, 0x6b6f4a, 0x47513f, 0x5a6b3f];
+  const n = Math.min(seats.length, Math.max(2, 1 + (typeof coopCount === "function" ? coopCount() : 2)));
+  for (let i = 0; i < n; i++) { const s = seats[i], t = makeTrooper(cols[i % cols.length]); t.position.set(s[0], s[1], s[2]); t.rotation.y = faceYaw; t.scale.setScalar(scale || 0.82); group.add(t); }
+}
+function endIntroAtOrigin(msg) {                          // continuous hand-off: stand the player at the LZ facing forward
+  const P = S.player; P.x = 0; P.z = 0; P.yaw = 0;
+  cam.yaw = 0; cam.pitch = -0.05; camera.up.set(0, 1, 0);
+  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
+  finishIntroCommon(msg);
+}
+
+/* ── OPERATION BLACKOUT · armored river-boat insertion (dawn mist → tunnel → dock) ── */
+function buildBoat() {                                    // armored riverine patrol boat (bow = local +x)
+  const b = new THREE.Group();
+  const hullMat = new THREE.MeshStandardMaterial({ color: 0x3f4a3c, roughness: 0.85, metalness: 0.2 });
+  const deckMat = new THREE.MeshStandardMaterial({ color: 0x2c312a, roughness: 0.92, metalness: 0.12 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0x20231d, roughness: 0.9, metalness: 0.25 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x1b2a2c, roughness: 0.24, metalness: 0.5, transparent: true, opacity: 0.6 });
+  // foreground water patch (rides with the boat; heavy mist hides the rest of the valley)
+  const water = new THREE.Mesh(new THREE.CircleGeometry(17, 40), new THREE.MeshStandardMaterial({ color: 0x1d3a4e, roughness: 0.3, metalness: 0.2, transparent: true, opacity: 0.92 }));
+  water.rotation.x = -Math.PI / 2; water.position.y = -0.25; b.add(water);
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.85, 2.6), hullMat); hull.position.y = 0.35; b.add(hull);
+  const prow = new THREE.Mesh(new THREE.ConeGeometry(1.35, 1.7, 4), hullMat); prow.rotation.z = -Math.PI / 2; prow.rotation.y = Math.PI / 4; prow.position.set(3.95, 0.4, 0); b.add(prow);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.16, 2.3), deckMat); deck.position.y = 0.8; b.add(deck);
+  for (const sz of [1.2, -1.2]) { const gw = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.55, 0.18), hullMat); gw.position.set(-0.1, 1.05, sz); b.add(gw); }
+  const house = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.3, 2.0), hullMat); house.position.set(-1.9, 1.55, 0); b.add(house);
+  const wglass = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 1.7), glassMat); wglass.position.set(-1.02, 1.78, 0); b.add(wglass);
+  for (const sz of [0.95, -0.95]) { const sg = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 0.05), glassMat); sg.position.set(-1.9, 1.8, sz); b.add(sg); }
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.12, 2.1), trimMat); roof.position.set(-1.9, 2.24, 0); b.add(roof);
+  // bow searchlight (forward = +x = world −z), cuts the tunnel dark
+  const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.16, 12), new THREE.MeshStandardMaterial({ color: 0xfff3d0, emissive: 0xfff3d0, emissiveIntensity: 1.5, roughness: 0.3 }));
+  lamp.rotation.z = Math.PI / 2; lamp.position.set(0.5, 1.75, 0); b.add(lamp);
+  const beam = new THREE.SpotLight(0xfff0c4, 5, 42, 0.5, 0.45, 1.2); beam.position.set(0.6, 1.75, 0); beam.target.position.set(16, 0.6, 0); b.add(beam); b.add(beam.target);
+  const ramp = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.4, 2.0), trimMat); ramp.position.set(2.7, 1.0, 0); b.add(ramp);   // bow ramp (up; drops at dock)
+  for (const px of [-3, -1, 1, 2.6]) for (const sz of [1.2, -1.2]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6), trimMat); post.position.set(px, 1.3, sz); b.add(post); }
+  b.userData.beam = beam;
+  return b;
+}
+function startIntroBoat() {
+  const b = buildBoat(); const WY = 1.0;
+  b.position.set(0, WY, 64); b.rotation.y = Math.PI / 2;   // bow (+x) → world −z (direction of travel)
+  seatTroopers(b, [[-0.4, 1.15, 0.7], [-0.4, 1.15, -0.7], [1.3, 1.18, 0]], Math.PI / 2, 0.8);
+  scene.add(b); introProp = b;
+  intro = { kind: "boat", t: 0, phase: "river", boat: b, wy: WY, line: -1, shake: 0, camActive: true };
+  introOpen("Jurassic Survival · Power Restoration · Sector grid");
+}
+function updateIntroBoat(dt) {
+  if (!intro) return;
+  intro.t += dt; const T = intro.t, b = intro.boat, tint = $("introTint"), cap = $("introCap");
+  radioStep(INTRO_RADIO_BOAT);
+  if (b) { b.position.y = intro.wy + Math.sin(T * 1.6) * 0.06; b.rotation.z = Math.sin(T * 1.1) * 0.02; }
+  const driveTo = (tz, rate) => { if (b) b.position.z += (tz - b.position.z) * dt * rate; };
+  if (T < 6) {                            // 1 · dawn approach up the canyon
+    intro.phase = "river"; intro.shake = 0.05; driveTo(34, 0.5);
+    tint.style.background = "#3a4a52"; tint.style.opacity = "0.32"; cap.style.opacity = T > 4.5 ? "0" : "1";
+  } else if (T < 10) {                    // 2 · detour through the flooded maintenance tunnel (flickering dark)
+    intro.phase = "tunnel"; intro.shake = 0.06; driveTo(20, 0.55);
+    tint.style.background = "#080b0e"; tint.style.opacity = (0.34 + Math.abs(Math.sin(T * 9)) * 0.32).toFixed(2);
+  } else if (T < 14) {                    // 3 · emerge at the ruined dock
+    intro.phase = "dock"; intro.shake = 0.04; driveTo(9, 1.0);
+    tint.style.background = "#2a3138"; tint.style.opacity = "0.26";
+  } else { if (intro.boat) scene.remove(intro.boat); endIntroBoat(); }
+}
+function updateIntroCameraBoat() {
+  const b = intro.boat; if (!b) return;
+  camera.position.lerp(tmp.set(b.position.x - 1.5, b.position.y + 2.2, b.position.z + 6.5), 0.06);
+  camera.lookAt(b.position.x + 2.5, b.position.y + 1.1, b.position.z - 8);
+  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+}
+function endIntroBoat() { introProp = null; endIntroAtOrigin("POWER RESTORATION · restart the stations — reach the objective marker"); }
+
+/* ── THE LAST SAMPLE · abandoned monorail arrival (transit → power loss → besieged facility) ── */
+function buildMonorail() {                                // interior-open tram car (front = local +x)
+  const c = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xb9c0c4, roughness: 0.55, metalness: 0.4, side: THREE.DoubleSide });
+  const innerMat = new THREE.MeshStandardMaterial({ color: 0x6d7478, roughness: 0.82, metalness: 0.2, side: THREE.DoubleSide });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x223033, roughness: 0.2, metalness: 0.5, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0x2a2e30, roughness: 0.7, metalness: 0.3 });
+  const L = 5.2, W = 2.5, H = 2.5;
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(L, 0.12, W), innerMat); floor.position.y = 0.76; c.add(floor);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(L, 0.14, W), bodyMat); roof.position.y = 0.76 + H; c.add(roof);
+  for (const sz of [W / 2, -W / 2]) {
+    const lower = new THREE.Mesh(new THREE.BoxGeometry(L, 0.9, 0.08), bodyMat); lower.position.set(0, 1.25, sz); c.add(lower);
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(L - 0.3, 1.0, 0.05), glassMat); glass.position.set(0, 2.1, sz); c.add(glass);
+  }
+  const rear = new THREE.Mesh(new THREE.BoxGeometry(0.1, H, W), bodyMat); rear.position.set(-L / 2, 0.76 + H / 2, 0); c.add(rear);
+  const front = new THREE.Mesh(new THREE.BoxGeometry(0.08, H - 0.7, W - 0.2), glassMat); front.position.set(L / 2, 1.0 + (H - 0.7) / 2, 0); c.add(front);
+  const noseTop = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.4, W), bodyMat); noseTop.position.set(L / 2, 0.76 + H - 0.18, 0); c.add(noseTop);
+  const noseBot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.4, W), bodyMat); noseBot.position.set(L / 2, 0.98, 0); c.add(noseBot);
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(L - 0.4, 0.06, 0.1), new THREE.MeshStandardMaterial({ color: 0xdfe7c8, emissive: 0xdfe7c8, emissiveIntensity: 0.8 })); strip.position.set(0, 0.76 + H - 0.1, 0); c.add(strip);
+  const cab = new THREE.PointLight(0xcfe0d6, 0.9, 9); cab.position.set(0, 2.3, 0); c.add(cab);
+  const under = new THREE.Mesh(new THREE.BoxGeometry(L - 0.4, 0.4, 1.0), trimMat); under.position.set(0, 0.5, 0); c.add(under);
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(L + 8, 0.4, 0.6), new THREE.MeshStandardMaterial({ color: 0x3a3e38, roughness: 0.9 })); beam.position.set(0, 0.18, 0); c.add(beam);
+  c.userData.cabLight = cab; c.userData.strip = strip;
+  return c;
+}
+function startIntroMonorail() {
+  const y0 = groundH(0, 30);
+  const c = buildMonorail(); c.position.set(0, y0, 60); c.rotation.y = Math.PI / 2;   // front (+x) → world −z
+  seatTroopers(c, [[-1.5, 1.0, 0.7], [-1.5, 1.0, -0.7], [0.1, 1.0, 0.7]], Math.PI / 2, 0.8);
+  scene.add(c); introProp = c;
+  intro = { kind: "monorail", t: 0, phase: "transit", car: c, y0, line: -1, shake: 0, camActive: true };
+  introOpen("Jurassic Survival · The Last Sample · Sector 4");
+}
+function updateIntroMonorail(dt) {
+  if (!intro) return;
+  intro.t += dt; const T = intro.t, c = intro.car, tint = $("introTint"), cap = $("introCap");
+  radioStep(INTRO_RADIO_MONO);
+  if (c) c.position.y = intro.y0;
+  const driveTo = (tz, rate) => { if (c) c.position.z += (tz - c.position.z) * dt * rate; };
+  if (T < 6) {                            // 1 · gliding transit through the dark
+    intro.phase = "transit"; intro.shake = 0.035; driveTo(34, 0.5);
+    tint.style.background = "#10151a"; tint.style.opacity = "0.34"; cap.style.opacity = T > 4.5 ? "0" : "1";
+    if (c && c.userData.cabLight) c.userData.cabLight.intensity = 0.9;
+  } else if (T < 9) {                     // 2 · power loss — lights flicker, car coasts
+    intro.phase = "stall"; intro.shake = 0.03; driveTo(24, 0.25);
+    const fl = Math.abs(Math.sin(T * 11)) > 0.5 ? 1 : 0.15;
+    if (c && c.userData.cabLight) c.userData.cabLight.intensity = 0.25 * fl;
+    if (c && c.userData.strip) c.userData.strip.material.emissiveIntensity = 0.8 * fl;
+    tint.style.background = "#04060a"; tint.style.opacity = "0.62";
+  } else if (T < 13) {                    // 3 · limp into the besieged platform (alarm glow)
+    intro.phase = "arrive"; intro.shake = 0.05; driveTo(8, 0.8);
+    if (c && c.userData.cabLight) c.userData.cabLight.intensity = 0.5;
+    if (c && c.userData.strip) c.userData.strip.material.emissiveIntensity = 0.6;
+    tint.style.background = "#2a1410"; tint.style.opacity = (0.26 + Math.abs(Math.sin(T * 6)) * 0.12).toFixed(2);
+  } else { if (intro.car) scene.remove(intro.car); endIntroMonorail(); }
+}
+function updateIntroCameraMonorail() {
+  const c = intro.car; if (!c) return;
+  camera.position.lerp(tmp.set(c.position.x, c.position.y + 1.55, c.position.z + 1.5), 0.12);   // inside, near the rear, looking forward
+  camera.lookAt(c.position.x, c.position.y + 1.25, c.position.z - 9);
+  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake * 0.6; }
+}
+function endIntroMonorail() { introProp = null; endIntroAtOrigin("THE LAST SAMPLE · restore power & retrieve the sample — reach the objective"); }
 function lockPointer() {   // pointer lock needs a user gesture; the timer-driven auto-end may be rejected — canvas click recovers it
   if (isTouch) return;
   try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
@@ -2278,6 +2448,8 @@ function skipIntro() {
   if (!intro) return;
   if (intro.heli) scene.remove(intro.heli.group);
   if (intro.kind === "jeep") { endIntroJeep(); return; }
+  if (intro.kind === "boat") { if (intro.boat) scene.remove(intro.boat); endIntroBoat(); return; }
+  if (intro.kind === "monorail") { if (intro.car) scene.remove(intro.car); endIntroMonorail(); return; }
   if (intro.kind === "research") { Audio.rotor(false); endIntroResearch(); return; }
   if (!wreckMesh) wreckMesh = buildWreck(intro.wx, intro.wz);
   S.player.x = 0; S.player.z = 0; placeAtWreck();
