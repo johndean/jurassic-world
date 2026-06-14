@@ -414,7 +414,7 @@
           "harry"
         ]
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/troodon.glb",
       "animSet": [
         "idle",
         "walk",
@@ -470,7 +470,7 @@
           "harry"
         ]
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/atrociraptor.glb",
       "animSet": [
         "idle",
         "walk",
@@ -526,7 +526,7 @@
           "harry"
         ]
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/pyroraptor.glb",
       "animSet": [
         "idle",
         "walk",
@@ -578,7 +578,7 @@
         "fleeHealthPct": 0.2,
         "fleeFromPredatorM": 0
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/dilophosaurus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -629,7 +629,7 @@
         "social": "solitary",
         "fleeHealthPct": 0.15
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/majungasaurus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -680,7 +680,7 @@
         "social": "solitary",
         "fleeHealthPct": 0.12
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/cryolophosaurus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -731,7 +731,7 @@
         "social": "solitary",
         "fleeHealthPct": 0.12
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/monolophosaurus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -782,7 +782,7 @@
         "social": "solitary",
         "fleeHealthPct": 0.1
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/ceratosaurus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -833,7 +833,7 @@
         "social": "solitary",
         "fleeHealthPct": 0.18
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/rugops.glb",
       "animSet": [
         "idle",
         "walk",
@@ -884,7 +884,7 @@
         "social": "solitary",
         "fleeHealthPct": 0.1
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/megalosaurus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -935,7 +935,7 @@
         "social": "solitary",
         "fleeHealthPct": 0.05
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/allosaurus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -986,7 +986,7 @@
         "social": "solitary",
         "fleeHealthPct": 0.05
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/yangchuanosaurus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -1037,7 +1037,7 @@
         "social": "solitary",
         "fleeHealthPct": 0.08
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/baryonyx.glb",
       "animSet": [
         "idle",
         "walk",
@@ -1088,7 +1088,7 @@
         "social": "solitary",
         "fleeHealthPct": 0.05
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/suchomimus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -1140,7 +1140,7 @@
         "fleeHealthPct": 0,
         "noiseDrawWeight": 1
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/giganotosaurus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -1193,7 +1193,7 @@
         "fleeHealthPct": 1,
         "fleeFromPredatorM": 42
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/gallimimus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -1245,7 +1245,7 @@
         "fleeHealthPct": 1,
         "fleeFromPredatorM": 38
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/dryosaurus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -1297,7 +1297,7 @@
         "fleeHealthPct": 1,
         "fleeFromPredatorM": 36
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/hypsilophodon.glb",
       "animSet": [
         "idle",
         "walk",
@@ -1349,7 +1349,7 @@
         "fleeHealthPct": 1,
         "fleeFromPredatorM": 38
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/corythosaurus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -1401,7 +1401,7 @@
         "fleeHealthPct": 0.6,
         "fleeFromPredatorM": 34
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/iguanodon.glb",
       "animSet": [
         "idle",
         "walk",
@@ -1453,7 +1453,7 @@
         "fleeHealthPct": 0.4,
         "fleeFromPredatorM": 30
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/pachyrhinosaurus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -1506,7 +1506,7 @@
         "fleeHealthPct": 0.4,
         "fleeFromPredatorM": 28
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/stegosaurus.glb",
       "animSet": [
         "idle",
         "walk",
@@ -1558,7 +1558,7 @@
         "fleeHealthPct": 0.35,
         "fleeFromPredatorM": 26
       },
-      "modelPath": "",
+      "modelPath": "./assets/models/ankylosaurus.glb",
       "animSet": [
         "idle",
         "walk",
