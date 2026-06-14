@@ -59,6 +59,10 @@ const MODELS = {};                 // modelPath/url -> prepared THREE.Object3D t
 const MODEL_ANIMS = {};            // modelPath/url -> AnimationClip[] (for rigged/animated models)
 // Served from the Higgsfield CDN (CORS *), so big .glb files stay out of the git repo.
 const PLAYER_MODEL = "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/f4ba47e8-eace-41a6-910a-d21d61f5bfb0.glb";
+const GROUND_TEX = "https://d8j0ntlcm91z4.cloudfront.net/user_3F4NGeiRVgVtbKFFkoeC4vFwa2f/hf_20260614_002025_be16d317-be18-49b8-95e3-b3ad06fb8dc2.png";
+const _texLoader = new THREE.TextureLoader();
+// foliage models (CDN .glb) used to replace grey-box trees; filled with URLs once generated
+const FOLIAGE = { tree: null, fern: null };
 const PLAYER_MODEL_YAW = 0;        // facing correction; flip to Math.PI if the player faces the camera
 let playerMixer = null, playerAction = null;
 const GAIT_RATE = { idle: 0, walk: 1, run: 1.7, crouch: 0.6 };  // walk-clip playback speed per gait
@@ -71,7 +75,7 @@ function loadModel(path) {
     () => res(null)));            // missing/failed model -> null -> grey-box fallback
 }
 async function preloadModels() {
-  const paths = [...new Set([PLAYER_MODEL, ...Object.values(SPECIES).map(s => s.modelPath).filter(Boolean)])];
+  const paths = [...new Set([PLAYER_MODEL, FOLIAGE.tree, FOLIAGE.fern, ...Object.values(SPECIES).map(s => s.modelPath)].filter(Boolean))];
   await Promise.all(paths.map(async p => { MODELS[p] = await loadModel(p); }));
 }
 
@@ -93,6 +97,7 @@ const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
 // ---- world collections
 let trees = [];         // {x,z,r}
+let foliageGroup = null;
 let dinos = [];         // active dino agents
 let blobPool = [];
 let beaconMesh, beaconRing, beaconGlow, playerMesh;
@@ -119,7 +124,7 @@ async function boot() {
   showStart();
   requestAnimationFrame(frame);
   // stream models in the background so the menu/start button appear instantly; swap player in when ready
-  preloadModels().then(() => { if (!playerMixer) buildPlayer(); });
+  preloadModels().then(() => { if (!playerMixer) buildPlayer(); buildFoliage(); });
 }
 
 // subtle vignette (edge darkening) for cinematic framing
@@ -181,7 +186,12 @@ function buildWorld() {
     pos.setY(i, h);
   }
   gGeo.computeVertexNormals();
-  const ground = new THREE.Mesh(gGeo, new THREE.MeshStandardMaterial({ color: m.groundColor, roughness: 1, metalness: 0, flatShading: true }));
+  const groundTex = _texLoader.load(GROUND_TEX);
+  groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
+  groundTex.repeat.set(36, 36);
+  groundTex.colorSpace = THREE.SRGBColorSpace;
+  groundTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const ground = new THREE.Mesh(gGeo, new THREE.MeshStandardMaterial({ map: groundTex, color: 0xb4b9ad, roughness: 1, metalness: 0 }));
   scene.add(ground);
 
   // boundary walls (charcoal slabs) — soft fence of the valley
@@ -191,30 +201,10 @@ function buildWorld() {
     const w = new THREE.Mesh(wGeo, wallMat); w.position.set(x, 3, z); w.rotation.y = ry * DEG; scene.add(w);
   });
 
-  // INSTANCED slab trees — one draw call (perf law §6.5)
-  trees = [];
-  const treeMat = new THREE.MeshStandardMaterial({ color: 0x33383a, roughness: 1, flatShading: true });
-  const trunkGeo = new THREE.CylinderGeometry(0.5, 0.7, 1, 6);
-  const canopyGeo = new THREE.BoxGeometry(1, 1, 1);
-  const NT = BIOME.scatter.trees;
-  const trunks = new THREE.InstancedMesh(trunkGeo, treeMat, NT);
-  const canopies = new THREE.InstancedMesh(canopyGeo, new THREE.MeshStandardMaterial({ color: 0x2a2f31, roughness: 1, flatShading: true }), NT);
-  const dm = new THREE.Object3D();
-  reseed(1337);
-  for (let i = 0; i < NT; i++) {
-    let x, z, ok = 0;
-    do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); ok++; } while (Math.hypot(x, z) < 10 && ok < 8);
-    const h = rand(4, 9), r = rand(0.7, 1.3);
-    dm.position.set(x, h / 2, z); dm.rotation.set(0, rand(0, 6.28), 0); dm.scale.set(r, h, r); dm.updateMatrix();
-    trunks.setMatrixAt(i, dm.matrix);
-    const cw = rand(2.2, 4.2);
-    dm.position.set(x, h - 0.5, z); dm.rotation.set(rand(-.2, .2), rand(0, 6.28), rand(-.2, .2)); dm.scale.set(cw, rand(1.4, 2.6), cw); dm.updateMatrix();
-    canopies.setMatrixAt(i, dm.matrix);
-    trees.push({ x, z, r: r * 0.9 });
-  }
-  scene.add(trunks, canopies);
+  buildFoliage();
 
   // INSTANCED rocks — one draw call
+  const dm = new THREE.Object3D();
   const NR = BIOME.scatter.rocks;
   const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0x60666a, roughness: 1, flatShading: true }), NR);
   for (let i = 0; i < NR; i++) {
@@ -257,6 +247,46 @@ function buildPlayer() {
     nub.position.set(0, 0.5, 0.45); playerMesh.add(nub);
     addBlob(playerMesh, 0.7);
   }
+}
+// scatter foliage: cloned real .glb trees/ferns when loaded, else grey-box slabs. Re-callable to swap.
+function buildFoliage() {
+  const m = BIOME.map, half = m.size / 2;
+  if (foliageGroup) scene.remove(foliageGroup);
+  foliageGroup = new THREE.Group();
+  trees = [];
+  reseed(1337);
+  if (MODELS[FOLIAGE.tree]) {
+    for (let i = 0; i < 60; i++) {
+      let x, z, ok = 0;
+      do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); ok++; } while (Math.hypot(x, z) < 12 && ok < 8);
+      const t = fitModel(MODELS[FOLIAGE.tree].clone(true), rand(9, 15), rand(0, 6.28));
+      t.position.set(x, groundH(x, z), z); foliageGroup.add(t);
+      trees.push({ x, z, r: 1.3 });
+    }
+    if (MODELS[FOLIAGE.fern]) for (let i = 0; i < 50; i++) {
+      const x = rand(-half + 4, half - 4), z = rand(-half + 4, half - 4);
+      const f = fitModel(MODELS[FOLIAGE.fern].clone(true), rand(1.3, 2.6), rand(0, 6.28));
+      f.position.set(x, groundH(x, z), z); foliageGroup.add(f);
+    }
+  } else {
+    const dm = new THREE.Object3D();
+    const NT = BIOME.scatter.trees;
+    const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.7, 1, 6), new THREE.MeshStandardMaterial({ color: 0x33383a, roughness: 1, flatShading: true }), NT);
+    const canopies = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x2a2f31, roughness: 1, flatShading: true }), NT);
+    for (let i = 0; i < NT; i++) {
+      let x, z, ok = 0;
+      do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); ok++; } while (Math.hypot(x, z) < 10 && ok < 8);
+      const h = rand(4, 9), r = rand(0.7, 1.3);
+      dm.position.set(x, h / 2, z); dm.rotation.set(0, rand(0, 6.28), 0); dm.scale.set(r, h, r); dm.updateMatrix();
+      trunks.setMatrixAt(i, dm.matrix);
+      const cw = rand(2.2, 4.2);
+      dm.position.set(x, h - 0.5, z); dm.rotation.set(rand(-.2, .2), rand(0, 6.28), rand(-.2, .2)); dm.scale.set(cw, rand(1.4, 2.6), cw); dm.updateMatrix();
+      canopies.setMatrixAt(i, dm.matrix);
+      trees.push({ x, z, r: r * 0.9 });
+    }
+    foliageGroup.add(trunks, canopies);
+  }
+  scene.add(foliageGroup);
 }
 function addBlob(parent, r) {
   const blob = new THREE.Mesh(new THREE.CircleGeometry(r, 16),
@@ -655,11 +685,16 @@ function steer(a, dt, P) {
   const moveAmt = Math.min(1, Math.hypot(a.vx, a.vz) / sp.move.run);
   const legs = a.mesh.userData.legs;
   if (legs) { const sw = Math.sin(S.t * (run ? 16 : 8) + a.x) * 0.5 * moveAmt; legs[0].rotation.x = sw; legs[1].rotation.x = -sw; }
-  else {   // real .glb model has no leg parts: fake a gait (vertical bob + body lean) so it doesn't glide
-    const ph = S.t * (run ? 13 : 8) + a.x;
-    if (moveAmt > 0.04) a.mesh.position.y += Math.abs(Math.sin(ph)) * (sp.greybox.standH || 2) * 0.03 * moveAmt;
+  else {   // real .glb model has NO skeleton (no leg/head bones to articulate): fake a clearly visible
+           // lumbering gait by bouncing + pitching + waddling the whole body while it moves.
+    const spd = Math.hypot(a.vx, a.vz);
+    const mv = Math.min(1, spd / (sp.move.walk || 2));   // ~1 once at walking speed
+    const ph = S.t * (run ? 11 : 7) + a.x;
     const body = a.mesh.children[0];
-    if (body) body.rotation.x = moveAmt > 0.04 ? Math.sin(ph) * 0.05 * moveAmt : body.rotation.x * 0.9;
+    if (mv > 0.05) {
+      a.mesh.position.y += Math.abs(Math.sin(ph)) * (sp.greybox.standH || 2) * 0.07 * mv;   // stride bounce
+      if (body) { body.rotation.x = Math.sin(ph) * 0.13 * mv; body.rotation.z = Math.cos(ph * 0.5) * 0.10 * mv; }
+    } else if (body) { body.rotation.x *= 0.9; body.rotation.z *= 0.9; }
   }
   if (a.mesh.userData.jaw) a.mesh.userData.jaw.rotation.x = a.anim > 0 ? 0.5 : 0;
 }
