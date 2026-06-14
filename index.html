@@ -194,8 +194,11 @@
   .bigbtn{font:inherit;font-size:15px;letter-spacing:.16em;color:#0b0f0e;background:#e0772f;border:none;
     padding:14px 30px;cursor:pointer;font-weight:700;transition:.2s;}
   .bigbtn:hover{background:#fff;}
-  .bigbtn.ghost{background:transparent;color:#d7e0da;border:1px solid var(--hud-line);margin-top:10px;font-size:12px;padding:11px 22px;}
+  .bigbtn.ghost{background:transparent;color:#d7e0da;border:1px solid var(--hud-line);margin-top:0;font-size:12px;padding:11px 22px;}
   .bigbtn.ghost:hover{border-color:#e0772f;color:#fff;background:transparent;}
+  .bigbtn.locked,.bigbtn:disabled{background:#2c322c;color:#7c857d;cursor:not-allowed;}
+  .bigbtn.locked:hover,.bigbtn:disabled:hover{background:#2c322c;color:#7c857d;}
+  .tab.done::after{content:" ✓";color:var(--hud-good);}
   /* field guide / bestiary */
   #codex{position:fixed;inset:0;z-index:80;display:none;flex-direction:column;background:rgba(7,10,9,.97);
     color:#d7e0da;font-family:ui-monospace,monospace;}

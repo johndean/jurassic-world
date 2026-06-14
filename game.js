@@ -108,6 +108,7 @@ function initCharSelect() {
     selectedRole = ROLES[+card.dataset.i];
     host.querySelectorAll(".char-card").forEach(c => c.classList.toggle("sel", c === card));
     if (MODELS[curPlayerModel()]) buildPlayer();   // live-preview the chosen avatar if loaded
+    tabsDone.role = true; showTab("coop");          // auto-advance to the name / co-op tab
   }));
 }
 
@@ -147,15 +148,28 @@ function initMissionSelect() {
     selectedMission = MISSIONS[card.dataset.k];
     host.querySelectorAll(".mission-card").forEach(c => c.classList.toggle("sel", c === card));
     const b = $("sBlurb"); if (b) b.textContent = selectedMission.blurb;
+    tabsDone.mission = true; showTab("role");   // auto-advance to the specialist tab
   }));
+}
+let tabsDone = { mission: false, role: false, coop: false };
+function showTab(k) {   // switch tab; visiting the co-op tab counts it complete (solo needs no input)
+  const tabs = $("startTabs"); if (!tabs) return;
+  tabs.querySelectorAll(".tab").forEach(x => x.classList.toggle("sel", x.dataset.tab === k));
+  document.querySelectorAll(".tabpanel").forEach(p => p.classList.toggle("on", p.dataset.panel === k));
+  if (k === "coop") tabsDone.coop = true;
+  refreshStart();
+}
+function refreshStart() {   // BEGIN EXTRACTION RUN is locked until mission + specialist + co-op tab are all done
+  const btn = $("startBtn"); if (!btn) return;
+  const ready = tabsDone.mission && tabsDone.role && tabsDone.coop;
+  btn.disabled = !ready; btn.classList.toggle("locked", !ready);
+  btn.textContent = ready ? STR.start : "▸ COMPLETE ALL 3 TABS";
+  const tabs = $("startTabs"); if (tabs) tabs.querySelectorAll(".tab").forEach(x => x.classList.toggle("done", !!tabsDone[x.dataset.tab]));
 }
 function initTabs() {   // homepage: Select Mission | Select Specialist | Name & Co-op (Field Guide + START always visible)
   const tabs = $("startTabs"); if (!tabs) return;
-  tabs.querySelectorAll(".tab").forEach(tb => tb.addEventListener("click", () => {
-    const k = tb.dataset.tab;
-    tabs.querySelectorAll(".tab").forEach(x => x.classList.toggle("sel", x === tb));
-    document.querySelectorAll(".tabpanel").forEach(p => p.classList.toggle("on", p.dataset.panel === k));
-  }));
+  tabs.querySelectorAll(".tab").forEach(tb => tb.addEventListener("click", () => showTab(tb.dataset.tab)));
+  refreshStart();
 }
 
 /* ===== campaign missions (multi-phase, data-driven; run on the generic engine below) ===== */
@@ -2501,7 +2515,8 @@ function showStart() {
   $("sTitle").textContent = STR.title; $("sSub").textContent = STR.subtitle;
   $("sBlurb").textContent = selectedMission.blurb;
   $("sHow").innerHTML = (isTouch ? STR.howto_touch : STR.howto_desktop) + "<br>" + STR.howto_gamepad;
-  $("startBtn").textContent = STR.start;
+  tabsDone = { mission: false, role: false, coop: false };
+  if ($("startTabs")) showTab("mission");   // start on the mission tab, START locked until all three done
 }
 /* ====================================================== field guide ====== */
 let dexBuilt = false, dexMax = null;
