@@ -319,6 +319,15 @@
   .t-ch{display:block;font-size:9px;font-weight:700;color:#9fe08a;margin-top:1px;min-height:11px;}
   .t-cd{position:absolute;left:0;bottom:0;width:100%;height:0;background:rgba(0,0,0,.55);pointer-events:none;}
   @media (max-width:560px){ #tools{bottom:10px;left:50%;transform:translateX(-50%);max-width:96vw;} .tool{width:56px;} .t-nm{font-size:7px;} }
+  /* contextual interaction prompt */
+  #prompt{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:47;display:none;flex-direction:column;align-items:center;gap:6px;
+    pointer-events:none;font-family:ui-monospace,monospace;}
+  #prompt.on{display:flex;}
+  #promptTxt{font-size:13px;letter-spacing:.14em;color:#fff;background:rgba(10,14,13,.78);border:1px solid var(--hud-accent);
+    border-radius:7px;padding:8px 16px;text-shadow:0 1px 4px #000;box-shadow:0 0 18px rgba(224,119,47,.35);}
+  #promptTrack{width:160px;height:5px;background:rgba(255,255,255,.14);border-radius:3px;overflow:hidden;}
+  #promptBar{display:block;height:100%;width:0;background:linear-gradient(90deg,#6fae6b,#e0772f);transition:width .05s linear;}
+  @media (max-width:760px){ #prompt{bottom:150px;} #promptTxt{font-size:12px;} }
   /* DNA / identification readout */
   #dnaHud{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:46;font:11px ui-monospace,monospace;
     letter-spacing:.12em;color:#9fe08a;background:rgba(10,14,13,.55);border:1px solid var(--hud-line);padding:4px 12px;border-radius:12px;pointer-events:none;}
@@ -493,6 +502,9 @@
   <button class="tool" data-i="5"><b>6</b><span class="t-ic">⚗</span><span class="t-nm">SAMPLE</span><span class="t-ch"></span><i class="t-cd"></i></button>
 </div>
 <div id="dnaHud"></div>
+
+<!-- contextual interaction prompt (appears when the player can act) -->
+<div id="prompt"><span id="promptTxt"></span><div id="promptTrack"><i id="promptBar"></i></div></div>
 
 <!-- binoculars: zoom + species identification -->
 <div id="scan"></div>

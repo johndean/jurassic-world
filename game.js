@@ -226,21 +226,29 @@ Object.assign(MISSIONS, {
 let MC = null, objMarker = null;   // MC = campaign runtime { idx, started }
 const activeCampaign = () => (selectedMission && selectedMission.phases) ? selectedMission : null;
 function phaseSite(ph) { return ph.atBeacon ? [S.extraction.beacon.x, S.extraction.beacon.z] : [ph.x, ph.z]; }
-function setObjMarker(x, z, color) {
+function setObjMarker(x, z, color, kind) {
   if (objMarker) { scene.remove(objMarker); objMarker = null; }
   if (x == null) return;
   const g = new THREE.Group(); g.position.set(x, groundH(x, z), z);
   const ring = new THREE.Mesh(new THREE.RingGeometry(2.0, 2.5, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12; g.add(ring);
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 18, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false })); beam.position.y = 9; g.add(beam);
-  const l = new THREE.PointLight(color, 1.5, 44); l.position.y = 5; g.add(l);
+  g.add(Object.assign(new THREE.PointLight(color, 1.5, 44), { position: new THREE.Vector3(0, 5, 0) }));
+  if (kind === "interact") {   // a physical console you walk up to and operate (button glows)
+    const metal = new THREE.MeshStandardMaterial({ color: 0x3c4038, roughness: 0.7, metalness: 0.4 });
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 1.1, 8), metal); post.position.y = 0.55; g.add(post);
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.6, 0.12), metal); panel.position.set(0, 1.2, 0); panel.rotation.x = -0.45; g.add(panel);
+    const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 12), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.4 }));
+    btn.rotation.x = Math.PI / 2 - 0.45; btn.position.set(0, 1.24, 0.12); g.add(btn); g.userData.btn = btn;
+  }
   objMarker = g; objMarker.userData.ring = ring; scene.add(g);
 }
 function applyPhaseMarker() {
   const m = activeCampaign(); if (!m || !MC) { setObjMarker(null); return; }
   const ph = m.phases[MC.idx];
   if (!ph) { setObjMarker(null); return; }
-  if (ph.t === "reach" || ph.t === "interact") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0x8fb8c4); }
+  if (ph.t === "interact") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0x8fb8c4, "interact"); }
+  else if (ph.t === "reach") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0x8fb8c4); }
   else if (ph.t === "extract") setObjMarker(S.extraction.beacon.x, S.extraction.beacon.z, 0xe0772f);
   else setObjMarker(null);
 }
@@ -250,15 +258,49 @@ function startMission() {
   m.phases.forEach(p => { p._done = false; });   // clear per-run interact flags
   MC = { idx: 0, started: false }; applyPhaseMarker();
 }
-function missionInteract() {   // E / CALL at an active interact objective; returns true if it handled the press
-  const m = activeCampaign(); if (!m || !MC) return false;
-  const ph = m.phases[MC.idx]; if (!ph || ph.t !== "interact") return false;
+const phLabel = ph => (typeof ph.l === "function" ? ph.l() : ph.l);
+function missionInteractInRange() {   // the active interact phase if the player is standing at its console, else null
+  const m = activeCampaign(); if (!m || !MC) return null;
+  const ph = m.phases[MC.idx]; if (!ph || ph.t !== "interact" || ph._done) return null;
   const [x, z] = phaseSite(ph);
-  if (dist2(S.player.x, S.player.z, x, z) >= (ph.r || 7) * (ph.r || 7)) return false;   // not at the marker → let tower/call handle E
+  return dist2(S.player.x, S.player.z, x, z) < (ph.r || 7) * (ph.r || 7) ? ph : null;
+}
+function finishMissionInteract(ph) {   // called when the player completes the HOLD (see updateAction)
   ph._done = true;
   if (ph.starts === "evac" && !S.extraction.called) { S.extraction.called = true; S.player.noise = 1; spawnTimer = 0; Audio.beacon(true); Audio.roar(); startEvac(); }
-  Audio.beacon(false); flash(); toast("✓ " + (typeof ph.l === "function" ? ph.l() : ph.l));
+  Audio.beacon(false); flash(); toast("✓ " + phLabel(ph));
+}
+function callReady() {   // would tryCall() succeed right now? (drives the CALL prompt)
+  if (S.extraction.called) return false;
+  const cm = activeCampaign();
+  if (cm && MC) { const ph = cm.phases[MC.idx]; return !!(ph && ph.t === "extract"); }
+  if (selectedMission.id === "dna") return dnaSamples >= DNA_GOAL;
   return true;
+}
+// Contextual interaction prompt + HOLD-to-act. The player always SEES what they can do and chooses to
+// act; hold actions fill a progress bar for clear feedback. Press actions (zip/call) fire on E/CALL.
+let actionHold = 0;
+const INTERACT_HOLD = 1.2;
+function updateAction(dt) {
+  const prompt = $("prompt"); if (!prompt) return;
+  const P = S.player, touch = isTouch, keyTxt = touch ? "HOLD ACTION" : "HOLD E", pressTxt = touch ? "TAP ACTION" : "PRESS E";
+  let label = null, hold = false, prog = 0;
+  const holding = keys.has("KeyE") || input.action;
+  if (P.zip) { actionHold = 0; }
+  else if (P.onTower) { label = pressTxt + " · ZIP DOWN"; actionHold = 0; }
+  else {
+    const ph = missionInteractInRange();
+    if (ph) {
+      hold = true;
+      if (holding) { actionHold = Math.min(INTERACT_HOLD, actionHold + dt); if (actionHold >= INTERACT_HOLD) { finishMissionInteract(ph); actionHold = 0; } }
+      else actionHold = Math.max(0, actionHold - dt * 2.5);
+      prog = actionHold / INTERACT_HOLD;
+      if (objMarker && objMarker.userData.btn) objMarker.userData.btn.material.emissiveIntensity = 1.2 + prog * 3.2;   // button glows as it engages
+      label = keyTxt + " · " + phLabel(ph).toUpperCase();
+    } else { actionHold = 0; if (S.extraction.inRange && callReady()) label = pressTxt + " · CALL EXTRACTION"; }
+  }
+  if (label) { prompt.classList.add("on"); $("promptTxt").textContent = label; const bar = $("promptBar"); bar.style.opacity = hold ? "1" : "0"; bar.style.width = (hold ? prog * 100 : 0).toFixed(0) + "%"; }
+  else prompt.classList.remove("on");
 }
 function updateMission(dt) {
   const m = activeCampaign(); if (!m || !MC) return;
@@ -817,13 +859,13 @@ function updateZip(dt) {
   if (playerMesh) { playerMesh.position.set(P.x, z.curFloor + 0.9, P.z); playerMesh.rotation.y = P.yaw; playerMesh.rotation.x = 0.25; }
   if (k >= 1) { P.zip = null; Audio.step("run"); }
 }
-function interact() {   // context action shared by E / the CALL button
+function interact() {   // context action shared by E / the ACTION button (press actions only — holds are in updateAction)
   const P = S.player;
   if (P.zip) return;
-  if (missionInteract()) return;             // complete a mission objective if you're standing on its marker
   if (P.onTower) { startZip(P.onTower); return; }
   const t = nearTowerBase(P);
   if (t) { climbTower(t); return; }
+  if (missionInteractInRange()) return;      // a hold-to-act objective is here — handled by the HOLD, not a press
   tryCall();   // default: extraction
 }
 
@@ -854,7 +896,7 @@ function buildFacility(bx, bz) {
 
 /* --------------------------------------------------------------- input ---- */
 const keys = new Set();
-const input = { mx: 0, mz: 0, sprint: false, crouch: false, lookDX: 0, lookDY: 0 };
+const input = { mx: 0, mz: 0, sprint: false, crouch: false, lookDX: 0, lookDY: 0, action: false };
 let pointerLocked = false, isTouch = false;
 
 function initInput() {
@@ -940,7 +982,9 @@ function setupTouch() {
   const hold = (el, on) => { el.addEventListener("pointerdown", () => on(true)); ["pointerup", "pointercancel", "pointerleave"].forEach(ev => el.addEventListener(ev, () => on(false))); };
   hold($("btnSprint"), v => input.sprint = v);
   hold($("btnCrouch"), v => input.crouch = v);
-  $("btnCall").addEventListener("pointerdown", e => { e.preventDefault(); interact(); });
+  { const ba = $("btnCall");   // ACTION button: hold for hold-to-act objectives, tap for press actions (zip/call)
+    ba.addEventListener("pointerdown", e => { e.preventDefault(); input.action = true; interact(); });
+    ["pointerup", "pointercancel", "pointerleave"].forEach(ev => ba.addEventListener(ev, () => input.action = false)); }
 }
 
 function pollGamepad() {
@@ -2301,6 +2345,7 @@ function simulate(dt) {
   updateTools(dt);
   updateField(dt);
   updateMission(dt);
+  updateAction(dt);
   updateFx(dt);
   if (wreckMesh) updateWreck(dt);
   Audio.tickHeartbeat(dt, S.player.fear);
