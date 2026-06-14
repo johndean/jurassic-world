@@ -600,8 +600,9 @@ function initInput() {
     cam.yaw -= e.movementX * 0.0022; cam.pitch = clamp(cam.pitch - e.movementY * 0.0019, -0.95, 0.45);
   });
 
-  // touch
-  if (matchMedia("(pointer:coarse)").matches || "ontouchstart" in window) { isTouch = true; setupTouch(); }
+  // touch — note iPadOS Safari defaults to "desktop mode" where ontouchstart + pointer:coarse are both
+  // false; maxTouchPoints stays > 0, so include it to reliably detect iPads (and 2-in-1 touch laptops).
+  if (navigator.maxTouchPoints > 0 || "ontouchstart" in window || matchMedia("(pointer:coarse)").matches) { isTouch = true; setupTouch(); }
   $("touch").style.display = isTouch ? "block" : "none";
 }
 
@@ -1587,7 +1588,7 @@ function dexThumb(id) {
   if (!tmpl) return null;                       // model not streamed in yet → caller shows a fallback tile
   if (!dexR) {
     dexR = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
-    dexR.setSize(320, 320); dexR.setClearColor(0x12160f, 1); dexR.outputColorSpace = THREE.SRGBColorSpace;
+    dexR.setSize(460, 460); dexR.setClearColor(0x12160f, 1); dexR.outputColorSpace = THREE.SRGBColorSpace;
     dexR.toneMapping = THREE.ACESFilmicToneMapping; dexR.toneMappingExposure = 1.15;
     dexScene = new THREE.Scene();
     dexScene.add(new THREE.HemisphereLight(0xd6e4ea, 0x33402e, 1.2));
@@ -1599,7 +1600,13 @@ function dexThumb(id) {
   const inst = skinned ? skeletonClone(tmpl) : tmpl.clone(true);
   const g = fitModel(inst, 2.0, (sp.modelYaw || 0) + 0.5);    // slight 3/4 turn for a portrait
   dexScene.add(g);
-  dexCam.position.set(2.7, 1.5, 3.1); dexCam.lookAt(0, 1.0, 0);
+  // frame the WHOLE model by its bounds (quadrupeds are long, bipeds tall) so nothing is cut off
+  const box = measureBox(g), ctr = new THREE.Vector3(), size = new THREE.Vector3();
+  box.getCenter(ctr); box.getSize(size);
+  const radius = (Math.max(size.x, size.y, size.z) * 0.5) || 1;
+  const dist = (radius * 1.2) / Math.sin((dexCam.fov * Math.PI / 180) / 2);
+  dexCam.position.set(ctr.x + dist * 0.5, ctr.y + radius * 0.5, ctr.z + dist * 0.8);
+  dexCam.lookAt(ctr);
   dexR.render(dexScene, dexCam);
   let url = null; try { url = dexR.domElement.toDataURL("image/jpeg", 0.85); } catch (e) { url = null; }
   dexScene.remove(g);
@@ -1615,11 +1622,20 @@ function buildFieldGuide() {
   grid.innerHTML = order.map(s => `<button class="dex-card ${s.diet === "carnivore" ? "pred" : "herb"}" data-id="${s.id}">
     <img class="dc-img" data-sp="${s.id}" alt="">
     <div class="dc-name">${s.displayName}</div><div class="dc-tag">${s.diet === "carnivore" ? "PREDATOR" : "HERBIVORE"} · ${s.archetype}</div></button>`).join("");
-  grid.querySelectorAll(".dc-img").forEach(im => { const u = dexThumb(im.dataset.sp); if (u) im.src = u; else im.style.display = "none"; });
   grid.querySelectorAll(".dex-card").forEach(c => c.addEventListener("click", () => {
     grid.querySelectorAll(".dex-card").forEach(x => x.classList.toggle("sel", x === c));
     renderDex(c.dataset.id);
   }));
+  // render portraits progressively (time-sliced) so opening the guide never blocks/janks the UI
+  const imgs = [...grid.querySelectorAll(".dc-img")]; let qi = 0;
+  (function chunk() {
+    const t0 = performance.now();
+    while (qi < imgs.length && performance.now() - t0 < 7) {
+      const im = imgs[qi++], u = dexThumb(im.dataset.sp);
+      if (u) im.src = u; else im.style.display = "none";
+    }
+    if (qi < imgs.length) requestAnimationFrame(chunk);
+  })();
   if (order[0]) { renderDex(order[0].id); grid.firstElementChild?.classList.add("sel"); }
   dexBuilt = true;
 }
