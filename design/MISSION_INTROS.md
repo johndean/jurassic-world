@@ -241,6 +241,18 @@ open bay → committed descent trail cam → ground stance.
 
 ---
 
+## Build status — ALL 7 INTROS SHIPPED
+
+All seven insertion intros are implemented on the kind-dispatched engine, each with bundled human VO
+(Inworld TTS) and continuous, skip-safe hand-off:
+`evac` crash (default) · `dna` research-heli · `ghosts` Land Rover convoy · `blackout` river boat ·
+`last_sample` monorail · `fallen_outpost` HALO parachute · `extinction` evac airship.
+The HALO drop & airship deployment share one **player-steered canopy** (steer with the stick / A-D, hold
+S to flare, land where you choose — real control, soft/hard landing, never a death).
+
+Deeper interactivity flagged for a later pass: free-walk-the-vehicle bays/decks (currently cinematic),
+the in-cabin equipment/tablet/lever hold-beats, and the airship's fast-rope / wingsuit descent variants.
+
 ## Build Plan (phased — additive)
 
 **Phase 0 — Engine (foundation).** Generalize `startIntro/updateIntro` into a data-driven `INTRO[missionId]`

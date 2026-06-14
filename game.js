@@ -1866,7 +1866,7 @@ const introCine = () => intro !== null;                  // input locked while t
 const INTRO_CAM_END = 21;                                // after the crash the normal (wreck) camera takes over
 // ── per-mission insertion intros (data-driven; see design/MISSION_INTROS.md) ──
 // default insertion is the helicopter crash ("crash"); a mission id here overrides it.
-const INTRO_KIND = { dna: "research", ghosts: "jeep", blackout: "boat", last_sample: "monorail" };   // future: fallen_outpost:halo, extinction:airship
+const INTRO_KIND = { dna: "research", ghosts: "jeep", blackout: "boat", last_sample: "monorail", fallen_outpost: "halo", extinction: "airship" };
 const introKind = () => (selectedMission && INTRO_KIND[selectedMission.id]) || "crash";
 const INTRO_RADIO = [
   { t: 1.2, h: `<span class="rc">RANGER-6:</span> Entering Alpha airspace. Stay sharp.`, say: "Ranger Six, entering Alpha airspace. Stay sharp.", voice: { rate: 1.0, pitch: 0.98 }, clip: "ranger_enter" },
@@ -1900,6 +1900,18 @@ const INTRO_RADIO_MONO = [   // THE LAST SAMPLE — abandoned monorail arrival (
   { t: 8.8, h: `<span class="rc">DR. SOTO:</span> That's the last sample in the cold vault. Restore the car's power, get to the platform.`, say: "That's the last sample, in the cold vault. Restore the car's power and get to the platform.", voice: { rate: 1.0, pitch: 1.0 }, clip: "mono_restore" },
   { t: 12.5, h: `<span class="rc">TRANSIT:</span> Facility under attack. Containment compromised. Doors opening.`, say: "Facility under attack. Containment compromised. Doors opening.", voice: { rate: 1.06, pitch: 1.04 }, clip: "mono_doors" },
 ];
+const INTRO_RADIO_HALO = [   // FALLEN OUTPOST — HALO parachute (bay → countdown); the canopy line fires on the jump
+  { t: 1.0, h: `<span class="rc">COMMANDER:</span> Outpost Echo's gone dark. Maya's beacon is still pulsing — she's alive, and she's not alone.`, say: "Outpost Echo's gone dark. Ranger Maya's beacon is still pulsing — she's alive, and she's not alone.", voice: { rate: 1.0, pitch: 0.96 }, clip: "cmd_echo" },
+  { t: 4.4, h: `<span class="rc">COMMANDER:</span> We can't land in that. HALO drop — you jump, you steer, you find her.`, say: "We can't land in that. HALO drop — you jump, you steer, you find her.", voice: { rate: 1.04, pitch: 0.98 }, clip: "cmd_halo" },
+  { t: 7.0, h: `<span class="rc">COMMANDER:</span> Ramp's open. Thirty seconds to the drop. On my mark.`, say: "Ramp's open. Thirty seconds to the drop. On my mark.", voice: { rate: 1.08, pitch: 1.0 }, clip: "cmd_ramp" },
+];
+const LINE_HALO_CANOPY = { h: `<span class="rc">COMMANDER:</span> Canopy's good — steer for the beacon, flare before the trees.`, say: "Canopy's good. Steer for the beacon — and flare before you hit the trees.", voice: { rate: 1.04, pitch: 1.0 }, clip: "cmd_canopy" };
+const INTRO_RADIO_AIRSHIP = [   // EXTINCTION PROTOCOL — evac airship (deck → breach); the descent line fires on the jump
+  { t: 1.0, h: `<span class="rc">COMMANDER:</span> This is the last carrier off the island. Below you, it's already over.`, say: "This is the last carrier off the island. Below you, it's already over.", voice: { rate: 0.98, pitch: 0.95 }, clip: "cmd_lastcarrier" },
+  { t: 4.4, h: `<span class="rc">COMMANDER:</span> Apex predators loose, containment's gone. We end this tonight — or no one leaves.`, say: "Multiple apex predators loose, containment's gone. We end this tonight, or no one leaves.", voice: { rate: 1.02, pitch: 0.97 }, clip: "cmd_apex" },
+  { t: 7.0, h: `<span class="rc">COMMANDER:</span> Breach on the flight deck! Emergency deployment — go, go, go!`, say: "Breach on the flight deck! Emergency deployment — go, go, go!", voice: { rate: 1.2, pitch: 1.08 }, clip: "cmd_breach" },
+];
+const LINE_AIRSHIP_DOWN = { h: `<span class="rc">COMMANDER:</span> Ride it down to the Command Center. Everything depends on what you do next.`, say: "Ride it down to the Command Center. Everything depends on what you do next.", voice: { rate: 1.02, pitch: 0.98 }, clip: "cmd_ridedown" };
 // Spoken radio via the Web Speech API. Quality is bounded by the OS voices, so we aggressively prefer
 // natural / neural / online voices (Chrome's "Google US English", macOS premium) over the built-in
 // robotic ones, and drive delivery per-line (frantic pilot vs calm briefing) via {rate,pitch,volume}.
@@ -1944,7 +1956,7 @@ const _radioClips = {};
 // NB: the game defines its own `Audio` object below, which shadows the browser Audio constructor —
 // so we must use `window.Audio` here for the HTMLAudioElement, not bare `Audio`.
 function radioClip(name) { if (!_radioClips[name]) { const a = new window.Audio(RADIO_DIR + name + ".m4a"); a.preload = "auto"; a.volume = 0.95; _radioClips[name] = a; } return _radioClips[name]; }
-function preloadRadio() { try { ["pilot_mayday","pilot_brace","ranger_enter","ranger_thermal","soto_cleared","soto_alive","soto_samples","pilot_skids","convoy_sector","ranger2_ping","convoy_wrecked","convoy_tracks","boat_approach","boat_stations","boat_tunnel","boat_dock","mono_transit","mono_power","mono_restore","mono_doors"].forEach(radioClip); } catch (e) {} }
+function preloadRadio() { try { ["pilot_mayday","pilot_brace","ranger_enter","ranger_thermal","soto_cleared","soto_alive","soto_samples","pilot_skids","convoy_sector","ranger2_ping","convoy_wrecked","convoy_tracks","boat_approach","boat_stations","boat_tunnel","boat_dock","mono_transit","mono_power","mono_restore","mono_doors","cmd_echo","cmd_halo","cmd_ramp","cmd_canopy","cmd_lastcarrier","cmd_apex","cmd_breach","cmd_ridedown"].forEach(radioClip); } catch (e) {} }
 function stopRadioClips() { for (const k in _radioClips) { try { _radioClips[k].pause(); _radioClips[k].currentTime = 0; } catch (e) {} } }
 function playRadio(e) {   // e = { say, voice, clip }
   if (e && e.clip) {
@@ -2009,6 +2021,8 @@ function startIntro() {                                   // dispatch to the act
   if (k === "jeep") return startIntroJeep();
   if (k === "boat") return startIntroBoat();
   if (k === "monorail") return startIntroMonorail();
+  if (k === "halo") return startIntroHalo();
+  if (k === "airship") return startIntroAirship();
   return startIntroCrash();
 }
 function startIntroCrash() {
@@ -2032,6 +2046,8 @@ function updateIntro(dt) {
   if (intro.kind === "jeep") return updateIntroJeep(dt);
   if (intro.kind === "boat") return updateIntroBoat(dt);
   if (intro.kind === "monorail") return updateIntroMonorail(dt);
+  if (intro.kind === "halo") return updateIntroHalo(dt);
+  if (intro.kind === "airship") return updateIntroAirship(dt);
   return updateIntroCrash(dt);
 }
 function updateIntroCrash(dt) {
@@ -2096,6 +2112,8 @@ function updateIntroCamera() {
   if (intro.kind === "jeep") return updateIntroCameraJeep();
   if (intro.kind === "boat") return updateIntroCameraBoat();
   if (intro.kind === "monorail") return updateIntroCameraMonorail();
+  if (intro.kind === "halo") return updateIntroCameraHalo();
+  if (intro.kind === "airship") return updateIntroCameraAirship();
   return updateIntroCameraCrash();
 }
 function updateIntroCameraCrash() {
@@ -2442,6 +2460,172 @@ function updateIntroCameraMonorail() {
   if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake * 0.6; }
 }
 function endIntroMonorail() { introProp = null; endIntroAtOrigin("THE LAST SAMPLE · restore power & retrieve the sample — reach the objective"); }
+
+/* ── Phase 4 · player-steered descent (shared by the HALO parachute & the evac airship) ── *
+ * The pre-jump cinematic (transport bay / airship deck) hands off to a CONTROLLABLE canopy:
+ * the player steers with the stick / A-D, flares with S (pull back), and lands where they choose.
+ * This is real player control inside the intro — not a rail. */
+function buildTransportBay() {                            // C-130-style fuselage interior (rear ramp at +x, open to the storm)
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x3a3f3a, roughness: 0.85, metalness: 0.3, side: THREE.DoubleSide });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x23261f, roughness: 0.9, metalness: 0.2, side: THREE.DoubleSide });
+  const L = 11, W = 3.6, H = 2.8;
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(L, 0.2, W), dark); g.add(floor);
+  const ceil = new THREE.Mesh(new THREE.BoxGeometry(L, 0.2, W), mat); ceil.position.y = H; g.add(ceil);
+  for (const sz of [W / 2, -W / 2]) { const wall = new THREE.Mesh(new THREE.BoxGeometry(L, H, 0.2), mat); wall.position.set(0, H / 2, sz); g.add(wall); }
+  const front = new THREE.Mesh(new THREE.BoxGeometry(0.2, H, W), mat); front.position.set(-L / 2, H / 2, 0); g.add(front);   // cockpit bulkhead
+  const ramp = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.18, W - 0.2), dark); ramp.position.set(L / 2 + 1.1, -0.5, 0); ramp.rotation.z = 0.5; g.add(ramp);   // lowered rear ramp
+  for (let i = -1; i <= 1; i++) { const rib = new THREE.Mesh(new THREE.TorusGeometry(W * 0.52, 0.08, 6, 14, Math.PI), mat); rib.position.set(i * 3, 0.1, 0); rib.rotation.z = -Math.PI / 2; g.add(rib); }
+  g.add(Object.assign(new THREE.PointLight(0x9fb0c0, 0.7, 13), { position: new THREE.Vector3(0, H - 0.4, 0) }));
+  g.add(Object.assign(new THREE.PointLight(0xbcd0e6, 1.6, 22), { position: new THREE.Vector3(L / 2 + 2, 1, 0) }));   // storm light through the open ramp
+  const jl = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), new THREE.MeshStandardMaterial({ color: 0xd6562f, emissive: 0xd6562f, emissiveIntensity: 1.6 }));
+  jl.position.set(L / 2 - 0.7, H - 0.5, W / 2 - 0.3); g.add(jl); g.userData.jumpLight = jl;
+  return g;
+}
+function buildAirshipDeck() {                             // open flight deck of the evac carrier (jump edge at +z)
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x4a4f55, roughness: 0.8, metalness: 0.4 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x2a2d30, roughness: 0.9, metalness: 0.3 });
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(14, 0.4, 8), mat); g.add(deck);
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(14, 3.2, 0.4), mat); wall.position.set(0, 1.6, -3.8); g.add(wall);
+  const board = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.4, 0.1), new THREE.MeshStandardMaterial({ color: 0x0c2a30, emissive: 0x1d6b76, emissiveIntensity: 0.9 })); board.position.set(-3.2, 1.9, -3.55); g.add(board);
+  for (const px of [-6, -3, 0, 3, 6]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.0, 6), dark); post.position.set(px, 0.7, 3.7); g.add(post); }
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(13, 0.1, 0.1), dark); rail.position.set(0, 1.2, 3.7); g.add(rail);
+  for (const c of [[5, -2], [-5, 1]]) { const cr = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 1.2), dark); cr.position.set(c[0], 0.7, c[1]); g.add(cr); }
+  g.add(Object.assign(new THREE.PointLight(0xffb070, 1.3, 26), { position: new THREE.Vector3(0, 1.5, 9) }));   // burning island glow from below the bow
+  g.add(Object.assign(new THREE.PointLight(0xcfe0ff, 0.6, 16), { position: new THREE.Vector3(0, 3, -2) }));
+  return g;
+}
+function buildParachute() {
+  const g = new THREE.Group();
+  const canMat = new THREE.MeshStandardMaterial({ color: 0x46553a, roughness: 0.92, metalness: 0.04, side: THREE.DoubleSide });
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xc9772f, roughness: 0.9, side: THREE.DoubleSide });
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(2.8, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), canMat); dome.position.y = 2.8; g.add(dome);
+  const band = new THREE.Mesh(new THREE.SphereGeometry(2.83, 18, 6, 0, Math.PI * 2, Math.PI * 0.34, Math.PI * 0.12), stripeMat); band.position.y = 2.8; g.add(band);
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; const ln = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 3.0, 4), new THREE.MeshBasicMaterial({ color: 0x14140e })); ln.position.set(Math.cos(a) * 2.0, 1.35, Math.sin(a) * 2.0); ln.rotation.x = Math.sin(a) * 0.26; ln.rotation.z = -Math.cos(a) * 0.26; g.add(ln); }
+  return g;
+}
+function steerXZ() {   // unified steering intent (touch stick / gamepad already in input.mx/mz, plus WASD/arrows)
+  let ix = input.mx, iz = input.mz;
+  if (keys.has("KeyW") || keys.has("ArrowUp")) iz -= 1;
+  if (keys.has("KeyS") || keys.has("ArrowDown")) iz += 1;
+  if (keys.has("KeyA") || keys.has("ArrowLeft")) ix -= 1;
+  if (keys.has("KeyD") || keys.has("ArrowRight")) ix += 1;
+  return { x: clamp(ix, -1, 1), z: clamp(iz, -1, 1) };
+}
+function beginCanopy(tx, tz) {   // hand off from the pre-jump cinematic into the controllable canopy
+  if (introProp) { scene.remove(introProp); introProp = null; }
+  intro.bay = null; intro.deck = null;
+  intro.tx = tx; intro.tz = tz;
+  intro.cx = tx - 46; intro.cz = tz - 46; intro.cy = 112;                 // start high & off-target so you must steer
+  intro.heading = Math.atan2(tx - intro.cx, tz - intro.cz);
+  intro.vdesc = 7; intro.ct = 0; intro.phase = "canopy"; intro.shake = 0.015; intro._canopyLine = false;
+  intro.chute = buildParachute(); scene.add(intro.chute);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(5.4, 6.0, 40), new THREE.MeshBasicMaterial({ color: 0x8fb8c4, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.set(tx, groundH(tx, tz) + 0.15, tz); scene.add(ring); intro.ring = ring;
+  Audio.squelch();
+}
+function updateCanopyPhase(dt) {
+  if (!intro) return;
+  intro.t += dt; intro.ct += dt; const big = $("introBig");
+  if (!intro._canopyLine && intro.ct > 1.0) {   // Commander's canopy/descent line
+    intro._canopyLine = true; const e = intro.kind === "airship" ? LINE_AIRSHIP_DOWN : LINE_HALO_CANOPY;
+    const r = $("introRadio"); r.innerHTML = e.h; r.style.opacity = "1"; Audio.squelch(); playRadio(e);
+  }
+  const s = steerXZ();
+  intro.heading += s.x * dt * 1.25;                       // steer left / right
+  const flare = s.z > 0.2, dive = s.z < -0.2;
+  const fwd = flare ? 3.5 : dive ? 15 : 9;
+  intro.vdesc = flare ? 2.6 : dive ? 13 : 7;
+  intro.cx += (Math.sin(intro.heading) * fwd + 2.0) * dt;  // forward + steady wind drift (+x)
+  intro.cz += (Math.cos(intro.heading) * fwd) * dt;
+  intro.cy -= intro.vdesc * dt;
+  const half = BIOME.map.size / 2 - 6; intro.cx = clamp(intro.cx, -half, half); intro.cz = clamp(intro.cz, -half, half);
+  const gy = groundH(intro.cx, intro.cz), py = Math.max(gy + 0.9, intro.cy);
+  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(intro.cx, py, intro.cz); playerMesh.rotation.y = intro.heading; }
+  if (intro.chute) { intro.chute.position.set(intro.cx, py + 2.5, intro.cz); intro.chute.rotation.y = intro.heading; intro.chute.rotation.z = -s.x * 0.32; }
+  const near = intro.cy - gy;
+  if (near < 20) { big.textContent = "FLARE — PULL BACK ▼"; big.style.opacity = "1"; }
+  else if (intro.ct < 5.5) { big.textContent = isTouch ? "STEER WITH THE STICK · HOLD DOWN TO FLARE" : "STEER  A / D  ·  HOLD  S  TO FLARE"; big.style.opacity = "1"; }
+  else big.style.opacity = "0";
+  if (intro.cy <= gy + 0.95 || intro.ct > 55) landCanopy(intro.vdesc > 6.0 && !flare);
+}
+function updateCanopyCamera() {
+  const a = intro.heading, gy = groundH(intro.cx, intro.cz), py = Math.max(gy + 0.9, intro.cy);
+  camera.position.lerp(tmp.set(intro.cx - Math.sin(a) * 9, py + 4.5, intro.cz - Math.cos(a) * 9), 0.1);
+  camera.lookAt(intro.cx + Math.sin(a) * 5, py - 0.5, intro.cz + Math.cos(a) * 5);
+  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+}
+function landCanopy(hard) {
+  if (intro.chute) scene.remove(intro.chute);
+  if (intro.ring) scene.remove(intro.ring);
+  const air = intro.kind === "airship";
+  const P = S.player; P.x = intro.cx; P.z = intro.cz; P.yaw = intro.heading;
+  cam.yaw = intro.heading; cam.pitch = -0.05; camera.up.set(0, 1, 0);
+  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
+  if (hard) { P.stamina = Math.max(15, P.stamina - 30); flash(); }
+  const base = air ? "EXTINCTION PROTOCOL · reach the Command Center" : "RESCUE · reach Outpost Echo & find Maya";
+  finishIntroCommon((hard ? "HARD LANDING · " : "✓ touchdown · ") + base);
+}
+/* HALO parachute — FALLEN OUTPOST */
+function startIntroHalo() {
+  const bay = buildTransportBay(); bay.position.set(0, 100, 0);
+  seatTroopers(bay, [[-3.6, 0.1, 1.3], [-3.6, 0.1, -1.3], [-1.6, 0.1, 1.3]], Math.PI / 2, 0.85);   // paratroopers along the wall
+  scene.add(bay); introProp = bay;
+  intro = { kind: "halo", t: 0, phase: "bay", bay, line: -1, shake: 0.05, camActive: true };
+  introOpen("Jurassic Survival · Rescue · Ranger Outpost Echo");
+  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(bay.position.x + 3.6, bay.position.y + 0.9, bay.position.z); playerMesh.rotation.y = Math.PI / 2; }   // you, at the ramp
+}
+function updateIntroHalo(dt) {
+  if (!intro) return;
+  if (intro.phase === "canopy") return updateCanopyPhase(dt);
+  intro.t += dt; const T = intro.t, tint = $("introTint"), cap = $("introCap"), big = $("introBig");
+  radioStep(INTRO_RADIO_HALO);
+  tint.style.background = "#1c2630"; tint.style.opacity = (0.34 + (Math.sin(T * 13) > 0.95 ? 0.42 : 0)).toFixed(2);   // storm + lightning flashes
+  if (T < 7) { intro.phase = "bay"; cap.style.opacity = T > 5 ? "0" : "1"; }
+  else if (T < 9.6) {   // green light → jump
+    intro.phase = "ready";
+    if (intro.bay && intro.bay.userData.jumpLight) { const j = intro.bay.userData.jumpLight.material; j.color.setHex(0x6fae6b); j.emissive.setHex(0x6fae6b); }
+    const n = Math.ceil(9.5 - T); big.textContent = n > 0 ? String(n) : "JUMP"; big.style.opacity = "1";
+    if (keys.has("KeyE") || keys.has("Space") || input.action || T >= 9.5) { big.style.opacity = "0"; beginCanopy(70, -70); }
+  }
+}
+function updateIntroCameraHalo() {
+  if (intro.phase === "canopy") return updateCanopyCamera();
+  const b = intro.bay; if (!b) return;
+  camera.position.lerp(tmp.set(b.position.x - 3.6, b.position.y + 1.7, b.position.z + 0.3), 0.08);
+  camera.lookAt(b.position.x + 5, b.position.y + 1.0, b.position.z);
+  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+}
+/* Evac airship — EXTINCTION PROTOCOL */
+function startIntroAirship() {
+  const deck = buildAirshipDeck(); deck.position.set(0, 92, 0);
+  seatTroopers(deck, [[-4.5, 0.2, 1.4], [4.5, 0.2, -1.6], [-2, 0.2, 1.0]], Math.PI / 2, 0.85);
+  scene.add(deck); introProp = deck;
+  intro = { kind: "airship", t: 0, phase: "deck", deck, line: -1, shake: 0.06, camActive: true };
+  introOpen("Jurassic Survival · Extinction Protocol · Final evacuation");
+  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(deck.position.x, deck.position.y + 0.9, deck.position.z + 2.6); playerMesh.rotation.y = 0; }   // you, at the rail
+}
+function updateIntroAirship(dt) {
+  if (!intro) return;
+  if (intro.phase === "canopy") return updateCanopyPhase(dt);
+  intro.t += dt; const T = intro.t, tint = $("introTint"), cap = $("introCap"), big = $("introBig");
+  radioStep(INTRO_RADIO_AIRSHIP);
+  tint.style.background = T < 7 ? "#3a1c10" : "#5a1810"; tint.style.opacity = (0.3 + (T > 7 ? Math.abs(Math.sin(T * 8)) * 0.18 : 0)).toFixed(2);   // fiery glow → alarm pulse
+  if (T < 7) { intro.phase = "deck"; cap.style.opacity = T > 5 ? "0" : "1"; }
+  else if (T < 9.6) {
+    intro.phase = "alarm";
+    const n = Math.ceil(9.5 - T); big.textContent = n > 0 ? "BREACH" : "JUMP"; big.style.opacity = "1";
+    if (keys.has("KeyE") || keys.has("Space") || input.action || T >= 9.5) { big.style.opacity = "0"; beginCanopy(0, -86); }
+  }
+}
+function updateIntroCameraAirship() {
+  if (intro.phase === "canopy") return updateCanopyCamera();
+  const d = intro.deck; if (!d) return;
+  camera.position.lerp(tmp.set(d.position.x, d.position.y + 2.3, d.position.z - 3.2), 0.06);
+  camera.lookAt(d.position.x, d.position.y + 1.3, d.position.z + 9);
+  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+}
 function lockPointer() {   // pointer lock needs a user gesture; the timer-driven auto-end may be rejected — canvas click recovers it
   if (isTouch) return;
   try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
@@ -2452,6 +2636,15 @@ function skipIntro() {
   if (intro.kind === "jeep") { endIntroJeep(); return; }
   if (intro.kind === "boat") { if (intro.boat) scene.remove(intro.boat); endIntroBoat(); return; }
   if (intro.kind === "monorail") { if (intro.car) scene.remove(intro.car); endIntroMonorail(); return; }
+  if (intro.kind === "halo" || intro.kind === "airship") {
+    if (intro.bay) scene.remove(intro.bay); if (intro.deck) scene.remove(intro.deck);
+    if (intro.chute) scene.remove(intro.chute); if (intro.ring) scene.remove(intro.ring); introProp = null;
+    const air = intro.kind === "airship", tx = intro.tx != null ? intro.tx : (air ? 0 : 70), tz = intro.tz != null ? intro.tz : (air ? -86 : -70);
+    const P = S.player; P.x = tx; P.z = tz; P.yaw = 0; cam.yaw = 0; cam.pitch = -0.05; camera.up.set(0, 1, 0);
+    if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = 0; }
+    finishIntroCommon(air ? "EXTINCTION PROTOCOL · reach the Command Center" : "RESCUE · reach Outpost Echo & find Maya");
+    return;
+  }
   if (intro.kind === "research") { Audio.rotor(false); endIntroResearch(); return; }
   if (!wreckMesh) wreckMesh = buildWreck(intro.wx, intro.wz);
   S.player.x = 0; S.player.z = 0; placeAtWreck();
