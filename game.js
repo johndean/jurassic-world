@@ -1904,11 +1904,6 @@ function upgradeIntroHeli() {                             // swap the boxy fallb
 }
 function startIntro() {
   const wx = 6, wz = 4;
-  if (introSeen) {   // already watched this session → drop straight into the world at the wreck
-    wreckMesh = buildWreck(wx, wz); intro = { wx, wz }; placeAtWreck(); intro = null;
-    S.phase = "playing"; $("hud").style.display = ""; Audio.ambient(true);
-    toast("SURVIVE · find the extraction beacon"); lockPointer(); return;
-  }
   Audio.rotor(true);
   const heli = buildHeli(); heli.group.position.set(60, 150, 120);
   buildRiders(heli.group);                                // the squad rides in the open door
@@ -2051,8 +2046,9 @@ function startRun() {
   }
   $("startScreen").classList.add("hidden"); $("endScreen").classList.add("hidden");
   cam.yaw = 0; cam.pitch = -0.18;
-  startMission();   // set up the selected mission's phase chain + first objective marker
-  startIntro();   // play the opening crash cinematic, then hand control to the player ("playing")
+  try { startMission(); } catch (e) { console.error("startMission", e); }   // set up the mission phase chain + objective marker
+  try { startIntro(); }                                                       // play the opening crash cinematic, then hand off to "playing"
+  catch (e) { console.error("startIntro", e); S.phase = "playing"; if (playerMesh) playerMesh.visible = true; $("intro").classList.add("hidden"); $("hud").style.display = ""; Audio.ambient(true); if (!isTouch) lockPointer(); }
 }
 function endRun(won) {
   if (S.phase !== "playing") return;
@@ -2380,7 +2376,7 @@ function frame(now) {
     if (S.phase === "playing") simulate(STEP);
     acc -= STEP; steps++;
   }
-  if (S.phase === "intro") updateIntro(Math.min(0.05, dtMs / 1000));   // cinematic runs on real time, capped
+  if (S.phase === "intro") { try { updateIntro(Math.min(0.05, dtMs / 1000)); } catch (e) { console.error("intro", e); try { skipIntro(); } catch (_) { S.phase = "playing"; if (playerMesh) playerMesh.visible = true; $("intro").classList.add("hidden"); $("hud").style.display = ""; } } }   // never strand the player on an intro error
   tickMs = performance.now() - t0;
   updateCamera();
   if (binoc) updateScan();   // live species labels track smoothly while glassing
