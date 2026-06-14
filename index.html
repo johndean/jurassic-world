@@ -72,8 +72,10 @@
   .obj-list{list-style:none;margin:0;padding:0;font-size:11.5px;}
   .obj-list li{display:flex;gap:7px;padding:2px 0;color:var(--hud-text);}
   .obj-list li.done{color:var(--hud-dim);text-decoration:line-through;}
+  .obj-list li.cur{color:#fff;font-weight:700;}
   .obj-check{color:var(--hud-accent);}
   .obj-list li.done .obj-check{color:var(--hud-good);}
+  .obj-list li.cur .obj-check{color:#e0772f;}
   .compass{position:absolute;top:22px;left:50%;transform:translateX(-50%);width:360px;height:40px;}
   .cmp-strip{position:relative;height:24px;border-bottom:1px solid var(--hud-line);overflow:hidden;
     -webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);

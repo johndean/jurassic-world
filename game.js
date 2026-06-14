@@ -149,6 +149,135 @@ function initMissionSelect() {
     const b = $("sBlurb"); if (b) b.textContent = selectedMission.blurb;
   }));
 }
+
+/* ===== campaign missions (multi-phase, data-driven; run on the generic engine below) ===== */
+Object.assign(MISSIONS, {
+  last_sample: {
+    id: "last_sample", name: "THE LAST SAMPLE", tag: "EASY · SCIENTIST · STEALTH",
+    short: "Recover the final DNA sample from the research facility, then evac.",
+    blurb: "The genetics program has collapsed. One final DNA sample remains inside the Sector 4 research facility — but predators have already entered. Restore power, retrieve the container, reach the Cold Storage Vault, and hold for extraction as the T-Rex closes in.",
+    phases: [
+      { t: "reach", l: "Reach the research dock — find the access card", x: -74, z: -56, r: 7 },
+      { t: "interact", l: "Restore facility power", x: -42, z: -74, r: 7 },
+      { t: "interact", l: "Retrieve the DNA container", x: 36, z: -52, r: 7 },
+      { t: "interact", l: "Reach the Cold Storage Vault — insert DNA", x: 66, z: 48, r: 7 },
+      { t: "interact", l: "Activate the distress beacon", atBeacon: true, r: 7, starts: "evac" },
+      { t: "extract", l: "Survive the hold — T-REX inbound — board the evac", species: "trex" },
+    ],
+  },
+  blackout: {
+    id: "blackout", name: "OPERATION BLACKOUT", tag: "MEDIUM · ENGINEER · SURVIVAL",
+    short: "Restart three power stations and the island grid, then escape.",
+    blurb: "The power grid failed and the fences are offline — predators roam freely. Restart Power Stations Alpha, Bravo and Charlie (every generator draws dinosaurs), return to the Control Center to restart the grid, then escape before the trapped predators reach you.",
+    phases: [
+      { t: "reach", l: "Reach Power Station Alpha", x: -80, z: 40, r: 7 },
+      { t: "interact", l: "Repair Generator Alpha — the noise draws predators", x: -80, z: 40, r: 7 },
+      { t: "reach", l: "Reach Power Station Bravo", x: 18, z: -82, r: 7 },
+      { t: "interact", l: "Repair Generator Bravo", x: 18, z: -82, r: 7 },
+      { t: "interact", l: "Restart Generator Charlie", x: 84, z: 10, r: 7 },
+      { t: "interact", l: "Return to Control Center — restart the grid", x: 0, z: 0, r: 8, starts: "evac" },
+      { t: "extract", l: "Escape before the trapped predators reach you", species: "allosaurus" },
+    ],
+  },
+  ghosts: {
+    id: "ghosts", name: "GHOSTS OF SECTOR 9", tag: "HARD · RANGER · INVESTIGATION",
+    short: "Track the missing survey team through Spinosaurus territory.",
+    blurb: "A survey team vanished in Sector 9 and satellite shows movement. Investigate the campsite, follow the tracks through the cave system — Spinosaurus territory — find the survivor and get them to extraction.",
+    phases: [
+      { t: "reach", l: "Investigate the abandoned campsite", x: -60, z: 70, r: 7 },
+      { t: "interact", l: "Examine the attack evidence — follow the tracks", x: -60, z: 70, r: 7 },
+      { t: "reach", l: "Recover the survivor's radio log", x: 10, z: 88, r: 7 },
+      { t: "reach", l: "Enter the cave system — Spinosaurus territory", x: 78, z: 64, r: 7 },
+      { t: "interact", l: "Find the missing surveyor", x: 78, z: 64, r: 7 },
+      { t: "interact", l: "Signal for extraction", atBeacon: true, r: 7, starts: "evac" },
+      { t: "extract", l: "Protect the survivor & reach the evac", species: "spinosaurus" },
+    ],
+  },
+  fallen_outpost: {
+    id: "fallen_outpost", name: "FALLEN OUTPOST", tag: "HARD · VETERINARIAN · RESCUE",
+    short: "Reach the injured ranger, stabilise her, escort to extraction.",
+    blurb: "An emergency beacon is transmitting from Ranger Outpost Echo — Ranger Maya is injured, alone, and being hunted. Reach her, stabilise the bleeding, escort her to the safehouse, then hold the extraction as Carnotaurus and the T-Rex arrive. Load Maya first.",
+    phases: [
+      { t: "reach", l: "Reach Ranger Outpost Echo", x: 70, z: -70, r: 7 },
+      { t: "interact", l: "Search the collapsed watchtower — find Maya", x: 70, z: -70, r: 7 },
+      { t: "interact", l: "Stabilise Maya — stop the bleeding", x: 70, z: -70, r: 7 },
+      { t: "reach", l: "Escort Maya to the safehouse (raptors pursue)", x: -20, z: -30, r: 7 },
+      { t: "interact", l: "Activate the emergency extraction beacon", atBeacon: true, r: 7, starts: "evac" },
+      { t: "extract", l: "Hold — Carnotaurus then T-Rex — load Maya & escape", species: "carnotaurus" },
+    ],
+  },
+  extinction: {
+    id: "extinction", name: "EXTINCTION PROTOCOL", tag: "NIGHTMARE · FINALE",
+    short: "Reach Command, activate the protocol, escape the collapsing island.",
+    blurb: "Jurassic World is collapsing — a containment breach has freed multiple apex predators and the evacuation has begun. Reach the Command Center, restore comms, unlock the evacuation routes, defend the line, ACTIVATE EXTINCTION PROTOCOL, then reach the final helicopter as the apexes converge.",
+    phases: [
+      { t: "reach", l: "Reach the Command Center", x: 0, z: -86, r: 8 },
+      { t: "interact", l: "Restore communications", x: 0, z: -86, r: 8 },
+      { t: "reach", l: "Activate sector emergency systems", x: -88, z: -20, r: 7 },
+      { t: "interact", l: "Unlock the evacuation routes", x: -88, z: -20, r: 7 },
+      { t: "interact", l: "Defend the Command Center — hold the line", x: 0, z: -86, r: 9 },
+      { t: "interact", l: "ACTIVATE EXTINCTION PROTOCOL", atBeacon: true, r: 7, starts: "evac" },
+      { t: "extract", l: "Reach the final helicopter — apexes converge", species: "trex" },
+    ],
+  },
+});
+
+/* ---- generic multi-phase mission engine (additive; only runs for missions with .phases) ---- */
+let MC = null, objMarker = null;   // MC = campaign runtime { idx, started }
+const activeCampaign = () => (selectedMission && selectedMission.phases) ? selectedMission : null;
+function phaseSite(ph) { return ph.atBeacon ? [S.extraction.beacon.x, S.extraction.beacon.z] : [ph.x, ph.z]; }
+function setObjMarker(x, z, color) {
+  if (objMarker) { scene.remove(objMarker); objMarker = null; }
+  if (x == null) return;
+  const g = new THREE.Group(); g.position.set(x, groundH(x, z), z);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(2.0, 2.5, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12; g.add(ring);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 18, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false })); beam.position.y = 9; g.add(beam);
+  const l = new THREE.PointLight(color, 1.5, 44); l.position.y = 5; g.add(l);
+  objMarker = g; objMarker.userData.ring = ring; scene.add(g);
+}
+function applyPhaseMarker() {
+  const m = activeCampaign(); if (!m || !MC) { setObjMarker(null); return; }
+  const ph = m.phases[MC.idx];
+  if (!ph) { setObjMarker(null); return; }
+  if (ph.t === "reach" || ph.t === "interact") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0x8fb8c4); }
+  else if (ph.t === "extract") setObjMarker(S.extraction.beacon.x, S.extraction.beacon.z, 0xe0772f);
+  else setObjMarker(null);
+}
+function startMission() {
+  const m = activeCampaign();
+  if (!m) { MC = null; setObjMarker(null); return; }
+  m.phases.forEach(p => { p._done = false; });   // clear per-run interact flags
+  MC = { idx: 0, started: false }; applyPhaseMarker();
+}
+function missionInteract() {   // E / CALL at an active interact objective; returns true if it handled the press
+  const m = activeCampaign(); if (!m || !MC) return false;
+  const ph = m.phases[MC.idx]; if (!ph || ph.t !== "interact") return false;
+  const [x, z] = phaseSite(ph);
+  if (dist2(S.player.x, S.player.z, x, z) >= (ph.r || 7) * (ph.r || 7)) return false;   // not at the marker → let tower/call handle E
+  ph._done = true;
+  if (ph.starts === "evac" && !S.extraction.called) { S.extraction.called = true; S.player.noise = 1; spawnTimer = 0; Audio.beacon(true); Audio.roar(); startEvac(); }
+  Audio.beacon(false); flash(); toast("✓ " + (typeof ph.l === "function" ? ph.l() : ph.l));
+  return true;
+}
+function updateMission(dt) {
+  const m = activeCampaign(); if (!m || !MC) return;
+  if (objMarker) objMarker.userData.ring.rotation.z += dt * 1.2;
+  const ph = m.phases[MC.idx]; if (!ph) return;
+  const P = S.player; let done = false;
+  if (ph.t === "reach") { const [x, z] = phaseSite(ph); if (dist2(P.x, P.z, x, z) < (ph.r || 7) * (ph.r || 7)) done = true; }
+  else if (ph.t === "interact") { if (ph._done) done = true; }
+  else if (ph.t === "collect") { if (dnaSamples >= (ph.count || 3)) done = true; }
+  else if (ph.t === "extract") {
+    if (!MC.started) { MC.started = true; if (!S.extraction.called) { S.extraction.called = true; S.player.noise = 1; spawnTimer = 0; Audio.beacon(true); Audio.roar(); startEvac(); } if (ph.species) spawnAtEdge(ph.species, P); }
+    if (S.extraction.won) done = true;
+  }
+  if (done) {
+    MC.idx++; MC.started = false;
+    if (MC.idx >= m.phases.length) setObjMarker(null);
+    else { applyPhaseMarker(); const np = m.phases[MC.idx]; toast("OBJECTIVE · " + (typeof np.l === "function" ? np.l() : np.l)); }
+  }
+}
 const GRACE_S = 7;   // predators ignore the player for the first seconds of a run (anti-spawn-camp)
 const _gltfLoader = new GLTFLoader();
 function loadModel(path) {
@@ -691,6 +820,7 @@ function updateZip(dt) {
 function interact() {   // context action shared by E / the CALL button
   const P = S.player;
   if (P.zip) return;
+  if (missionInteract()) return;             // complete a mission objective if you're standing on its marker
   if (P.onTower) { startZip(P.onTower); return; }
   const t = nearTowerBase(P);
   if (t) { climbTower(t); return; }
@@ -1474,6 +1604,8 @@ function updateThreat(dt, P) {
 /* ================================================== extraction loop ====== */
 function tryCall() {
   if (S.phase !== "playing" || S.extraction.called) return;
+  const cm = activeCampaign();
+  if (cm && MC) { const ph = cm.phases[MC.idx]; if (ph && ph.t !== "extract" && !(ph.t === "interact" && ph.starts === "evac")) { toast("Complete the mission objectives first"); return; } }
   if (selectedMission.id === "dna" && dnaSamples < DNA_GOAL) { toast(`Secure the DNA first · ${dnaSamples}/${DNA_GOAL} samples`); return; }
   if (!S.extraction.inRange) { toast(STR.reachBeaconFirst); return; }
   S.extraction.called = true; S.player.noise = 1; spawnTimer = 0;
@@ -1822,6 +1954,7 @@ function startRun() {
   }
   $("startScreen").classList.add("hidden"); $("endScreen").classList.add("hidden");
   cam.yaw = 0; cam.pitch = -0.18;
+  startMission();   // set up the selected mission's phase chain + first objective marker
   startIntro();   // play the opening crash cinematic, then hand control to the player ("playing")
 }
 function endRun(won) {
@@ -1919,8 +2052,16 @@ function updateHUD() {
   // objectives — driven by the selected mission
   const M = selectedMission;
   $("objTitle").textContent = M.name;
-  $("objSub").textContent = typeof M.sub === "function" ? M.sub() : M.sub;
-  $("objList").innerHTML = M.steps.map(o => { const done = o.done(); const l = typeof o.l === "function" ? o.l() : o.l; return `<li class="${done ? "done" : ""}"><span class="obj-check">${done ? "◆" : "◇"}</span>${l}</li>`; }).join("");
+  if (M.phases && MC) {                                   // campaign mission: phase chain
+    const cur = M.phases[MC.idx];
+    let sub = cur ? (typeof cur.l === "function" ? cur.l() : cur.l) : "Mission complete — extract";
+    if (cur && (cur.t === "reach" || cur.t === "interact" || cur.t === "extract")) { const [sx, sz] = cur.t === "extract" ? [S.extraction.beacon.x, S.extraction.beacon.z] : phaseSite(cur); sub += " · " + Math.round(Math.sqrt(dist2(P.x, P.z, sx, sz))) + " " + STR.km; }
+    $("objSub").textContent = sub;
+    $("objList").innerHTML = M.phases.map((p, i) => { const l = typeof p.l === "function" ? p.l() : p.l; const mk = i < MC.idx ? "◆" : (i === MC.idx ? "▸" : "◇"); return `<li class="${i < MC.idx ? "done" : (i === MC.idx ? "cur" : "")}"><span class="obj-check">${mk}</span>${l}</li>`; }).join("");
+  } else {                                                // simple mission: steps
+    $("objSub").textContent = typeof M.sub === "function" ? M.sub() : M.sub;
+    $("objList").innerHTML = M.steps.map(o => { const done = o.done(); const l = typeof o.l === "function" ? o.l() : o.l; return `<li class="${done ? "done" : ""}"><span class="obj-check">${done ? "◆" : "◇"}</span>${l}</li>`; }).join("");
+  }
 
   // compass
   const heading = ((-cam.yaw / DEG) % 360 + 360) % 360;
@@ -2153,6 +2294,7 @@ function simulate(dt) {
   updateEvac(dt);
   updateTools(dt);
   updateField(dt);
+  updateMission(dt);
   updateFx(dt);
   if (wreckMesh) updateWreck(dt);
   Audio.tickHeartbeat(dt, S.player.fear);
