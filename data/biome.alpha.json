@@ -14,18 +14,18 @@
     "rocks": 60
   },
   "spawnDirector": {
-    "maxActiveAI": 16,
+    "maxActiveAI": 14,
     "activeRadiusM": 95,
     "comment": "Dinos beyond activeRadius downgrade to background drift (no perception/BT). N supports 50-100 in v2.",
     "roster": [
       {
         "species": "parasaurolophus",
-        "target": 3,
+        "target": 4,
         "respawn": true
       },
       {
         "species": "corythosaurus",
-        "target": 2,
+        "target": 3,
         "respawn": true
       },
       {
@@ -35,17 +35,17 @@
       },
       {
         "species": "gallimimus",
-        "target": 3,
+        "target": 4,
         "respawn": true
       },
       {
         "species": "dryosaurus",
-        "target": 3,
+        "target": 4,
         "respawn": true
       },
       {
         "species": "hypsilophodon",
-        "target": 3,
+        "target": 4,
         "respawn": true
       },
       {
@@ -55,46 +55,46 @@
       },
       {
         "species": "pachyrhinosaurus",
-        "target": 1,
+        "target": 2,
         "respawn": true
       },
       {
         "species": "stegosaurus",
-        "target": 1,
+        "target": 2,
         "respawn": true
       },
       {
         "species": "ankylosaurus",
-        "target": 1,
+        "target": 2,
         "respawn": true
       },
       {
         "species": "deinonychus",
-        "target": 3,
+        "target": 2,
         "respawn": true,
         "pack": true
       },
       {
         "species": "velociraptor",
-        "target": 3,
+        "target": 2,
         "respawn": true,
         "pack": true
       },
       {
         "species": "troodon",
-        "target": 2,
+        "target": 1,
         "respawn": true,
         "pack": true
       },
       {
         "species": "atrociraptor",
-        "target": 2,
+        "target": 1,
         "respawn": true,
         "pack": true
       },
       {
         "species": "pyroraptor",
-        "target": 2,
+        "target": 1,
         "respawn": true,
         "pack": true
       },

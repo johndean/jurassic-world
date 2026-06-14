@@ -239,11 +239,109 @@ function buildWorld() {
   rocks.instanceMatrix.needsUpdate = true;
   scene.add(rocks);
 
+  buildRuins();
   buildPlayer();
 
   buildBeacon();
   // blob shadow pool for dinos
   blobPool = [];
+}
+
+// Jurassic-World theme: weathered concrete + moss-overgrown ruins, an iconic gate, a derelict
+// visitor centre, a leaning watchtower, a broken electric perimeter fence and an abandoned tour jeep.
+// All procedural (no assets), placed on the terrain inside the valley floor.
+function buildRuins() {
+  const half = BIOME.map.size / 2;
+  const g = new THREE.Group();
+  const concrete = new THREE.MeshStandardMaterial({ color: 0x8d9088, roughness: 0.95, metalness: 0.02, flatShading: true });
+  const mossy = new THREE.MeshStandardMaterial({ color: 0x5d6b4a, roughness: 1, metalness: 0, flatShading: true });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x6b4e34, roughness: 1, flatShading: true });
+  const rust = new THREE.MeshStandardMaterial({ color: 0x7a4a32, roughness: 1, metalness: 0.12, flatShading: true });
+  const torchMat = new THREE.MeshStandardMaterial({ color: 0xffb347, emissive: 0xff7a1a, emissiveIntensity: 2.4 });
+  const place = (mesh, x, z, yOff = 0, ry = 0) => { mesh.position.set(x, groundH(x, z) + yOff, z); mesh.rotation.y = ry; g.add(mesh); return mesh; };
+
+  // iconic gate: two timber posts + crossbeam, flaming braziers, and a canvas-textured sign
+  (function gate() {
+    const gx = 0, gz = -56, postH = 11, span = 16;
+    for (const sx of [-1, 1]) {
+      const px = gx + sx * span / 2;
+      place(new THREE.Mesh(new THREE.BoxGeometry(2.4, postH, 2.4), wood), px, gz, postH / 2);
+      const fl = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.7, 8), torchMat);
+      fl.position.set(px, groundH(px, gz) + postH + 1.0, gz); g.add(fl);
+      const pl = new THREE.PointLight(0xff8a2a, 6, 42, 2); pl.position.copy(fl.position); g.add(pl);
+    }
+    place(new THREE.Mesh(new THREE.BoxGeometry(span + 3, 1.8, 1.4), wood), gx, gz, postH - 0.5);
+    // sign with stenciled title (CanvasTexture)
+    const cv = document.createElement("canvas"); cv.width = 512; cv.height = 132;
+    const ctx = cv.getContext("2d"); ctx.fillStyle = "#160f0a"; ctx.fillRect(0, 0, 512, 132);
+    ctx.strokeStyle = "#e0772f"; ctx.lineWidth = 6; ctx.strokeRect(8, 8, 496, 116);
+    ctx.fillStyle = "#e0772f"; ctx.font = "bold 60px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("ISLA ALPHA", 256, 66);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(span * 0.72, 3.0, 0.4),
+      [rust, rust, rust, rust, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, emissive: 0x2a1505, emissiveIntensity: 0.35 }), rust]);
+    sign.position.set(gx, groundH(gx, gz) + postH - 3.4, gz + 0.6); g.add(sign);
+  })();
+
+  // derelict visitor centre: broken walls, fallen + standing columns, collapsed roof slab
+  (function centre() {
+    const cx = -45, cz = 26;
+    place(new THREE.Mesh(new THREE.BoxGeometry(26, 1, 18), concrete), cx, cz, 0.5);
+    place(new THREE.Mesh(new THREE.BoxGeometry(26, 9, 1), mossy), cx, cz - 8.5, 4.5);
+    place(new THREE.Mesh(new THREE.BoxGeometry(1, 7, 18), mossy), cx - 12.5, cz, 3.5);
+    place(new THREE.Mesh(new THREE.BoxGeometry(1, 4, 11), mossy), cx + 12.5, cz + 3, 2);
+    for (let i = 0; i < 4; i++) place(new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.8, 8, 10), concrete), cx - 9 + i * 6, cz + 8, 4);
+    const fallen = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.8, 9, 10), concrete); fallen.rotation.z = Math.PI / 2; place(fallen, cx + 3, cz + 11, 0.85);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(14, 0.8, 12), concrete); place(roof, cx - 3, cz, 6.6); roof.rotation.set(0.3, 0.2, 0.16);
+  })();
+
+  // leaning ruined watchtower
+  (function tower() {
+    const tx = 50, tz = -14, t = new THREE.Group();
+    const legGeo = new THREE.BoxGeometry(0.8, 16, 0.8);
+    for (const [dx, dz] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) { const l = new THREE.Mesh(legGeo, rust); l.position.set(dx, 8, dz); t.add(l); }
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(9, 4, 9), mossy); cab.position.y = 16; t.add(cab);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(7, 3, 4), rust); roof.position.y = 19.5; roof.rotation.y = Math.PI / 4; t.add(roof);
+    t.position.set(tx, groundH(tx, tz), tz); t.rotation.z = 0.06; g.add(t);
+  })();
+
+  // broken electric perimeter fence: leaning posts + three sagging wires
+  (function fence() {
+    const postGeo = new THREE.BoxGeometry(0.4, 6, 0.4), pts = [];
+    for (let i = 0; i < 11; i++) {
+      const x = -38 + i * 7.6, z = -46 + Math.sin(i * 0.6) * 7;
+      const p = new THREE.Mesh(postGeo, rust); p.rotation.z = (i % 4 === 0) ? rand(-0.3, 0.3) : 0; place(p, x, z, 3);
+      pts.push([x, groundH(x, z) + 5, z]);
+    }
+    const wireMat = new THREE.LineBasicMaterial({ color: 0x3a3f3a });
+    for (const yo of [0, -1.6, -3.2]) {
+      const v = []; for (const [x, y, z] of pts) v.push(x, y + yo, z);
+      const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
+      g.add(new THREE.Line(lg, wireMat));
+    }
+  })();
+
+  // abandoned tour jeep
+  (function jeep() {
+    const jx = 18, jz = 16, ry = 0.6, j = new THREE.Group();
+    j.add(new THREE.Mesh(new THREE.BoxGeometry(5, 1.6, 2.4), new THREE.MeshStandardMaterial({ color: 0xb8b29a, roughness: 0.9, flatShading: true })));
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.4, 2.2), new THREE.MeshStandardMaterial({ color: 0x9a3530, roughness: 0.9, flatShading: true }));
+    cab.position.set(-0.4, 1.3, 0); j.add(cab);
+    const wgeo = new THREE.CylinderGeometry(0.7, 0.7, 0.5, 12), wm = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 1 });
+    for (const [dx, dz] of [[-1.8, -1.1], [1.8, -1.1], [-1.8, 1.1], [1.8, 1.1]]) { const w = new THREE.Mesh(wgeo, wm); w.rotation.x = Math.PI / 2; w.position.set(dx, -0.5, dz); j.add(w); }
+    j.position.set(jx, groundH(jx, jz) + 1.2, jz); j.rotation.y = ry; g.add(j);
+  })();
+
+  // scattered ruin blocks
+  for (let i = 0; i < 14; i++) {
+    const x = rand(-half + 16, half - 16), z = rand(-half + 16, half - 16);
+    if (Math.hypot(x, z) < 14 || Math.hypot(x, z) > 60) continue;   // keep spawn clear, stay off the mountains
+    const s = rand(1.2, 3);
+    const blk = new THREE.Mesh(new THREE.BoxGeometry(s * rand(1, 2), s, s * rand(1, 2)), i % 2 ? mossy : concrete);
+    place(blk, x, z, s * 0.4, rand(0, 6)); blk.rotation.x = rand(-0.18, 0.18); blk.rotation.z = rand(-0.18, 0.18);
+  }
+
+  scene.add(g);
 }
 
 // player — real character model if loaded, else amber capsule fallback. Re-callable to swap in the
@@ -395,6 +493,8 @@ function initInput() {
       "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyE", "Space"].includes(e.code)) e.preventDefault();
     keys.add(e.code);
     if (e.code === "KeyE") tryCall();
+    if (e.code === "KeyM") toggleMap();
+    if (e.code === "Escape" && mapOpen) toggleMap();
   });
   addEventListener("keyup", e => keys.delete(e.code));
   addEventListener("blur", () => keys.clear());
@@ -1033,15 +1133,12 @@ function updateHUD() {
     const w = $("exfilWave").children; for (let i = 0; i < 28; i++) w[i].style.height = "8%";
   }
 
-  // minimap
-  const half = BIOME.map.size / 2; let svg = "";
-  const toMM = (x, z) => [50 + (x / half) * 46, 50 + (z / half) * 46];
-  const [bx, bz] = toMM(S.extraction.beacon.x, S.extraction.beacon.z);
-  svg += `<circle cx="${bx}" cy="${bz}" r="3" class="mm-exfil"/>`;
-  for (const d of dinos) { if (!d.alive) continue; const [mx, mz] = toMM(d.x, d.z); svg += `<circle cx="${mx}" cy="${mz}" r="${d.sp.role === "apex" ? 2.4 : 1.5}" class="${d.sp.diet === "carnivore" ? "mm-threat" : "mm-prey"}"/>`; }
-  const [sx, sz] = toMM(P.x, P.z);
-  svg += `<circle cx="${sx}" cy="${sz}" r="2.4" class="mm-self"/>`;
-  $("mmSvg").innerHTML = svg;
+  // minimap (+ optional fullscreen tactical map, toggled with M)
+  $("mmSvg").innerHTML = mapSVG(false);
+  if (mapOpen) {
+    $("mapBigSvg").innerHTML = mapSVG(true);
+    $("mapDist").textContent = "· BEACON " + Math.round(Math.hypot(S.extraction.beacon.x - P.x, S.extraction.beacon.z - P.z)) + STR.km;
+  }
 
   // vignette (fear/threat dread) + contact red push
   const v = $("vig"); const intensity = Math.max(P.fear, S.threat / 10 * 0.7);
@@ -1050,6 +1147,45 @@ function updateHUD() {
   v.style.boxShadow = `inset 0 0 ${160 + intensity * 120}px ${40 + intensity * 60}px rgba(${col},${0.0 + intensity * 0.55})`;
 }
 function setBar(barId, numId, v, color) { const b = $(barId); b.style.width = clamp(v, 0, 100) + "%"; b.style.background = color; $(numId).textContent = Math.round(v); }
+
+// Build the tactical map as an SVG string (viewBox 0..100). Shared by the corner minimap (big=false)
+// and the fullscreen overlay (big=true, which adds species tooltips + bigger markers).
+let mapOpen = false;
+function mapSVG(big) {
+  const P = S.player, half = BIOME.map.size / 2;
+  const toMM = (x, z) => [50 + (x / half) * 46, 50 + (z / half) * 46];
+  const tri = (mx, mz, a, sz) => `${(mx + Math.sin(a) * sz).toFixed(1)},${(mz + Math.cos(a) * sz).toFixed(1)} ${(mx + Math.sin(a + 2.5) * sz * 0.7).toFixed(1)},${(mz + Math.cos(a + 2.5) * sz * 0.7).toFixed(1)} ${(mx + Math.sin(a - 2.5) * sz * 0.7).toFixed(1)},${(mz + Math.cos(a - 2.5) * sz * 0.7).toFixed(1)}`;
+  let s = "";
+  // valley boundary + mountain ring (terrain rises past world r≈70) + winding river
+  s += `<circle cx="50" cy="50" r="46.5" fill="none" stroke="#6b7d6e" stroke-width="0.6" opacity="0.5"/>`;
+  s += `<circle cx="50" cy="50" r="${((70 / half) * 46).toFixed(1)}" fill="none" stroke="#7d8a72" stroke-width="0.5" stroke-dasharray="2 2" opacity="0.4"/>`;
+  let rv = ""; for (let x = -half; x <= half; x += half / 24) { const [mx, mz] = toMM(x, riverCenter(x)); rv += `${mx.toFixed(1)},${mz.toFixed(1)} `; }
+  s += `<polyline points="${rv}" fill="none" stroke="#5b9fd6" stroke-width="${big ? 1.6 : 1.2}" opacity="0.5" stroke-linecap="round"/>`;
+  // extraction facility + pulsing beacon
+  const [bx, bz] = toMM(S.extraction.beacon.x, S.extraction.beacon.z), pulse = 2.4 + Math.sin(S.t * 4) * 0.9;
+  s += `<rect x="${(bx - 2.2).toFixed(1)}" y="${(bz - 2.2).toFixed(1)}" width="4.4" height="4.4" fill="none" stroke="var(--hud-accent)" stroke-width="0.6"/>`;
+  s += `<circle cx="${bx.toFixed(1)}" cy="${bz.toFixed(1)}" r="${pulse.toFixed(1)}" fill="none" stroke="var(--hud-accent)" stroke-width="0.7" opacity="0.85"/>`;
+  s += `<circle cx="${bx.toFixed(1)}" cy="${bz.toFixed(1)}" r="1.1" class="mm-exfil"/>`;
+  // contacts: predators = heading triangles (apex outlined), herbivores = dots
+  for (const d of dinos) {
+    if (!d.alive) continue;
+    const [mx, mz] = toMM(d.x, d.z), apex = d.sp.role === "apex", tt = big ? `><title>${d.sp.displayName}</title></polygon` : "/";
+    if (d.sp.diet === "carnivore") s += `<polygon points="${tri(mx, mz, d.yaw, apex ? 2.9 : 2.1)}" class="mm-threat${apex ? " mm-apex" : ""}"${tt}>`;
+    else s += `<circle cx="${mx.toFixed(1)}" cy="${mz.toFixed(1)}" r="${big ? 1.7 : 1.4}" class="mm-prey"${big ? `><title>${d.sp.displayName}</title></circle` : "/"}>`;
+  }
+  // player view cone + heading marker + north
+  const [sx, sz] = toMM(P.x, P.z), a = P.yaw, cr = big ? 13 : 9;
+  s += `<polygon points="${sx.toFixed(1)},${sz.toFixed(1)} ${(sx + Math.sin(a - 0.5) * cr).toFixed(1)},${(sz + Math.cos(a - 0.5) * cr).toFixed(1)} ${(sx + Math.sin(a + 0.5) * cr).toFixed(1)},${(sz + Math.cos(a + 0.5) * cr).toFixed(1)}" fill="var(--hud-good)" opacity="0.13"/>`;
+  s += `<polygon points="${tri(sx, sz, a, 3.1)}" class="mm-self"/>`;
+  s += `<text x="50" y="5.5" class="mm-n" text-anchor="middle">N</text>`;
+  return s;
+}
+
+function toggleMap() {
+  if (S.phase !== "playing" && !mapOpen) return;
+  mapOpen = !mapOpen;
+  $("mapOverlay").classList.toggle("open", mapOpen);
+}
 
 let toastTimer = 0;
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.style.opacity = "1"; toastTimer = 2.4; }

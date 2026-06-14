@@ -95,17 +95,45 @@
   .exfil-btn:hover{background:var(--hud-accent);}
   .exfil-btn:disabled{opacity:.4;cursor:not-allowed;border-color:var(--hud-dim);}
   .exfil-warn{font-size:9px;letter-spacing:.1em;color:var(--hud-alert);margin-top:4px;}
-  .minimap{position:absolute;left:30px;bottom:30px;width:150px;height:150px;
-    border:1px solid var(--hud-line);background:var(--hud-bg);overflow:hidden;}
+  .minimap{position:absolute;left:30px;bottom:30px;width:208px;height:208px;
+    border:1px solid var(--hud-line);background:var(--hud-bg);overflow:hidden;border-radius:3px;}
   .mm-grid{position:absolute;inset:0;
     background-image:linear-gradient(var(--hud-line) 1px,transparent 1px),linear-gradient(90deg,var(--hud-line) 1px,transparent 1px);
-    background-size:25px 25px;opacity:.25;}
+    background-size:26px 26px;opacity:.25;}
   .mm-svg{position:absolute;inset:0;width:100%;height:100%;}
   .mm-exfil{fill:var(--hud-accent);}
   .mm-self{fill:var(--hud-good);}
   .mm-threat{fill:var(--hud-alert);}
+  .mm-apex{fill:var(--hud-alert);stroke:#fff;stroke-width:0.5;}
   .mm-prey{fill:var(--hud-stam);}
+  .mm-n{fill:var(--hud-dim);font-size:5px;font-weight:700;letter-spacing:.05em;}
   .mm-label{position:absolute;bottom:5px;left:7px;font-size:8px;letter-spacing:.1em;color:var(--hud-dim);}
+  /* legend key */
+  .mm-legend{position:absolute;top:4px;left:6px;display:flex;flex-direction:column;gap:1px;
+    font-size:7px;letter-spacing:.06em;color:var(--hud-dim);pointer-events:none;}
+  .mm-legend span{display:flex;align-items:center;gap:4px;}
+  .mm-legend i{width:7px;height:7px;display:inline-block;flex:0 0 auto;}
+  .lg-self{background:var(--hud-good);clip-path:polygon(50% 0,100% 100%,0 100%);}
+  .lg-threat{background:var(--hud-alert);clip-path:polygon(50% 0,100% 100%,0 100%);}
+  .lg-prey{background:var(--hud-stam);border-radius:50%;}
+  .lg-exfil{background:none;border:1px solid var(--hud-accent);}
+  .mm-hint{position:absolute;bottom:5px;right:7px;font-size:7px;letter-spacing:.1em;color:var(--hud-dim);opacity:.7;}
+  /* fullscreen tactical map overlay */
+  #mapOverlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(8,11,10,.72);backdrop-filter:blur(2px);z-index:60;}
+  #mapOverlay.open{display:flex;}
+  .map-frame{position:relative;width:min(76vmin,720px);height:min(76vmin,720px);
+    border:1px solid var(--hud-line);background:rgba(10,14,13,.85);border-radius:4px;overflow:hidden;
+    box-shadow:0 0 60px rgba(0,0,0,.6);}
+  .map-title{position:absolute;top:0;left:0;right:0;padding:8px 12px;font-size:12px;letter-spacing:.18em;
+    color:var(--hud-text);border-bottom:1px solid var(--hud-line);background:rgba(10,14,13,.6);z-index:2;}
+  .map-title span{color:var(--hud-accent);}
+  .map-legend{position:absolute;bottom:8px;left:12px;display:flex;gap:14px;font-size:9px;
+    letter-spacing:.1em;color:var(--hud-dim);z-index:2;}
+  .map-legend span{display:flex;align-items:center;gap:5px;}
+  .map-legend i{width:9px;height:9px;display:inline-block;}
+  .map-hint{position:absolute;bottom:8px;right:12px;font-size:9px;letter-spacing:.12em;color:var(--hud-dim);z-index:2;}
+  .map-frame svg [title],.map-frame svg polygon,.map-frame svg circle{cursor:default;}
 
   /* toast / banner */
   #toast{position:absolute;top:150px;left:50%;transform:translateX(-50%);z-index:42;
@@ -150,7 +178,8 @@
     .obj{min-width:0;max-width:172px;left:18px;}
     .compass,.squad,.contact{display:none;}
     .vitals{width:150px;bottom:130px;left:18px;}
-    .minimap{width:104px;height:104px;left:18px;bottom:18px;}
+    .minimap{width:128px;height:128px;left:18px;bottom:18px;}
+    .mm-legend{display:none;}
     .exfil{width:178px;top:64px;}
     .exfil-time{font-size:22px;}
   }
@@ -211,7 +240,29 @@
   <div class="minimap">
     <div class="mm-grid"></div>
     <svg viewBox="0 0 100 100" class="mm-svg" id="mmSvg"></svg>
+    <div class="mm-legend">
+      <span><i class="lg lg-self"></i>YOU</span>
+      <span><i class="lg lg-threat"></i>PREDATOR</span>
+      <span><i class="lg lg-prey"></i>HERBIVORE</span>
+      <span><i class="lg lg-exfil"></i>EXTRACTION</span>
+    </div>
     <div class="mm-label" id="mmLabel"></div>
+    <div class="mm-hint">M · MAP</div>
+  </div>
+</div>
+
+<div id="mapOverlay">
+  <div class="map-frame">
+    <div class="map-title">TACTICAL MAP · ISLAND ALPHA <span id="mapDist"></span></div>
+    <div class="mm-grid"></div>
+    <svg viewBox="0 0 100 100" class="mm-svg" id="mapBigSvg"></svg>
+    <div class="map-legend">
+      <span><i class="lg lg-self"></i>YOU</span>
+      <span><i class="lg lg-threat"></i>PREDATOR</span>
+      <span><i class="lg lg-prey"></i>HERBIVORE</span>
+      <span><i class="lg lg-exfil"></i>EXTRACTION</span>
+    </div>
+    <div class="map-hint">M / ESC TO CLOSE · HOVER A CONTACT FOR SPECIES</div>
   </div>
 </div>
 
