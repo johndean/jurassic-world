@@ -575,7 +575,9 @@ const input = { mx: 0, mz: 0, sprint: false, crouch: false, lookDX: 0, lookDY: 0
 let pointerLocked = false, isTouch = false;
 
 function initInput() {
+  const typing = (e) => { const t = e.target; return t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable); };
   addEventListener("keydown", e => {
+    if (typing(e)) return;   // let text fields (lobby name/room code) receive every key, incl. WASD/E/Space
     if (["KeyW", "KeyA", "KeyS", "KeyD", "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight",
       "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyE", "Space"].includes(e.code)) e.preventDefault();
     keys.add(e.code);
@@ -583,7 +585,7 @@ function initInput() {
     if (e.code === "KeyM") toggleMap();
     if (e.code === "Escape" && mapOpen) toggleMap();
   });
-  addEventListener("keyup", e => keys.delete(e.code));
+  addEventListener("keyup", e => { if (typing(e)) return; keys.delete(e.code); });
   addEventListener("blur", () => keys.clear());
 
   // mouse look via pointer lock
@@ -1112,6 +1114,10 @@ function startRun() {
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
   Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole });
+  if (Net.on) {   // co-op: spawn beside each other like a squad — a small cluster, same facing, no overlap
+    const a = (Net.id || 1) * 2.39996;   // golden-angle spread → distinct, non-overlapping spots
+    S.player.x = Math.cos(a) * 3.0; S.player.z = Math.sin(a) * 3.0; S.player.yaw = 0;
+  }
   buildPlayer();   // (re)build the chosen specialist as the player avatar
   S.threat = 0; S.t = 0; S._everInRange = false; S._lastBeep = 0;
   const holdMod = (selectedRole && selectedRole.mod.hold) || 0;   // comms perk: shorter hold
@@ -1409,14 +1415,27 @@ function buildCharMesh(roleId) {
   addBlob(g, 0.7); scene.add(g);
   return { group: g, mixer, action };
 }
+function makeNameTag(name) {   // floating label above a remote teammate so you can confirm who's who
+  const cv = document.createElement("canvas"); cv.width = 256; cv.height = 64;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "rgba(10,14,13,0.7)"; ctx.fillRect(0, 0, 256, 64);
+  ctx.strokeStyle = "rgba(111,174,107,0.8)"; ctx.lineWidth = 3; ctx.strokeRect(2, 2, 252, 60);
+  ctx.fillStyle = "#9fe08a"; ctx.font = "bold 30px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(String(name || "PLAYER").toUpperCase().slice(0, 12), 128, 34);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  spr.scale.set(2.4, 0.6, 1); spr.position.y = 2.4; spr.renderOrder = 20;
+  return spr;
+}
 function removeRemote(id) { const r = remotePlayers.get(id); if (r) { scene.remove(r.group); remotePlayers.delete(id); } }
 function clearRemotes() { for (const id of [...remotePlayers.keys()]) removeRemote(id); }
 function netUpsertState(msg) {
   const p = msg.p; if (!p || S.phase !== "playing") return;   // only render peers once you're in-world
   let r = remotePlayers.get(msg.id);
   if (!r) {
-    const role = (Net.peers.get(msg.id) || {}).role || "navigator";
-    r = Object.assign(buildCharMesh(role), { tx: p.x, tz: p.z, tyaw: p.yaw || 0, gait: p.gait || "idle", hp: p.hp ?? 100, alive: p.alive !== false });
+    const peer = Net.peers.get(msg.id) || {};
+    r = Object.assign(buildCharMesh(peer.role || "navigator"), { tx: p.x, tz: p.z, tyaw: p.yaw || 0, gait: p.gait || "idle", hp: p.hp ?? 100, alive: p.alive !== false });
+    r.group.add(makeNameTag(peer.name));
     r.group.position.set(p.x, groundH(p.x, p.z) + 0.9, p.z);
     remotePlayers.set(msg.id, r);
   }
