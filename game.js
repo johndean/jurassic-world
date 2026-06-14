@@ -1374,6 +1374,14 @@ function mapSVG(big) {
   s += `<rect x="${(bx - 2.2).toFixed(1)}" y="${(bz - 2.2).toFixed(1)}" width="4.4" height="4.4" fill="none" stroke="var(--hud-accent)" stroke-width="0.6"/>`;
   s += `<circle cx="${bx.toFixed(1)}" cy="${bz.toFixed(1)}" r="${pulse.toFixed(1)}" fill="none" stroke="var(--hud-accent)" stroke-width="0.7" opacity="0.85"/>`;
   s += `<circle cx="${bx.toFixed(1)}" cy="${bz.toFixed(1)}" r="1.1" class="mm-exfil"/>`;
+  // incoming evac helicopter — show its live position + a dashed inbound track to the beacon
+  if (evac && evac.heli) {
+    const [hx, hz] = toMM(evac.heli.group.position.x, evac.heli.group.position.z);
+    s += `<line x1="${hx.toFixed(1)}" y1="${hz.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${bz.toFixed(1)}" stroke="var(--hud-accent)" stroke-width="0.4" stroke-dasharray="1.5 1.5" opacity="0.7"/>`;
+    const rot = (S.t * 220) % 360;   // spinning rotor cross
+    s += `<g transform="translate(${hx.toFixed(1)},${hz.toFixed(1)}) rotate(${rot.toFixed(0)})"><line x1="-3" y1="0" x2="3" y2="0" stroke="#fff" stroke-width="0.6"/><line x1="0" y1="-3" x2="0" y2="3" stroke="#fff" stroke-width="0.6"/></g>`;
+    s += `<circle cx="${hx.toFixed(1)}" cy="${hz.toFixed(1)}" r="1.4" fill="var(--hud-accent)"/>`;
+  }
   // contacts: predators = heading triangles (apex outlined), herbivores = dots
   for (const d of dinos) {
     if (!d.alive) continue;
