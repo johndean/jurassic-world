@@ -880,14 +880,20 @@ function startRun() {
   S.threat = 0; S.t = 0; S._everInRange = false; S._lastBeep = 0;
   Object.assign(S.extraction, { called: false, hold: 0, holdMax: BIOME.extraction.holdSeconds, inRange: false, won: false });
   S.killedBy = "";
-  // initial roster
+  // initial roster: expand targets to a flat list, shuffle, then spawn up to maxActiveAI so a
+  // 30-species roster yields a varied (but capped) starting population instead of dumping all 48.
   const sd = BIOME.spawnDirector;
-  for (const r of sd.roster) for (let i = 0; i < r.target; i++) {
+  const pool = [];
+  for (const r of sd.roster) for (let i = 0; i < r.target; i++) pool.push(r.species);
+  for (let i = pool.length - 1; i > 0; i--) { const k = (rand(0, 1) * (i + 1)) | 0; const t = pool[i]; pool[i] = pool[k]; pool[k] = t; }
+  const initialN = Math.min(pool.length, sd.maxActiveAI);
+  for (let n = 0; n < initialN; n++) {
+    const species = pool[n];
     const half = BIOME.map.size / 2 - 8;
-    const minR = SPECIES[r.species].diet === "carnivore" ? 75 : 18;  // predators start well away from the player
+    const minR = SPECIES[species].diet === "carnivore" ? 75 : 18;  // predators start well away from the player
     let x, z, tries = 0;
     do { x = rand(-half, half); z = rand(-half, half); tries++; } while (dist2(x, z, 0, 0) < minR * minR && tries < 24);
-    dinos.push(spawnDino(r.species, clamp(x, -half, half), clamp(z, -half, half)));
+    dinos.push(spawnDino(species, clamp(x, -half, half), clamp(z, -half, half)));
   }
   S.phase = "playing";
   $("startScreen").classList.add("hidden"); $("endScreen").classList.add("hidden");
