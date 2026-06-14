@@ -68,6 +68,7 @@
   .obj{top:24px;left:30px;min-width:248px;}
   .obj-head{font-size:12px;font-weight:700;letter-spacing:.14em;display:flex;align-items:center;gap:8px;color:#fff;}
   .obj-dot{width:7px;height:7px;background:var(--hud-accent);transform:rotate(45deg);}
+  .obj-pct{margin-left:auto;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--hud-accent);}
   .obj-sub{font-size:10.5px;color:var(--hud-dim);margin:5px 0 8px;}
   .obj-list{list-style:none;margin:0;padding:0;font-size:11.5px;}
   .obj-list li{display:flex;gap:7px;padding:2px 0;color:var(--hud-text);}
@@ -119,6 +120,8 @@
   .exfil-wave{display:flex;align-items:flex-end;gap:2px;height:22px;margin:5px 0;justify-content:center;}
   .exfil-wave i{width:3px;background:var(--hud-stam);opacity:.6;transition:height .25s;}
   .exfil.live .exfil-wave i{background:var(--hud-accent);opacity:.9;}
+  .exfil-dist{font-size:9.5px;letter-spacing:.14em;color:var(--hud-dim);margin:2px 0 6px;}
+  .exfil-dist b,.exfil-dist span{color:var(--hud-accent);}
   .exfil-btn{font:inherit;font-size:11px;letter-spacing:.12em;color:#fff;background:transparent;
     border:1px solid var(--hud-accent);padding:6px 12px;cursor:pointer;transition:.2s;}
   .exfil-btn:hover{background:var(--hud-accent);}
@@ -146,6 +149,9 @@
   .lg-threat{background:var(--hud-alert);clip-path:polygon(50% 0,100% 100%,0 100%);}
   .lg-prey{background:var(--hud-stam);border-radius:50%;}
   .lg-exfil{background:none;border:1px solid var(--hud-accent);}
+  .lg-obj{background:#8fb8c4;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);}
+  .lg-tower{background:none;border:1px solid #8fb8c4;clip-path:polygon(50% 0,100% 100%,0 100%);}
+  .lg-safe{background:none;border:1px dashed #6fae6b;border-radius:50%;}
   .mm-hint{position:absolute;bottom:5px;right:7px;font-size:7px;letter-spacing:.1em;color:var(--hud-dim);opacity:.7;}
   /* fullscreen tactical map overlay */
   #mapOverlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
@@ -157,6 +163,10 @@
   .map-title{position:absolute;top:0;left:0;right:0;padding:8px 12px;font-size:12px;letter-spacing:.18em;
     color:var(--hud-text);border-bottom:1px solid var(--hud-line);background:rgba(10,14,13,.6);z-index:2;}
   .map-title span{color:var(--hud-accent);}
+  .map-layers{position:absolute;top:42px;left:12px;display:flex;gap:6px;z-index:3;}
+  .map-layers button{font:inherit;font-size:9px;letter-spacing:.1em;color:var(--hud-dim);background:rgba(8,11,10,.66);
+    border:1px solid var(--hud-line);border-radius:4px;padding:4px 8px;cursor:pointer;transition:.18s;-webkit-tap-highlight-color:transparent;}
+  .map-layers button.on{color:#fff;border-color:var(--hud-accent);background:rgba(224,119,47,.16);}
   .map-legend{position:absolute;bottom:8px;left:12px;right:12px;display:flex;flex-wrap:wrap;gap:6px 14px;font-size:9px;
     letter-spacing:.1em;color:var(--hud-text);z-index:2;background:rgba(8,11,10,.66);border:1px solid var(--hud-line);
     border-radius:5px;padding:6px 9px;max-width:max-content;}
@@ -394,12 +404,16 @@
   .kh-tip b{color:#e0772f;}
   #btnMap{right:14px;top:14px;width:54px;height:54px;font-size:22px;}
   @media (max-width:760px){
-    .obj{min-width:0;max-width:172px;left:18px;}
-    .compass,.squad,.contact{display:none;}
-    .vitals{width:150px;bottom:130px;left:18px;}
-    .minimap{width:128px;height:128px;left:18px;bottom:18px;}
-    .mm-legend{display:none;}
-    .exfil{width:178px;top:64px;}
+    .obj{min-width:0;max-width:158px;left:14px;top:14px;font-size:.92em;}
+    /* parity mandate: compass/threat/contact stay VISIBLE on mobile (compacted, never hidden) */
+    .compass{width:200px;height:34px;top:8px;}
+    .squad{min-width:0;width:128px;right:12px;top:10px;transform:scale(.9);transform-origin:top right;}
+    .contact{right:12px;top:92px;font-size:9px;}
+    .vitals{width:138px;bottom:128px;left:14px;}
+    .minimap{width:120px;height:120px;left:14px;bottom:14px;}
+    .mm-legend{font-size:5.5px;gap:0;top:2px;left:3px;}
+    .mm-legend i{width:5px;height:5px;}
+    .exfil{width:168px;top:50px;}
     .exfil-time{font-size:22px;}
     /* tactical map expands to fill the screen; legend wraps over a translucent strip */
     .map-frame{width:min(96vw,82vh);height:min(96vw,82vh);max-width:none;}
@@ -439,7 +453,7 @@
   <div class="frame bl"></div><div class="frame br"></div>
 
   <section class="panel obj">
-    <div class="obj-head"><span class="obj-dot"></span><span id="objTitle"></span></div>
+    <div class="obj-head"><span class="obj-dot"></span><span id="objTitle"></span><span class="obj-pct" id="objPct"></span></div>
     <div class="obj-sub" id="objSub"></div>
     <ul class="obj-list" id="objList"></ul>
   </section>
@@ -474,6 +488,7 @@
     <div class="exfil-label" id="exfilLabel"></div>
     <div class="exfil-time" id="exfilTime">00:00</div>
     <div class="exfil-wave" id="exfilWave"></div>
+    <div class="exfil-dist" id="exfilDist"></div>
     <button class="exfil-btn" id="exfilBtn"></button>
     <div class="exfil-warn" id="exfilWarn" style="display:none"></div>
   </section>
@@ -483,9 +498,12 @@
     <svg viewBox="0 0 100 100" class="mm-svg" id="mmSvg"></svg>
     <div class="mm-legend">
       <span><i class="lg lg-self"></i>YOU</span>
+      <span><i class="lg lg-obj"></i>OBJECTIVE</span>
       <span><i class="lg lg-threat"></i>PREDATOR</span>
       <span><i class="lg lg-prey"></i>HERBIVORE</span>
+      <span><i class="lg lg-tower"></i>WATCHTOWER</span>
       <span><i class="lg lg-exfil"></i>EXTRACTION</span>
+      <span><i class="lg lg-safe"></i>SAFE ZONE</span>
     </div>
     <div class="mm-label" id="mmLabel"></div>
     <div class="mm-hint">🗺 / M · MAP</div>
@@ -495,6 +513,11 @@
 <div id="mapOverlay">
   <div class="map-frame">
     <div class="map-title">TACTICAL MAP · ISLAND ALPHA <span id="mapDist"></span><button id="mapClose">✕</button></div>
+    <div class="map-layers" id="mapLayers">
+      <button data-layer="threat" class="on">THREAT</button>
+      <button data-layer="territory">TERRITORY</button>
+      <button data-layer="ghosts" class="on">LAST-SEEN</button>
+    </div>
     <div class="mm-grid"></div>
     <svg viewBox="0 0 100 100" class="mm-svg" id="mapBigSvg"></svg>
     <div class="map-legend">
@@ -506,7 +529,10 @@
       <span><svg viewBox="0 0 10 10"><polygon points="5,1.2 8.8,8.8 1.2,8.8" fill="none" stroke="#8fb8c4" stroke-width="1.1"/></svg>WATCHTOWER</span>
       <span><svg viewBox="0 0 10 10"><rect x="1.4" y="1.4" width="7.2" height="7.2" fill="none" stroke="#e0772f" stroke-width="1.1"/></svg>EXTRACTION</span>
       <span><svg viewBox="0 0 10 10"><g stroke="#fff" stroke-width="0.9"><line x1="1" y1="5" x2="9" y2="5"/><line x1="5" y1="1" x2="5" y2="9"/></g><circle cx="5" cy="5" r="1.7" fill="#e0772f"/></svg>EVAC INBOUND</span>
-      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.6" fill="none" stroke="#6fae6b" stroke-width="1.1"/></svg>SAFE ZONE</span>
+      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.6" fill="none" stroke="#6fae6b" stroke-width="1.1" stroke-dasharray="1.4 1.2"/></svg>SAFE ZONE</span>
+      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.8" fill="none" stroke="#d6562f" stroke-width="0.8" stroke-dasharray="1 1.2"/></svg>THREAT RADIUS</span>
+      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.8" fill="none" stroke="#c9a23a" stroke-width="0.8" stroke-dasharray="1.2 1.6"/></svg>TERRITORY</span>
+      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.2" fill="none" stroke="#d6562f" stroke-width="1" stroke-dasharray="1.4 1.4"/></svg>LAST SEEN</span>
       <span><svg viewBox="0 0 10 10"><line x1="1" y1="3" x2="9" y2="7" stroke="#5b9fd6" stroke-width="1.3"/></svg>RIVER</span>
       <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.8" fill="none" stroke="#7d8a72" stroke-width="0.9" stroke-dasharray="1.6 1.6"/></svg>VALLEY EDGE</span>
     </div>

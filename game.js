@@ -1242,6 +1242,12 @@ function initInput() {
   addEventListener("wheel", e => { if (binoc) { binocZoom(e.deltaY < 0 ? 1 : -1); e.preventDefault(); } }, { passive: false });
   const bm = $("btnMap"); if (bm) bm.addEventListener("pointerdown", e => { e.preventDefault(); toggleMap(); });
   const mc = $("mapClose"); if (mc) mc.addEventListener("click", e => { e.preventDefault(); if (mapOpen) toggleMap(); });
+  const ml = $("mapLayers"); if (ml) ml.addEventListener("click", e => {   // toggle threat/territory/ghost overlays
+    const b = e.target.closest("button"); if (!b) return; e.preventDefault();
+    const k = b.dataset.layer; if (!(k in mapLayers)) return;
+    mapLayers[k] = !mapLayers[k]; b.classList.toggle("on", mapLayers[k]);
+    if (mapOpen) $("mapBigSvg").innerHTML = mapSVG(true);
+  });
   const mo = $("mapOverlay"); if (mo) mo.addEventListener("pointerdown", e => { if (e.target === mo && mapOpen) toggleMap(); });   // tap backdrop to close
   const mm = document.querySelector(".minimap"); if (mm) mm.addEventListener("click", () => { if (!mapOpen) toggleMap(); });   // desktop: click minimap to expand
 
@@ -1930,6 +1936,11 @@ function updateDinos(dt, P) {
     a.decideIn -= dt;
     if (a.decideIn <= 0) { a.decideIn = 0.25; if (a.lod === "full") decide(a, P); else { a.state = baseStateFor(a.sp); } }
     steer(a, dt, P);
+    // map intel: a contact is "sighted" while within detection range; stamp its last-seen track
+    // so the tactical map can show a decaying ghost once it slips away (binoculars also sight it).
+    const seenNow = dist2(a.x, a.z, P.x, P.z) < MAP_SIGHT_R * MAP_SIGHT_R;
+    a.mapSeen = seenNow;
+    if (seenNow) { a.mapX = a.x; a.mapZ = a.z; a.mapYaw = a.yaw; a.mapT = S.t; }
     if (a.hp <= 0) killDino(a);
   }
 }
@@ -3163,6 +3174,11 @@ function updateHUD() {
   // objectives — driven by the selected mission
   const M = selectedMission;
   $("objTitle").textContent = M.name;
+  // mission progress % — completed phases (campaign) or completed steps (simple)
+  let pct = 0;
+  if (M.phases && MC) pct = Math.round(clamp(MC.idx / M.phases.length, 0, 1) * 100);
+  else if (M.steps) pct = Math.round(M.steps.filter(o => o.done()).length / M.steps.length * 100);
+  const op = $("objPct"); if (op) op.textContent = pct + "%";
   if (M.phases && MC) {                                   // campaign mission: phase chain
     const cur = M.phases[MC.idx];
     let sub = cur ? (typeof cur.l === "function" ? cur.l() : cur.l) : "Mission complete — extract";
@@ -3226,6 +3242,9 @@ function updateHUD() {
     $("exfilWarn").style.display = "none";
     const w = $("exfilWave").children; for (let i = 0; i < 28; i++) w[i].style.height = "8%";
   }
+  // persistent beacon distance — extraction range is survival-critical, so don't hide it behind the map
+  const ed = $("exfilDist");
+  if (ed) ed.textContent = "BEACON · " + Math.round(Math.hypot(S.extraction.beacon.x - P.x, S.extraction.beacon.z - P.z)) + " " + STR.km;
 
   // minimap (+ optional fullscreen tactical map, toggled with M)
   $("mmSvg").innerHTML = mapSVG(false);
@@ -3278,6 +3297,7 @@ function updateScan() {   // binoculars: project in-view dinos to screen, label 
     const v = tmp.set(a.x, wy, a.z).project(camera);
     if (v.z > 1 || v.x < -1 || v.x > 1 || v.y < -1 || v.y > 1) continue;   // behind / off-screen
     identified.add(a.sp.id);
+    a.mapSeen = true; a.mapX = a.x; a.mapZ = a.z; a.mapYaw = a.yaw; a.mapT = S.t;   // glassing = recon ping on the map
     const sx = (v.x * 0.5 + 0.5) * 100, sy = (-v.y * 0.5 + 0.5) * 100, carn = a.sp.diet === "carnivore";
     const tag = isDown(a) ? (a.sedated ? "SEDATED" : "TRAPPED") : (carn ? "PREDATOR" : "HERBIVORE");
     html += `<div class="scan-tag ${carn ? "pred" : "herb"}" style="left:${sx.toFixed(1)}%;top:${sy.toFixed(1)}%"><b>${a.sp.displayName}</b><span>${tag} · ${Math.round(d)}m</span></div>`;
@@ -3297,6 +3317,24 @@ function clearField() {
 // Build the tactical map as an SVG string (viewBox 0..100). Shared by the corner minimap (big=false)
 // and the fullscreen overlay (big=true, which adds species tooltips + bigger markers).
 let mapOpen = false;
+// === dinosaur intelligence layer ===
+// The map is field equipment, not omniscience: a contact is shown live only while SIGHTED
+// (within detection range or glassed); once it slips out of sight the map keeps a decaying
+// LAST-SEEN ghost instead of tracking it perfectly. Threat-radius + territory + state overlays
+// are toggleable layers on the fullscreen map.
+const MAP_SIGHT_R = 62;        // player auto-detect radius for live map intel (m)
+const MAP_GHOST_TTL = 28;      // last-seen ghost lifetime before it drops off the map (s)
+let mapLayers = { threat: true, territory: false, ghosts: true };
+// Internal AI state -> readable field label for the tactical map.
+function dinoMapState(d) {
+  if (isDown(d)) return d.sedated ? "SEDATED" : "TRAPPED";
+  return ({ Chase: "HUNTING", Attack: "ATTACKING", Stalk: "STALKING", Investigate: "ALERT",
+    Flee: "FLEEING", Retreat: "WOUNDED", Patrol: "ROAMING", Graze: "GRAZING" })[d.state] || "";
+}
+function mapThreatRadiusM(d) {  // how far this predator projects danger — drives the threat ring
+  const b = d.sp.behavior || {};
+  return clamp(8 + (b.aggression || 0.5) * 22 + (isApex(d.sp) ? 14 : 0), 6, 44);
+}
 function mapSVG(big) {
   const P = S.player, half = BIOME.map.size / 2;
   const toMM = (x, z) => [50 + (x / half) * 46, 50 + (z / half) * 46];
@@ -3312,6 +3350,10 @@ function mapSVG(big) {
   s += `<rect x="${(bx - 2.2).toFixed(1)}" y="${(bz - 2.2).toFixed(1)}" width="4.4" height="4.4" fill="none" stroke="var(--hud-accent)" stroke-width="0.6"/>`;
   s += `<circle cx="${bx.toFixed(1)}" cy="${bz.toFixed(1)}" r="${pulse.toFixed(1)}" fill="none" stroke="var(--hud-accent)" stroke-width="0.7" opacity="0.85"/>`;
   s += `<circle cx="${bx.toFixed(1)}" cy="${bz.toFixed(1)}" r="1.1" class="mm-exfil"/>`;
+  // SAFE ZONE — predators disengage & you take no damage inside this radius (matches the 3D ground
+  // ring at the beacon + the map legend; previously listed in the key but never drawn here).
+  const safeR = ((SAFE_R / half) * 46).toFixed(1);
+  s += `<circle cx="${bx.toFixed(1)}" cy="${bz.toFixed(1)}" r="${safeR}" fill="rgba(111,174,107,0.06)" stroke="#6fae6b" stroke-width="0.5" stroke-dasharray="1.4 1.2" opacity="0.75"/>`;
   // ranger watchtowers — safe vantage points
   for (const t of TOWERS) { const [tx, tz] = toMM(t.x, t.z); s += `<polygon points="${tx.toFixed(1)},${(tz - 2).toFixed(1)} ${(tx - 1.7).toFixed(1)},${(tz + 1.4).toFixed(1)} ${(tx + 1.7).toFixed(1)},${(tz + 1.4).toFixed(1)}" fill="none" stroke="#8fb8c4" stroke-width="0.6"/>`; }
   // active mission objective — tracks the CURRENT step for every mission type (not the fixed beacon)
@@ -3333,12 +3375,32 @@ function mapSVG(big) {
     s += `<g transform="translate(${hx.toFixed(1)},${hz.toFixed(1)}) rotate(${rot.toFixed(0)})"><line x1="-3" y1="0" x2="3" y2="0" stroke="#fff" stroke-width="0.6"/><line x1="0" y1="-3" x2="0" y2="3" stroke="#fff" stroke-width="0.6"/></g>`;
     s += `<circle cx="${hx.toFixed(1)}" cy="${hz.toFixed(1)}" r="1.4" fill="var(--hud-accent)"/>`;
   }
-  // contacts: predators = heading triangles (apex outlined), herbivores = dots
+  // contacts (intelligence layer): SIGHTED = live heading triangle (apex outlined) / herbivore dot,
+  // plus threat-radius + territory rings + state label on the big map. UNSIGHTED = decaying last-seen
+  // ghost. Never-seen dinos aren't drawn (fog of war — the map only knows what you've detected).
   for (const d of dinos) {
     if (!d.alive) continue;
-    const [mx, mz] = toMM(d.x, d.z), apex = d.sp.role === "apex", tt = big ? `><title>${d.sp.displayName}</title></polygon` : "/";
-    if (d.sp.diet === "carnivore") s += `<polygon points="${tri(mx, mz, d.yaw, apex ? 2.9 : 2.1)}" class="mm-threat${apex ? " mm-apex" : ""}"${tt}>`;
-    else s += `<circle cx="${mx.toFixed(1)}" cy="${mz.toFixed(1)}" r="${big ? 1.7 : 1.4}" class="mm-prey"${big ? `><title>${d.sp.displayName}</title></circle` : "/"}>`;
+    const carn = d.sp.diet === "carnivore", apex = isApex(d.sp);
+    if (!d.mapSeen) {
+      if (!d.mapT || !mapLayers.ghosts) continue;
+      const age = S.t - d.mapT; if (age > MAP_GHOST_TTL) continue;
+      const [gx, gz] = toMM(d.mapX, d.mapZ), op = (0.5 * (1 - age / MAP_GHOST_TTL)).toFixed(2);
+      s += `<circle cx="${gx.toFixed(1)}" cy="${gz.toFixed(1)}" r="${big ? 1.8 : 1.5}" fill="none" stroke="${carn ? "var(--hud-alert)" : "var(--hud-stam)"}" stroke-width="0.5" stroke-dasharray="0.8 0.8" opacity="${op}"${big ? `><title>${d.sp.displayName} · LAST SEEN ${Math.round(age)}s AGO</title></circle` : "/"}>`;
+      continue;
+    }
+    const [mx, mz] = toMM(d.x, d.z);
+    if (big && carn && mapLayers.territory && d.sp.behavior && d.sp.behavior.territoryRadiusM) {
+      const tr = ((d.sp.behavior.territoryRadiusM / half) * 46).toFixed(1);
+      s += `<circle cx="${mx.toFixed(1)}" cy="${mz.toFixed(1)}" r="${tr}" fill="none" stroke="#c9a23a" stroke-width="0.3" stroke-dasharray="1 1.4" opacity="0.32"/>`;
+    }
+    if (big && carn && mapLayers.threat) {
+      const thr = ((mapThreatRadiusM(d) / half) * 46).toFixed(1), hot = d.state === "Chase" || d.state === "Attack";
+      s += `<circle cx="${mx.toFixed(1)}" cy="${mz.toFixed(1)}" r="${thr}" fill="${hot ? "rgba(214,86,47,0.07)" : "none"}" stroke="var(--hud-alert)" stroke-width="0.3" stroke-dasharray="0.8 1" opacity="${hot ? 0.7 : 0.32}"/>`;
+    }
+    const st = big ? dinoMapState(d) : "", tt = big ? `><title>${d.sp.displayName}${st ? " · " + st : ""}</title></polygon` : "/";
+    if (carn) s += `<polygon points="${tri(mx, mz, d.yaw, apex ? 2.9 : 2.1)}" class="mm-threat${apex ? " mm-apex" : ""}"${tt}>`;
+    else s += `<circle cx="${mx.toFixed(1)}" cy="${mz.toFixed(1)}" r="${big ? 1.7 : 1.4}" class="mm-prey"${big ? `><title>${d.sp.displayName}${st ? " · " + st : ""}</title></circle` : "/"}>`;
+    if (big && st) s += `<text x="${mx.toFixed(1)}" y="${(mz + 3.5).toFixed(1)}" fill="${carn ? "#e7a08a" : "#9fc6d2"}" font-size="2.2" text-anchor="middle" opacity="0.85">${st}</text>`;
   }
   // player view cone + heading marker + north
   const [sx, sz] = toMM(P.x, P.z), a = P.yaw, cr = big ? 13 : 9;
