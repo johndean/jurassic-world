@@ -71,7 +71,7 @@
       "role": "pack",
       "archetype": "pack-hunter",
       "size": { "lengthM": 2.0, "massKg": 15, "eyeHeightM": 0.7 },
-      "move": { "walk": 2.8, "run": 14.0, "turnRate": 340 },
+      "move": { "walk": 2.8, "run": 10.5, "turnRate": 340 },
       "senses": { "sightRangeM": 60, "sightFovDeg": 150, "hearingRangeM": 55 },
       "combat": { "damage": 7, "attackRangeM": 1.8, "attackCooldownS": 1.0, "health": 45 },
       "behavior": { "aggression": 0.75, "territoryRadiusM": 120, "social": "pack", "packRoles": ["lead", "flank", "harry"], "fleeHealthPct": 0.2 },

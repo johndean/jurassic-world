@@ -62,6 +62,7 @@ const PLAYER_MODEL = "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a
 const PLAYER_MODEL_YAW = 0;        // facing correction; flip to Math.PI if the player faces the camera
 let playerMixer = null, playerAction = null;
 const GAIT_RATE = { idle: 0, walk: 1, run: 1.7, crouch: 0.6 };  // walk-clip playback speed per gait
+const GRACE_S = 7;   // predators ignore the player for the first seconds of a run (anti-spawn-camp)
 const _gltfLoader = new GLTFLoader();
 function loadModel(path) {
   return new Promise(res => _gltfLoader.load(path,
@@ -109,7 +110,6 @@ async function boot() {
   ARCHETYPES = ar.archetypes || {};
   sp.species.forEach(s => { s.arch = resolveArchetype(s); SPECIES[s.id] = s; });
   BIOME = bi;
-  await preloadModels();
 
   initRenderer();
   buildWorld();
@@ -118,6 +118,8 @@ async function boot() {
   buildStaticHUD();
   showStart();
   requestAnimationFrame(frame);
+  // stream models in the background so the menu/start button appear instantly; swap player in when ready
+  preloadModels().then(() => { if (!playerMixer) buildPlayer(); });
 }
 
 // subtle vignette (edge darkening) for cinematic framing
@@ -222,11 +224,22 @@ function buildWorld() {
   }
   scene.add(rocks);
 
-  // player — real character model if loaded, else amber capsule fallback
+  buildPlayer();
+
+  buildBeacon();
+  // blob shadow pool for dinos
+  blobPool = [];
+}
+
+// player — real character model if loaded, else amber capsule fallback. Re-callable to swap in the
+// model once it finishes streaming (keeps the start screen instant instead of blocking on a 50MB load).
+function buildPlayer() {
+  if (playerMesh) { scene.remove(playerMesh); }
+  playerMixer = null; playerAction = null;
   if (MODELS[PLAYER_MODEL]) {
     playerMesh = new THREE.Group();
     const fig = fitModel(MODELS[PLAYER_MODEL], 1.8, PLAYER_MODEL_YAW);
-    fig.position.y = -0.9;   // line ~372 sets group center to ground+0.9; drop feet to ground
+    fig.position.y = -0.9;   // updatePlayer sets group center to ground+0.9; drop feet to ground
     playerMesh.add(fig);
     scene.add(playerMesh);
     addBlob(playerMesh, 0.7);
@@ -240,17 +253,11 @@ function buildWorld() {
     const pGeo = new THREE.CapsuleGeometry(0.4, 1.0, 4, 10);
     playerMesh = new THREE.Mesh(pGeo, new THREE.MeshStandardMaterial({ color: 0xe0a24a, roughness: 0.7, flatShading: true, emissive: 0x3a2a08, emissiveIntensity: 0.4 }));
     scene.add(playerMesh);
-    // facing nub so orientation reads
     const nub = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.4), new THREE.MeshStandardMaterial({ color: 0xfff0c0 }));
     nub.position.set(0, 0.5, 0.45); playerMesh.add(nub);
     addBlob(playerMesh, 0.7);
   }
-
-  buildBeacon();
-  // blob shadow pool for dinos
-  blobPool = [];
 }
-
 function addBlob(parent, r) {
   const blob = new THREE.Mesh(new THREE.CircleGeometry(r, 16),
     new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }));
@@ -542,9 +549,11 @@ function decide(a, P) {
   }
   // carnivores
   if (a.hp < sp.combat.health * sp.behavior.fleeHealthPct) { a.state = "Retreat"; return; }
-  if (per.seen && per.d < sp.combat.attackRangeM + 0.5) { a.state = "Attack"; return; }
-  if ((per.seen || (bb.hasTarget && rng() < aggr)) && per.d < sp.senses.sightRangeM * 1.4) { a.state = (usesPackTactics(sp) ? "Chase" : (per.seen ? "Chase" : "Stalk")); return; }
-  if (bb.hasTarget && (per.heard || rng() < aggr * 0.6)) { a.state = "Investigate"; return; }
+  if (S.t >= GRACE_S) {   // spawn grace: ignore the player for the first seconds so you can orient/move
+    if (per.seen && per.d < sp.combat.attackRangeM + 0.5) { a.state = "Attack"; return; }
+    if ((per.seen || (bb.hasTarget && rng() < aggr)) && per.d < sp.senses.sightRangeM * 1.4) { a.state = (usesPackTactics(sp) ? "Chase" : (per.seen ? "Chase" : "Stalk")); return; }
+    if (bb.hasTarget && (per.heard || rng() < aggr * 0.6)) { a.state = "Investigate"; return; }
+  }
   // no player interest → hunt herd prey (predator vs prey) or patrol
   const prey = nearestPreyTo(a.x, a.z);
   if (prey && Math.hypot(prey.x - a.x, prey.z - a.z) < sp.senses.sightRangeM) { a.state = "Chase"; bb.lastSeenX = prey.x; bb.lastSeenZ = prey.z; bb.preyHunt = prey; }
@@ -646,6 +655,12 @@ function steer(a, dt, P) {
   const moveAmt = Math.min(1, Math.hypot(a.vx, a.vz) / sp.move.run);
   const legs = a.mesh.userData.legs;
   if (legs) { const sw = Math.sin(S.t * (run ? 16 : 8) + a.x) * 0.5 * moveAmt; legs[0].rotation.x = sw; legs[1].rotation.x = -sw; }
+  else {   // real .glb model has no leg parts: fake a gait (vertical bob + body lean) so it doesn't glide
+    const ph = S.t * (run ? 13 : 8) + a.x;
+    if (moveAmt > 0.04) a.mesh.position.y += Math.abs(Math.sin(ph)) * (sp.greybox.standH || 2) * 0.03 * moveAmt;
+    const body = a.mesh.children[0];
+    if (body) body.rotation.x = moveAmt > 0.04 ? Math.sin(ph) * 0.05 * moveAmt : body.rotation.x * 0.9;
+  }
   if (a.mesh.userData.jaw) a.mesh.userData.jaw.rotation.x = a.anim > 0 ? 0.5 : 0;
 }
 
@@ -740,8 +755,9 @@ function startRun() {
   const sd = BIOME.spawnDirector;
   for (const r of sd.roster) for (let i = 0; i < r.target; i++) {
     const half = BIOME.map.size / 2 - 8;
-    let x = rand(-half, half), z = rand(-half, half);
-    if (dist2(x, z, 0, 0) < 30 * 30) { x *= 1.6; z *= 1.6; }
+    const minR = SPECIES[r.species].diet === "carnivore" ? 75 : 18;  // predators start well away from the player
+    let x, z, tries = 0;
+    do { x = rand(-half, half); z = rand(-half, half); tries++; } while (dist2(x, z, 0, 0) < minR * minR && tries < 24);
     dinos.push(spawnDino(r.species, clamp(x, -half, half), clamp(z, -half, half)));
   }
   S.phase = "playing";

@@ -4,7 +4,7 @@
   "map": { "size": 240, "fogColor": "#9aa6ad", "fogNear": 14, "fogFar": 78, "groundColor": "#5c625e", "skyColor": "#aab4b8" },
   "scatter": { "trees": 150, "rocks": 60 },
   "spawnDirector": {
-    "maxActiveAI": 16,
+    "maxActiveAI": 10,
     "activeRadiusM": 95,
     "comment": "Dinos beyond activeRadius downgrade to background drift (no perception/BT). N supports 50-100 in v2.",
     "roster": [
