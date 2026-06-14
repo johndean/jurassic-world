@@ -393,23 +393,40 @@ function loadModel(path) {
     undefined,
     () => res(null)));            // missing/failed model -> null -> grey-box fallback
 }
-// Load creatures FIRST (player + every species) so dinos are textured ASAP; each species
-// re-skins its already-spawned grey-box instances the instant it lands. The big foliage-tree
-// .glb files (~30 MB) load last so they never gate the creature skins behind them.
+// Heavy finale-only apex models (~10-14 MB of textures each): they appear only in the EXTINCTION
+// boss + the Field Guide, so they load LAST and never gate the player avatar or common creatures.
+const HEAVY_MODELS = new Set(["./assets/models/indominus.glb", "./assets/models/mosasaurus.glb", "./assets/models/pteranodon.glb"]);
+const _loadingModels = {};   // path -> in-flight Promise, so preload + the guide never double-fetch the same .glb
+function loadModelOnce(path) {
+  if (!path) return Promise.resolve(null);
+  if (MODELS[path]) return Promise.resolve(MODELS[path]);
+  if (_loadingModels[path]) return _loadingModels[path];
+  const p = loadModel(path).then(m => { MODELS[path] = m; if (m) reskinDinos(path); delete _loadingModels[path]; return m; });
+  return (_loadingModels[path] = p);
+}
+// Fetch a batch of models at most `conc` at a time (bandwidth cap so one huge .glb can't starve the rest).
+async function loadWave(paths, conc = 5) {
+  let i = 0;
+  const worker = async () => { while (i < paths.length) await loadModelOnce(paths[i++]); };
+  await Promise.all(Array.from({ length: Math.min(conc, paths.length || 1) }, worker));
+}
+// Tiered, non-blocking model streaming (best practice):
+//   T0 helicopter (first thing seen in the crash intro) · T1 player+specialists (gate play on these only)
+//   T2 common creatures · environment (foliage, ruins) · T3 heavy finale apexes — all background, grey-box until landed.
 async function preloadModels() {
-  // HELI is in the priority wave: it's the FIRST thing seen (the crash intro), so the realistic Huey
-  // must be ready before any creature/foliage — otherwise the intro falls back to the boxy chopper.
-  if (HELI_MODEL) loadModel(HELI_MODEL).then(m => { MODELS[HELI_MODEL] = m; });   // load the realistic Huey pristine (no geometry edits)
-  const creatures = [...new Set([PLAYER_MODEL, ...ROLES.map(r => r.model), ...Object.values(SPECIES).map(s => s.modelPath)].filter(Boolean))];
-  await Promise.all(creatures.map(async p => { MODELS[p] = await loadModel(p); reskinDinos(p); }));
+  if (HELI_MODEL) loadModelOnce(HELI_MODEL);
+  const tier1 = [...new Set([PLAYER_MODEL, ...ROLES.map(r => r.model)].filter(Boolean))];
+  await loadWave(tier1, 4);                                // the ONLY wait before the game is playable
   if (!playerMixer) buildPlayer();
-  const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.fern].filter(Boolean))];
-  await Promise.all(foliage.map(async p => { MODELS[p] = await loadModel(p); }));
-  buildFoliage();
-  // hero ruin structures (photoreal .glb) — replace the procedural gate/centre once they land
-  const ruins = [...new Set([RUINS.gate.url, RUINS.centre.url].filter(Boolean))];
-  await Promise.all(ruins.map(async p => { MODELS[p] = await loadModel(p); }));
-  buildRuinModels();
+  (async () => {                                           // everything else streams in the background, prioritised
+    const all = [...new Set(Object.values(SPECIES).map(s => s.modelPath).filter(Boolean))].filter(p => !tier1.includes(p));
+    await loadWave(all.filter(p => !HEAVY_MODELS.has(p)), 5);   // common creatures reskin as they land
+    const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.fern].filter(Boolean))];
+    await loadWave(foliage, 2); buildFoliage();
+    const ruins = [...new Set([RUINS.gate.url, RUINS.centre.url].filter(Boolean))];
+    await loadWave(ruins, 2); buildRuinModels();
+    await loadWave(all.filter(p => HEAVY_MODELS.has(p)), 2);    // heavy apexes last — finale/guide only
+  })();
 }
 
 // ---- core state object (the "room snapshot")
@@ -3539,11 +3556,14 @@ let dexBuilt = false, dexMax = null;
  * The gallery is a fast text name-list (no per-item GL renders — that was the
  * lag). Selecting a species loads its real .glb into ONE persistent, lit, auto-
  * rotating viewer you can spin and zoom. */
-let dexR = null, dexScene = null, dexCam = null, dexModel = null, dexLoopOn = false;
+let dexR = null, dexScene = null, dexCam = null, dexModel = null, dexLoopOn = false, dexCurrentId = null;
 const dexView = { yaw: 0.7, pitch: 0.16, dist: 3.0, radius: 1.5, target: new THREE.Vector3(), drag: false };
+function setDexLoading(on) { const e = $("dexLoading"); if (e) e.style.display = on ? "flex" : "none"; }
 function dexViewerInit() {
   if (dexR) return;
   const cv = $("dexCanvas"); if (!cv) return;
+  const wrap = cv.parentElement;   // a "LOADING MODEL…" overlay so an un-streamed .glb reads as loading, not blank
+  if (wrap && !$("dexLoading")) { if (getComputedStyle(wrap).position === "static") wrap.style.position = "relative"; const d = document.createElement("div"); d.id = "dexLoading"; d.textContent = "LOADING MODEL…"; d.style.cssText = "position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:#8a978f;font:11px ui-monospace,monospace;letter-spacing:.12em;pointer-events:none;"; wrap.appendChild(d); }
   dexR = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: false });
   dexR.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   dexR.setClearColor(0x0c110d, 1); dexR.outputColorSpace = THREE.SRGBColorSpace;
@@ -3569,9 +3589,15 @@ function dexViewerInit() {
 }
 function dexSetModel(id) {
   if (!dexR) return;
+  dexCurrentId = id;
   if (dexModel) { dexScene.remove(dexModel); dexModel = null; }
   const sp = SPECIES[id], tmpl = MODELS[sp.modelPath];
-  if (!tmpl) return;                                 // model still streaming in — viewer stays empty, text loads instantly
+  if (!tmpl) {                                       // not streamed yet — lazy-load on demand, show a spinner, render when it lands
+    setDexLoading(true);
+    loadModelOnce(sp.modelPath).then(() => { if (dexCurrentId === id && $("codex") && $("codex").classList.contains("on")) dexSetModel(id); });
+    return;
+  }
+  setDexLoading(false);
   let skinned = false; tmpl.traverse(o => { if (o.isSkinnedMesh) skinned = true; });
   const inst = skinned ? skeletonClone(tmpl) : tmpl.clone(true);
   inst.traverse(o => { if (o.isMesh || o.isSkinnedMesh) o.frustumCulled = false; });
