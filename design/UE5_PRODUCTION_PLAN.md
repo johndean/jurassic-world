@@ -25,7 +25,12 @@ Trade-off: UE5 ships as a **multi-GB download for gaming PC/console**, not an in
 - **Environment:** **Quixel Megascans** (UE-native, free) for jungle, rock, ground, foliage; UE5 foliage tools.
 - **Creatures:** the hard part. Options, cheapest→best: (a) **Fab/Unreal Marketplace** dinosaur packs
   (rigged + animated, ready to drop in — fastest); (b) commission custom dino models/anims; (c) custom in-house.
-- **Animation:** Control Rig + retarget; marketplace anim packs; optional mocap for hero moments.
+  **Do NOT rely on AI image→3D auto-rig for creatures** — proven unreliable on dinosaur meshes in the
+  browser build (1/13 usable rigs); buy pre-rigged or rig with Control Rig.
+- **Animation:** **true per-species skeletal walking lives here, not in AI auto-rig.** Control Rig +
+  IK Retargeter with **one shared rig per body archetype** (biped theropod, quadruped ceratopsian/
+  stegosaur/ankylosaur, ostrich-mimic) so locomotion sets cover every species of that archetype;
+  marketplace anim packs; optional mocap for hero moments. Quadrupeds must never use a humanoid walk clip.
 - **Materials/Texturing:** Substance 3D Painter/Designer.
 - **Audio:** MetaSounds; licensed jungle ambience + creature SFX libraries.
 - **Multiplayer (10–20p target):** UE5 replication / dedicated servers (a major workstream — phase it later).

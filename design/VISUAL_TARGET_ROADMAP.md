@@ -72,9 +72,14 @@ This is what makes it *feel* painted. All code, no/low credits.
 ## Phase 4 — Animation & character polish
 - Player: blend **idle / walk / run / crouch** (currently one walk clip, gait-scaled). Generate the
   extra clips (Meshy `enable_animation` + clip IDs) or drive the shared rig.
-- Dinos: locomotion + **attack / roar / flee** clips; wire to the existing AI states in `steer()`.
+- Dinos: **AI auto-rig proved unreliable** — only the T-Rex rigged (1/13 attempts); every other species
+  ships an **improved distance-synced procedural body gait** (stride bob / pitch / roll / waddle, no
+  articulated legs). That is the realistic browser ceiling. **True per-species skeletal walking is a
+  UE5 item** (rigged marketplace pack or Control Rig per body archetype) — see `ue5/03_SYSTEMS_DESIGN.md`
+  §5b and the UE5 production plan. Wire whatever clips exist to the AI states in `steer()`.
 - Address the **hands** weak spot (retopo, multi-image input, or accept at distance).
-- **Done when:** creatures and player move believably, not gliding.
+- **Done when:** player moves believably (rigged) and creatures read as walking, not gliding (procedural
+  in-browser; skeletal in UE5).
 
 ## Phase 5 — Performance & delivery *(enabler; required before/with Phase 2)*
 - **Compress every model:** Draco / meshopt + KTX2 textures → ~10 MB ⇒ ~1–2 MB. Critical at 30+ models + foliage.

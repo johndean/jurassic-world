@@ -37,7 +37,7 @@ PCG (Procedural Content Generation, built-in) scatters the foliage across the va
 
 ## Creatures — the one place to consider spending
 
-AI image→3D (our browser pipeline) is fine at browser fidelity but **not** photoreal/clean-rigged for UE5 hero creatures. Best value for the slice:
+AI image→3D (our browser pipeline) is fine at browser fidelity but **not** photoreal/clean-rigged for UE5 hero creatures. **Proven the hard way:** AI auto-rig (Meshy) landed a usable skinned+animated dino on only **1 of 13 attempts** in the browser build — buy rigged creatures, don't auto-rig them (see `03_SYSTEMS_DESIGN.md` §5b). Best value for the slice:
 
 | Option | What you get | Cost |
 |---|---|---|

@@ -63,6 +63,36 @@ Mirrors `biome.alpha.json extraction` + the browser extraction state in `S.extra
 - Enhanced Input: WASD, Shift sprint, Ctrl crouch, mouse look, **E** call extraction (matches `STR.howto_desktop`). Gamepad map per `STR.howto_gamepad`.
 - Third-person orbit camera (browser `cam` orbit) → `USpringArmComponent` + `UCameraComponent`.
 
+## 5b. Creature locomotion / skeletal animation — UE5 only (lesson from the browser build)
+
+**Decision: true per-species skeletal walking belongs in the UE5 path, NOT AI auto-rig.**
+
+Empirical finding from the live browser build: AI image→3D **auto-rigging is unreliable for dinosaur
+meshes**. Across 13 attempts (Meshy `image_to_3d` with `enable_rigging`+`enable_animation`, run both
+solo and batched), only **1 produced a usable skinned + animated GLB (the T-Rex)** — the other 12
+silently returned static meshes (0 skins / 0 animation). The auto-rigger is tuned for upright humanoids
+and does not consistently recognize sprawling/horizontal/small-biped dinosaur proportions. It is not a
+viable route to "every species walks."
+
+What the browser build ships instead (the realistic ceiling for that tech): the one T-Rex that rigged
+plays a skeletal walk; **all other species use a distance-synced procedural body gait** (stride bob,
+footfall pitch, weight-shift roll, hip/tail waddle, cadence tied to ground speed). Good for stylized
+realtime, but it is body-motion only — no articulated legs.
+
+In UE5 this is solved properly, two ways (cheapest → best):
+- **Rigged dino marketplace pack (Fab):** dinosaurs that arrive **already rigged + animated** (walk /
+  run / idle / attack). Drop-in, no auto-rig gamble. This is the slice's recommended source (see
+  `04_SHOPPING_LIST.md`).
+- **UE5 Control Rig + IK Retargeter:** build/clean a creature skeleton once per body archetype (biped
+  theropod, quadruped ceratopsian/stegosaur/ankylosaur, ostrich-mimic, etc.), author or retarget
+  locomotion sets, and **share each rig across every species of that archetype** — mirrors the
+  data-driven archetype model in `02_DATA_ASSET_SCHEMA.md`. Optional mocap for hero moments.
+- Wire the resulting clips to the AI states from §1 (Walk/Run/Hunt/Flee/Attack) via the AnimBP /
+  StateTree; blend by speed exactly like the browser cadence-by-speed approach.
+
+**Takeaway:** don't spend on AI auto-rig for creatures. Budget for a rigged dino pack (slice) and/or
+Control Rig per archetype (alpha+). Quadrupeds especially must never use a humanoid walk clip.
+
 ## 6. Multiplayer hooks (designed-in, NOT built in the slice)
 
 `logic.js` already declares the seam: `meta = { minPlayers: 1, maxPlayers: 1 }` with `setup/validateAction/applyAction/isGameOver/viewFor` stubs — the authoritative-sim shape. UE5 path to 10–20p (parent-plan Beta):
