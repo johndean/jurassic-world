@@ -82,7 +82,31 @@ const RUINS = {
 };
 const PLAYER_MODEL_YAW = 0;        // facing correction; flip to Math.PI if the player faces the camera
 let playerMixer = null, playerAction = null;
-const GAIT_RATE = { idle: 0, walk: 1, run: 1.7, crouch: 0.6 };  // walk-clip playback speed per gait
+const GAIT_RATE = { idle: 0, walk: 1, run: 1.9, crouch: 0.6 };  // walk-clip playback speed per gait
+
+// ---- selectable expedition specialists (role = player character + a gameplay perk) ----
+// model: per-role rigged .glb (streams in; falls back to the default player model until present).
+const EMPTY_MOD = {};
+const ROLES = [
+  { id: "navigator", name: "NAVIGATOR", img: "./assets/keyart/squad/card_navigator.png", model: "./assets/models/char_navigator.glb", perk: "Efficient routes · +8% movement", mod: { speed: 1.08 } },
+  { id: "tracker",   name: "TRACKER",   img: "./assets/keyart/squad/card_tracker.png",   model: "./assets/models/char_tracker.glb",   perk: "Field-craft · predators notice you slower", mod: { seen: 0.78 } },
+  { id: "medic",     name: "MEDIC",     img: "./assets/keyart/squad/card_medic.png",     model: "./assets/models/char_medic.glb",     perk: "Field medicine · 2× health regen", mod: { heal: 2.0 } },
+  { id: "comms",     name: "COMMS",     img: "./assets/keyart/squad/card_comms.png",     model: "./assets/models/char_comms.glb",     perk: "Fast evac · extraction hold −15s", mod: { hold: -15 } },
+  { id: "survival",  name: "SURVIVAL",  img: "./assets/keyart/squad/card_survival.png",  model: "./assets/models/char_survival.glb",  perk: "Endurance · stamina lasts far longer", mod: { drain: 0.6 } },
+  { id: "research",  name: "RESEARCH",  img: "./assets/keyart/squad/card_research.png",  model: "./assets/models/char_research.glb",  perk: "Careful steps · −30% noise", mod: { noise: 0.7 } },
+];
+let selectedRole = ROLES[0];
+function curPlayerModel() { const u = selectedRole && selectedRole.model; return (u && MODELS[u]) ? u : PLAYER_MODEL; }
+function initCharSelect() {
+  const host = $("charSelect"); if (!host) return;
+  host.innerHTML = ROLES.map((r, i) => `<div class="char-card${i === 0 ? " sel" : ""}" data-i="${i}">
+    <img src="${r.img}" alt="${r.name}" loading="lazy"><div class="cc-role">${r.name}</div><div class="cc-perk">${r.perk}</div></div>`).join("");
+  host.querySelectorAll(".char-card").forEach(card => card.addEventListener("click", () => {
+    selectedRole = ROLES[+card.dataset.i];
+    host.querySelectorAll(".char-card").forEach(c => c.classList.toggle("sel", c === card));
+    if (MODELS[curPlayerModel()]) buildPlayer();   // live-preview the chosen avatar if loaded
+  }));
+}
 const GRACE_S = 7;   // predators ignore the player for the first seconds of a run (anti-spawn-camp)
 const _gltfLoader = new GLTFLoader();
 function loadModel(path) {
@@ -95,7 +119,7 @@ function loadModel(path) {
 // re-skins its already-spawned grey-box instances the instant it lands. The big foliage-tree
 // .glb files (~30 MB) load last so they never gate the creature skins behind them.
 async function preloadModels() {
-  const creatures = [...new Set([PLAYER_MODEL, ...Object.values(SPECIES).map(s => s.modelPath)].filter(Boolean))];
+  const creatures = [...new Set([PLAYER_MODEL, ...ROLES.map(r => r.model), ...Object.values(SPECIES).map(s => s.modelPath)].filter(Boolean))];
   await Promise.all(creatures.map(async p => { MODELS[p] = await loadModel(p); reskinDinos(p); }));
   if (!playerMixer) buildPlayer();
   const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.fern].filter(Boolean))];
@@ -150,6 +174,7 @@ async function boot() {
   initAudio();
   buildStaticHUD();
   showStart();
+  initCharSelect();
   requestAnimationFrame(frame);
   // stream models in the background so the menu/start button appears instantly;
   // creatures load first (re-skinning as they arrive), player + foliage build inside preloadModels
@@ -404,16 +429,21 @@ function buildRuinModels() {
 function buildPlayer() {
   if (playerMesh) { scene.remove(playerMesh); }
   playerMixer = null; playerAction = null;
-  if (MODELS[PLAYER_MODEL]) {
+  const PM = curPlayerModel();
+  if (MODELS[PM]) {
     playerMesh = new THREE.Group();
-    const fig = fitModel(MODELS[PLAYER_MODEL], 1.8, PLAYER_MODEL_YAW);
+    // skinned models must be SkeletonUtils-cloned (clone(true) breaks the skeleton); a fresh clone each
+    // rebuild also avoids compounding fitModel's transforms when the player switches role.
+    let skinned = false; MODELS[PM].traverse(o => { if (o.isSkinnedMesh) skinned = true; });
+    const src = skinned ? skeletonClone(MODELS[PM]) : MODELS[PM].clone(true);
+    const fig = fitModel(src, 1.8, PLAYER_MODEL_YAW);
     fig.position.y = -0.9;   // updatePlayer sets group center to ground+0.9; drop feet to ground
     playerMesh.add(fig);
     scene.add(playerMesh);
     addBlob(playerMesh, 0.7);
-    const clips = MODEL_ANIMS[PLAYER_MODEL];
+    const clips = MODEL_ANIMS[PM];
     if (clips && clips.length) {           // play the baked walk clip; speed scaled by gait in frame()
-      playerMixer = new THREE.AnimationMixer(playerMesh);
+      playerMixer = new THREE.AnimationMixer(src);
       playerAction = playerMixer.clipAction(clips[0]);
       playerAction.play();
     }
@@ -653,16 +683,18 @@ function updatePlayer(dt) {
     else { gait = "walk"; speed = cfg.walkSpeed; }
   } else if (crouch) gait = "crouch";
   P.gait = gait;
-  const targetNoise = cfg.noise[gait] ?? 0;
+  const rmod = P.role ? P.role.mod : EMPTY_MOD;
+  speed *= rmod.speed || 1;                                       // role perk: movement (navigator)
+  const targetNoise = (cfg.noise[gait] ?? 0) * (rmod.noise || 1); // role perk: stealth/noise (research)
   P.noise = lerp(P.noise, S.extraction.called ? Math.max(targetNoise, 0.6) : targetNoise, 0.15);
 
-  // stamina (fear throttles regen — the brief's fear→stamina coupling)
-  if (gait === "run" && moving) P.stamina = Math.max(0, P.stamina - cfg.staminaDrainPerS * dt);
+  // stamina (fear throttles regen; survival perk slows the drain)
+  if (gait === "run" && moving) P.stamina = Math.max(0, P.stamina - cfg.staminaDrainPerS * (rmod.drain || 1) * dt);
   else P.stamina = Math.min(100, P.stamina + cfg.staminaRegenPerS * (1 - P.fear * 0.7) * dt);
 
-  // health slow regen when calm & unhurt
+  // health slow regen when calm & unhurt (medic perk boosts it)
   hitCooldownVisual = Math.max(0, hitCooldownVisual - dt);
-  if (P.fear < 0.3 && hitCooldownVisual <= 0 && P.hp > 0) P.hp = Math.min(100, P.hp + cfg.healthRegenPerS * dt);
+  if (P.fear < 0.3 && hitCooldownVisual <= 0 && P.hp > 0) P.hp = Math.min(100, P.hp + cfg.healthRegenPerS * (rmod.heal || 1) * dt);
 
   // move relative to camera yaw
   if (moving) {
@@ -686,13 +718,14 @@ function updatePlayer(dt) {
   const lim = BIOME.map.size / 2 - 3;
   P.x = clamp(P.x, -lim, lim); P.z = clamp(P.z, -lim, lim);
 
-  // posture per gait: crouch drops + leans the body; idle adds a subtle breathing sway (the single
-  // walk clip is frozen at idle, so this keeps the character alive). walk/run drive the clip (below).
+  // posture per gait: running pitches the torso forward into the stride (the single walk clip sped up
+  // reads as a power-walk otherwise); crouch drops + leans; idle adds a breathing sway (clip frozen).
   const crouchDrop = P.gait === "crouch" ? 0.4 : 0;
   const idleBob = P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.02 : 0;
-  playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9 - crouchDrop + idleBob, P.z);
+  const runBounce = P.gait === "run" ? Math.abs(Math.sin(S.t * 11)) * 0.05 : 0;   // light foot-strike bob
+  playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9 - crouchDrop + idleBob + runBounce, P.z);
   playerMesh.rotation.y = P.yaw;
-  playerMesh.rotation.x = (P.gait === "crouch" ? 0.2 : 0) + (P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.012 : 0);
+  playerMesh.rotation.x = (P.gait === "run" ? 0.16 : 0) + (P.gait === "crouch" ? 0.22 : 0) + (P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.012 : 0);
 
   // extraction proximity
   const bd = Math.sqrt(dist2(P.x, P.z, S.extraction.beacon.x, S.extraction.beacon.z));
@@ -815,7 +848,7 @@ function perceive(a, P) {
   const dx = P.x - a.x, dz = P.z - a.z, d = Math.hypot(dx, dz) || 1;
   const s = a.sp.senses;
   // sight: range scaled by crouch (stealth) + fov check
-  const effRange = s.sightRangeM * (S.player.gait === "crouch" ? 0.45 : 1) * (P.fear > 0 ? 1 : 1);
+  const effRange = s.sightRangeM * (S.player.gait === "crouch" ? 0.45 : 1) * (P.role && P.role.mod.seen ? P.role.mod.seen : 1);
   let seen = false;
   if (d < effRange) {
     const fwdx = Math.sin(a.yaw), fwdz = Math.cos(a.yaw);
@@ -1074,9 +1107,11 @@ function startRun() {
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = [];
   reseed((Math.random() * 1e9) >>> 0);
-  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true });
+  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole });
+  buildPlayer();   // (re)build the chosen specialist as the player avatar
   S.threat = 0; S.t = 0; S._everInRange = false; S._lastBeep = 0;
-  Object.assign(S.extraction, { called: false, hold: 0, holdMax: BIOME.extraction.holdSeconds, inRange: false, won: false });
+  const holdMod = (selectedRole && selectedRole.mod.hold) || 0;   // comms perk: shorter hold
+  Object.assign(S.extraction, { called: false, hold: 0, holdMax: Math.max(45, BIOME.extraction.holdSeconds + holdMod), inRange: false, won: false });
   S.killedBy = "";
   // initial roster: expand targets to a flat list, shuffle, then spawn up to maxActiveAI so a
   // 30-species roster yields a varied (but capped) starting population instead of dumping all 48.
@@ -1165,7 +1200,7 @@ function buildStaticHUD() {
   const tm = $("thrMeter"); tm.innerHTML = ""; for (let i = 0; i < 10; i++) tm.appendChild(document.createElement("span"));
   const wv = $("exfilWave"); wv.innerHTML = ""; for (let i = 0; i < 28; i++) wv.appendChild(document.createElement("i"));
   // single-player squad row (seam for co-op roster)
-  $("sqRows").innerHTML = `<div class="sq-row" id="sqSelf"><span class="sq-tag">ALPHA-01</span><div class="sq-bar"><i id="sqSelfBar"></i></div></div>`;
+  $("sqRows").innerHTML = `<div class="sq-row" id="sqSelf"><span class="sq-tag" id="sqTag">ALPHA-01</span><div class="sq-bar"><i id="sqSelfBar"></i></div></div>`;
   $("exfilBtn").addEventListener("click", tryCall);
 }
 function fmtTime(t) { t = Math.max(0, Math.ceil(t)); const m = (t / 60) | 0, s = t % 60; return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0"); }
@@ -1195,6 +1230,7 @@ function updateHUD() {
 
   // squad (self)
   $("sqCount").textContent = (P.alive ? 1 : 0) + "/1";
+  const tg = $("sqTag"); if (tg) tg.textContent = P.role ? P.role.name : "ALPHA-01";
   const sb = $("sqSelfBar"); if (sb) { sb.style.width = P.hp + "%"; sb.style.background = hpColor(P.hp); }
   $("sqSelf").className = "sq-row" + (P.alive ? "" : " ko");
 
