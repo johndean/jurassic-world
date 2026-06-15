@@ -179,8 +179,8 @@ Object.assign(MISSIONS, {
     short: "Recover the final DNA sample from the research facility, then evac.",
     blurb: "The genetics program has collapsed. One final DNA sample remains inside the Sector 4 research facility — but predators have already entered. Restore power, retrieve the container, reach the Cold Storage Vault, and hold for extraction as the T-Rex closes in.",
     phases: [
-      { t: "reach", l: "Reach the research dock — find the access card", x: -74, z: -56, r: 7, site: "safehouse" },
-      { t: "interact", l: "Restore facility power", x: -42, z: -74, r: 7, site: "generator" },
+      { t: "interact", l: "Research dock — swipe the access card", x: -74, z: -56, r: 7, site: "safehouse" },
+      { t: "interact", l: "Restore facility power — hold to start the generator", x: -42, z: -74, r: 7, site: "generator" },
       { t: "interact", l: "Retrieve the DNA container", x: 36, z: -52, r: 7, site: "facility" },
       { t: "interact", l: "Reach the Cold Storage Vault — insert DNA", x: 66, z: 48, r: 7, site: "facility" },
       { t: "interact", l: "Activate the distress beacon", atBeacon: true, r: 7, starts: "evac" },
@@ -1534,20 +1534,25 @@ function updatePlayer(dt) {
   hitCooldownVisual = Math.max(0, hitCooldownVisual - dt);
   if (P.fear < 0.3 && hitCooldownVisual <= 0 && P.hp > 0) P.hp = Math.min(100, P.hp + cfg.healthRegenPerS * (rmod.heal || 1) * dt);
 
-  // move relative to camera yaw
+  // FREE-LOOK movement: the move direction is LATCHED to the camera yaw at the moment you start moving
+  // (or meaningfully change stick direction). After that you can swing the camera/look all the way around
+  // to scan for threats WITHOUT curving your travel — you keep walking the same world heading until you
+  // push a new direction. (Camera-relative-on-press, then decoupled — the AAA "look around while moving".)
   let wx = 0, wz = 0;
   if (moving) {
-    const sin = Math.sin(cam.yaw), cos = Math.cos(cam.yaw);
+    const stickAng = Math.atan2(ix, iz);
+    let d = stickAng - (P._lastStick == null ? stickAng : P._lastStick); d = Math.abs(((d + Math.PI) % (Math.PI * 2)) - Math.PI);
+    if (!P._moving || d > 0.55 || P.moveYaw == null) P.moveYaw = cam.yaw;   // (re)latch on start / new intended direction
+    P._lastStick = stickAng; P._moving = true;
+    const fy = P.moveYaw, sin = Math.sin(fy), cos = Math.cos(fy);
     wx = (ix * cos - iz * sin); wz = (ix * sin + iz * cos);
-    // slope: climbing uphill costs extra stamina (real legs do too) — sampled along the move direction
     const slope = (groundH(P.x + wx * 2, P.z + wz * 2) - groundH(P.x, P.z)) * 0.5;
     if (slope > 0.04 && !P.onProp) P.stamina = Math.max(0, P.stamina - slope * 9 * dt);
     P.x += wx * speed * dt; P.z += wz * speed * dt;
-    P.yaw = lerp2angle(P.yaw, Math.atan2(wx, wz));
-    // footstep audio cadence
+    P.yaw = lerp2angle(P.yaw, Math.atan2(wx, wz));   // body faces travel
     stepPhase += speed * dt;
     if (stepPhase > (gait === "run" ? 1.7 : 2.6)) { stepPhase = 0; Audio.step(gait); }
-  }
+  } else P._moving = false;
   // vertical traversal (jump / auto-vault / mantle) — additive; does nothing while grounded & not jumping
   updateTraversal(dt, wx, wz, moving);
   // water: deep channel → swim (no jump/mantle); hold crouch to dive (oxygen drains); the current
@@ -1600,8 +1605,7 @@ function updatePlayer(dt) {
   P.eyeY = standY;                                                                 // camera follows jumps/climbs/swim
   playerMesh.position.set(P.x, standY + 0.9 - crouchDrop + idleBob + runBounce, P.z);
   playerMesh.rotation.y = P.yaw;
-  const slopeP = (P.onProp || P.air > 0.05 || P.swim) ? 0 : terrainPitch(P.x, P.z, P.yaw) * 0.7;   // lean to the hillside
-  playerMesh.rotation.x = (P.gait === "run" ? 0.16 : 0) + (P.gait === "crouch" ? 0.22 : 0) + (P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.012 : 0) + slopeP;
+  playerMesh.rotation.x = (P.gait === "run" ? 0.16 : 0) + (P.gait === "crouch" ? 0.22 : 0) + (P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.012 : 0);
 
   // anti-stuck safeguard: if you're trying to move but wedged between colliders, nudge free toward open ground
   if (moving && !P.onTower && !P.zip) {
@@ -2172,7 +2176,7 @@ function animateDino(a, dt) {
   // place + animate (fliers cruise/dive, aquatic species float in the channel)
   a.mesh.position.set(a.x, dinoY(a), a.z);
   a.mesh.rotation.y = a.yaw;
-  a.mesh.rotation.x = (isFlier(sp) || isAquatic(sp)) ? 0 : terrainPitch(a.x, a.z, a.yaw) * 0.5;   // foot/terrain adaptation on slopes
+  a.mesh.rotation.x = 0;   // (terrain tilt removed — it lifted long dinos' far feet off the ground & foreshortened them)
   a.anim = Math.max(0, a.anim - dt);
   if (a.roar > 0) a.roar = Math.max(0, a.roar - dt);
   const vmag = Math.hypot(a.vx, a.vz);
@@ -2641,14 +2645,30 @@ function placeAtWreck() {                                 // stand the survivor 
   cam.yaw = P.yaw; cam.pitch = -0.12; camera.up.set(0, 1, 0);
   if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
 }
-function makeTrooper(color) {                              // simple seated squad figure (reliable — no model load race)
+// A believable SEATED squad member — origin at the hips so seat coords place them naturally. Own bucket
+// seat (never fused to mid-air), helmet, chest rig, arms resting on the lap, distinct fatigues per member.
+function makeTrooper(color) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.1 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x26261f, roughness: 0.6 });
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.46, 4, 8), mat); torso.position.y = 0.55; torso.rotation.x = 0.18; g.add(torso);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), dark); head.position.set(0, 0.98, 0.04); g.add(head);
-  const lap = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.46), mat); lap.position.set(0, 0.32, 0.26); g.add(lap);           // thighs (seated)
-  for (const sx of [-1, 1]) { const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.42, 6), dark); shin.position.set(sx * 0.12, 0.12, 0.46); g.add(shin); }
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.08 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x23261f, roughness: 0.7 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0xb88a66, roughness: 0.72 });
+  const vest = new THREE.MeshStandardMaterial({ color: 0x2c322a, roughness: 0.85, metalness: 0.15 });
+  // bucket seat (cushion + back) so the figure clearly rests ON something
+  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.48), dark), { position: new THREE.Vector3(0, -0.06, 0.08) }));
+  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.52, 0.1), dark), { position: new THREE.Vector3(0, 0.2, -0.18) }));
+  // seated body
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.19, 0.4, 4, 8), mat); torso.position.set(0, 0.3, 0.0); torso.rotation.x = 0.1; g.add(torso);
+  const rig = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.32, 0.16), vest); rig.position.set(0, 0.32, 0.12); g.add(rig);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.135, 12, 10), skin); head.position.set(0, 0.66, 0.03); g.add(head);
+  const helm = new THREE.Mesh(new THREE.SphereGeometry(0.155, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.62), dark); helm.position.set(0, 0.69, 0.03); g.add(helm);
+  // arms resting forward on the lap
+  for (const sx of [-1, 1]) { const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.065, 0.32, 4, 6), mat); arm.position.set(sx * 0.24, 0.26, 0.16); arm.rotation.x = 1.0; g.add(arm); }
+  // thighs forward + shins down (the seated L) + boots
+  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.15, 0.4), mat), { position: new THREE.Vector3(0, 0.05, 0.24) }));
+  for (const sx of [-1, 1]) {
+    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.42, 6), dark); shin.position.set(sx * 0.11, -0.18, 0.42); g.add(shin);
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.1, 0.24), dark); boot.position.set(sx * 0.11, -0.4, 0.5); g.add(boot);
+  }
   return g;
 }
 function buildRiders(group) {                             // squad seated INSIDE the cabin (within the fuselage volume)
@@ -2657,9 +2677,9 @@ function buildRiders(group) {                             // squad seated INSIDE
   for (let i = 0; i < n; i++) {
     const t = makeTrooper(colors[i % colors.length]);
     const x = n === 1 ? -0.3 : -1.0 + (i / (n - 1)) * 1.5;   // cabin row, well within the body
-    t.position.set(x, 1.0, (i % 2 ? 0.32 : -0.32)); t.scale.setScalar(0.82); group.add(t);
+    t.position.set(x, 1.3, (i % 2 ? 0.32 : -0.32)); t.scale.setScalar(0.82); group.add(t);
   }
-  const pilot = makeTrooper(0x3a3f30); pilot.position.set(1.15, 1.05, 0); pilot.scale.setScalar(0.82); group.add(pilot);   // cockpit
+  const pilot = makeTrooper(0x3a3f30); pilot.position.set(1.15, 1.35, 0); pilot.scale.setScalar(0.82); group.add(pilot);   // cockpit
 }
 function upgradeIntroHeli() {                             // swap the boxy fallback for the realistic Huey the instant it loads
   if (!intro || intro.crashed || !intro.heli || intro.heli.real || !MODELS[HELI_MODEL]) return;
@@ -3071,7 +3091,7 @@ function placeRiverDinos(startX) {                         // stage herbivores o
 function startIntroBoat() {
   const b = buildBoat(); const startX = -64;
   positionBoatOnRiver(b, startX, WATER_Y);
-  seatTroopers(b, [[-1.7, 1.0, 0.7], [-1.7, 1.0, -0.7], [0.3, 1.06, 0.6], [0.3, 1.06, -0.6]], Math.PI / 2, 0.82);
+  seatTroopers(b, [[-1.7, 1.32, 0.7], [-1.7, 1.32, -0.7], [0.3, 1.38, 0.6], [0.3, 1.38, -0.6]], Math.PI / 2, 0.82);
   scene.add(b); introProp = b;
   intro = { kind: "boat", t: 0, phase: "river", boat: b, bx: startX, dockX: 6, line: -1, shake: 0.04, camActive: true };
   introOpen("Jurassic Survival · Power Restoration · River insertion");
@@ -3134,13 +3154,49 @@ function buildMonorail() {                                // interior-open tram 
   const cab = new THREE.PointLight(0xcfe0d6, 0.9, 9); cab.position.set(0, 2.3, 0); c.add(cab);
   const under = new THREE.Mesh(new THREE.BoxGeometry(L - 0.4, 0.4, 1.0), trimMat); under.position.set(0, 0.5, 0); c.add(under);
   const beam = new THREE.Mesh(new THREE.BoxGeometry(L + 8, 0.4, 0.6), new THREE.MeshStandardMaterial({ color: 0x3a3e38, roughness: 0.9 })); beam.position.set(0, 0.18, 0); c.add(beam);
+  // interior fit-out: side benches the crew sit on, grab poles, and a lit destination sign (believable transit car)
+  for (const sz of [W / 2 - 0.22, -(W / 2 - 0.22)]) {
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(L - 1.0, 0.12, 0.42), trimMat); bench.position.set(-0.3, 1.06, sz); c.add(bench);
+    const bback = new THREE.Mesh(new THREE.BoxGeometry(L - 1.0, 0.4, 0.08), trimMat); bback.position.set(-0.3, 1.3, sz + (sz > 0 ? 0.18 : -0.18)); c.add(bback);
+  }
+  for (const px of [-1.6, -0.2, 1.0]) { const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, H - 0.3, 8), new THREE.MeshStandardMaterial({ color: 0xd8a23a, roughness: 0.4, metalness: 0.7 })); pole.position.set(px, 0.76 + (H - 0.3) / 2, 0); c.add(pole); }
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.3, 0.04), new THREE.MeshStandardMaterial({ color: 0x0a2a2e, emissive: 0x1d9b76, emissiveIntensity: 0.9 })); sign.position.set(-L / 2 + 0.09, 2.45, 0); sign.rotation.y = Math.PI / 2; c.add(sign);
   c.userData.cabLight = cab; c.userData.strip = strip;
   return c;
+}
+// Ground-level monorail guideway: the long concrete straddle-beam the car rides, running the length of
+// the line, with periodic footings + a moss-grown top so it reads as real, weathered track.
+function buildMonorailRail(x, z0, z1) {
+  const g = new THREE.Group();
+  const concrete = new THREE.MeshStandardMaterial({ color: 0x8a8f8c, roughness: 0.92, metalness: 0.05 });
+  const moss = new THREE.MeshStandardMaterial({ color: 0x5a6b46, roughness: 1 });
+  const mid = (z0 + z1) / 2, len = Math.abs(z1 - z0), railY = groundH(x, mid) + 0.18;   // straddle-beam under the car body
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, len), concrete); beam.position.set(x, railY, mid); g.add(beam);
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.1, len), moss); cap.position.set(x, railY + 0.3, mid); g.add(cap);
+  for (let z = Math.min(z0, z1); z <= Math.max(z0, z1); z += 9) { const gy = groundH(x, z); const foot = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.4, 1.2), concrete); foot.position.set(x, gy + 0.05, z); g.add(foot); }   // ground footings
+  return g;
+}
+// Ruined arrival station beside the track: a low platform at car-floor height, snapped columns, a
+// collapsed canopy, vines + rubble — an overgrown Jurassic transit stop.
+function buildMonorailStation(x, z) {
+  const g = new THREE.Group(); const gy = groundH(x, z); g.position.set(x, gy, z);
+  const concrete = new THREE.MeshStandardMaterial({ color: 0x8a8d83, roughness: 0.95, flatShading: true });
+  const rust = new THREE.MeshStandardMaterial({ color: 0x6f4630, roughness: 1, metalness: 0.2 });
+  const moss = new THREE.MeshStandardMaterial({ color: 0x5a6b46, roughness: 1 });
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(6, 0.7, 12), concrete); deck.position.set(3.4, 0.55, 0); g.add(deck);          // step-off platform ~car-floor height
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.9, 12), new THREE.MeshStandardMaterial({ color: 0xd8a23a, roughness: 0.7 })); edge.position.set(0.9, 0.65, 0); g.add(edge);   // yellow platform edge line
+  for (const pz of [-4.5, 0.5, 4.5]) { const col = new THREE.Mesh(new THREE.BoxGeometry(0.45, 3.6, 0.45), concrete); col.position.set(5.8, 1.9, pz); col.rotation.z = (pz === 0.5 ? 0.12 : 0); g.add(col); }   // one leaning
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.28, 12), rust); canopy.position.set(3.2, 3.7, 0.5); canopy.rotation.z = -0.12; g.add(canopy);                                  // sagging roof
+  for (let i = 0; i < 6; i++) { const r = new THREE.Mesh(new THREE.BoxGeometry(rand(1, 2.4), 0.3, 0.3), i % 2 ? moss : concrete); r.position.set(3 + rand(-2, 2), 0.95, rand(-5, 5)); r.rotation.y = rand(0, 6); g.add(r); }   // rubble on the deck
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.0, 3.0), [rust, rust, rust, rust, new THREE.MeshStandardMaterial({ color: 0x1a1d18, emissive: 0x0a3a2e, emissiveIntensity: 0.5 }), rust]); sign.position.set(6.05, 3.0, 0); g.add(sign);   // faded SECTOR 4 sign
+  return g;
 }
 function startIntroMonorail() {
   const y0 = groundH(0, 30);
   const c = buildMonorail(); c.position.set(0, y0, 60); c.rotation.y = Math.PI / 2;   // front (+x) → world −z
-  seatTroopers(c, [[-1.5, 1.0, 0.7], [-1.5, 1.0, -0.7], [0.1, 1.0, 0.7]], Math.PI / 2, 0.8);
+  seatTroopers(c, [[-1.5, 1.16, 0.78], [-1.5, 1.16, -0.78], [0.1, 1.16, 0.78]], Math.PI / 2, 0.82);
+  const rail = buildMonorailRail(0, -16, 92), stn = buildMonorailStation(0, 2);   // visible guideway + ruined station
+  scene.add(rail); scene.add(stn); introExtra.push(rail, stn);
   scene.add(c); introProp = c;
   intro = { kind: "monorail", t: 0, phase: "transit", car: c, y0, line: -1, shake: 0, camActive: true };
   introOpen("Jurassic Survival · The Last Sample · Sector 4");
@@ -3424,7 +3480,7 @@ function startRun() {
   applyUnlocks();                                                                     // persistent progression: veteran loadout bonuses
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
-  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole, onTower: null, zip: null, air: 0, vy: 0, onProp: null, eyeY: null, swim: false, dive: false, oxygen: 100, hunger: 100, thirst: 100, temp: 0, injured: false });
+  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole, onTower: null, zip: null, air: 0, vy: 0, onProp: null, eyeY: null, swim: false, dive: false, oxygen: 100, hunger: 100, thirst: 100, temp: 0, injured: false, moveYaw: 0, _moving: false, _lastStick: 0 });
   if (Net.on) {   // co-op: spawn beside each other like a squad — a small cluster, same facing, no overlap
     const a = (Net.id || 1) * 2.39996;   // golden-angle spread → distinct, non-overlapping spots
     S.player.x = Math.cos(a) * 3.0; S.player.z = Math.sin(a) * 3.0; S.player.yaw = 0;
