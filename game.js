@@ -3538,8 +3538,18 @@ function startRun() {
   cam.yaw = 0; cam.pitch = -0.18;
   try { startMission(); } catch (e) { console.error("startMission", e); }   // set up the mission phase chain + objective marker
   try { buildMissionSites(); } catch (e) { console.error("missionSites", e); }   // build the real structures (outpost, generators, Maya…) at objective sites
-  try { startIntro(); }                                                       // play the opening crash cinematic, then hand off to "playing"
-  catch (e) { console.error("startIntro", e); S.phase = "playing"; if (playerMesh) playerMesh.visible = true; $("intro").classList.add("hidden"); $("hud").style.display = ""; Audio.ambient(true); if (!isTouch) lockPointer(); }
+  // co-op join-in-progress: if the host is already mid-mission (a fresh world tick arrived <2s ago),
+  // skip the insertion cinematic, bootstrap to the host's live phase/extraction state, and drop in with the squad.
+  const joinLive = Net.on && !Net.isHost && _netWorldLastT && (performance.now() - _netWorldLastT < 2000);
+  if (joinLive) {
+    try { netApplyWorld(_netWorldLast); } catch (e) {}                        // adopt host phase, extraction timer, survivor pos
+    introSeen = true; intro = null; S.phase = "playing"; if (playerMesh) playerMesh.visible = true;
+    $("intro").classList.add("hidden"); $("hud").style.display = ""; Audio.ambient(true); if (!isTouch) lockPointer();
+    toast("JOINED SQUAD · MISSION IN PROGRESS");
+  } else {
+    try { startIntro(); }                                                       // play the opening crash cinematic, then hand off to "playing"
+    catch (e) { console.error("startIntro", e); S.phase = "playing"; if (playerMesh) playerMesh.visible = true; $("intro").classList.add("hidden"); $("hud").style.display = ""; Audio.ambient(true); if (!isTouch) lockPointer(); }
+  }
 }
 const ENDINGS = {   // EXTINCTION PROTOCOL branching finales
   A: { cls: "win", title: "CONTAINMENT HOLDS", body: "The paddock slammed shut on the Indominus. Every survivor reached the evac. Island Alpha is locked down — for tonight." },
@@ -4123,6 +4133,7 @@ function updateRemotes(dt) {
 }
 /* ---- host-authoritative world sync (dinos + mission/extraction + survivor) ---- */
 let _netDinoId = 0, _netDinoAcc = 0, _netWorldAcc = 0;
+let _netWorldLast = null, _netWorldLastT = 0;   // latest host world snapshot (for join-in-progress bootstrap)
 function netSendDinos() {           // HOST → clients: compact transform snapshot of every live dino
   const d = [];
   for (const a of dinos) { if (!a.alive) continue; if (a._netId == null) a._netId = ++_netDinoId; d.push({ i: a._netId, s: a.sp.id, x: +a.x.toFixed(1), z: +a.z.toFixed(1), y: +a.yaw.toFixed(2), st: a.state, hp: Math.round(a.hp), an: +(a.anim || 0).toFixed(2) }); }
@@ -4160,6 +4171,7 @@ function netSendWorld() {            // HOST → clients: mission phase + extrac
 }
 function netApplyWorld(m) {          // CLIENT: apply host's authoritative mission/extraction/survivor state
   if (Net.isHost) return;
+  _netWorldLast = m; _netWorldLastT = performance.now();   // remember it so a late joiner can bootstrap to the live phase
   if (m.idx != null && m.idx >= 0 && MC && m.idx !== MC.idx) { MC.idx = m.idx; try { applyPhaseMarker(); } catch (e) {} }
   if (MC && m.started) MC.started = true;
   S.extraction.called = !!m.called; if (m.hold != null) S.extraction.hold = m.hold;
@@ -4200,7 +4212,7 @@ function initLobby() {
     status.innerHTML = `Co-op room <span class="code">${Net.room}</span> · ${Net.isHost ? "hosting" : "joined"}${Net.isHost ? "" : mn} · share the code, then BEGIN`;
     roomI.value = Net.room; show(true); renderPeers();
   });
-  Net.onEvent("peers", renderPeers);
+  Net.onEvent("peers", () => { renderPeers(); if (Net.isHost && S.phase === "playing") { try { netSendWorld(); netSendDinos(); } catch (e) {} } });   // a peer joined mid-run → push live world+dinos at once so they bootstrap instantly
   Net.onEvent("state", netUpsertState);
   Net.onEvent("dinos", netApplyDinos);     // host-authoritative dino transforms
   Net.onEvent("exfil", netApplyWorld);     // host-authoritative mission / extraction / survivor
