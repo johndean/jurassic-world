@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-f";
+const BUILD = "2026-06-15-g";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -348,7 +348,9 @@ function updateAction(dt) {
   const P = S.player, touch = isTouch, keyTxt = touch ? "HOLD ACTION" : "HOLD E", pressTxt = touch ? "TAP ACTION" : "PRESS E";
   let label = null, hold = false, prog = 0;
   const holding = keys.has("KeyE") || input.action;
-  if (P.zip) { actionHold = 0; }
+  if (P.driveVeh) { label = pressTxt + " · EXIT JEEP"; actionHold = 0; }
+  else if (nearVehicle(P)) { label = pressTxt + " · DRIVE JEEP"; actionHold = 0; }
+  else if (P.zip) { actionHold = 0; }
   else if (P.onTower) { label = pressTxt + " · ZIP DOWN"; actionHold = 0; }
   else {
     const ph = missionInteractInRange();
@@ -1294,7 +1296,9 @@ function updateZip(dt) {
 }
 function interact() {   // context action shared by E / the ACTION button (press actions only — holds are in updateAction)
   const P = S.player;
+  if (P.driveVeh) { exitVehicle(); return; }   // driving → step out
   if (P.zip) return;
+  const veh = nearVehicle(P); if (veh) { enterVehicle(veh); return; }   // standing by the jeep → drive it
   if (P.onTower) { startZip(P.onTower); return; }
   const t = nearTowerBase(P);
   if (t) { climbTower(t); return; }
@@ -1549,6 +1553,7 @@ let hitCooldownVisual = 0, stepPhase = 0;
 function updatePlayer(dt) {
   const P = S.player, cfg = BIOME.player;
   if (evacCine()) return;   // evac cinematic drives the player (boarding); ignore input
+  if (P.driveVeh) { updateDriving(dt); return; }   // driving the jeep — input steers the vehicle, not the avatar
   if (P.zip) { updateZip(dt); return; }   // riding the zipline down (brief, ~1.7s)
   // intent from keyboard + touch/gamepad (input.mx/mz already set for touch/pad)
   let ix = input.mx, iz = input.mz;
@@ -3035,6 +3040,7 @@ function startIntroJeep() {
   const j = buildJeep();
   j.position.set(2, groundH(2, 56), 56); j.rotation.y = Math.PI / 2;   // front (+x local) points toward −z = direction of travel
   buildJeepRiders(j); scene.add(j); introProp = j;
+  j.userData.drivable = true; j.userData.speed = 0;   // left parked & drivable once the mission begins
   intro = { kind: "jeep", t: 0, phase: "drive", jeep: j, line: -1, shake: 0, camActive: true, stopped: false };
   if (playerMesh) playerMesh.visible = false;
   ["introTint", "introVig", "introBlack", "introRadio", "introBig"].forEach(k => { const e = $(k); if (e) e.style.opacity = "0"; });
@@ -3081,6 +3087,61 @@ function endIntroJeep() {                                 // step out beside the
   cam.yaw = 0; cam.pitch = -0.05; camera.up.set(0, 1, 0);
   if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); playerMesh.rotation.y = P.yaw; }
   finishIntroCommon("INVESTIGATION · follow the tracks — reach the objective marker");
+}
+
+/* ── drivable vehicle (the parked ranger jeep) — additive: a deliberate enter/exit mode, free-walk untouched ── */
+const VEH = { accel: 12, drag: 1.1, brake: 18, maxFwd: 17, maxRev: 5, turn: 1.5, enterR: 4.6, bodyR: 2.2 };
+function nearVehicle(P) {   // the parked drivable jeep, if you're standing next to it (on foot, in play)
+  if (S.phase !== "playing" || P.driveVeh) return null;
+  const j = introProp;
+  if (!j || !j.userData || !j.userData.drivable) return null;
+  return dist2(P.x, P.z, j.position.x, j.position.z) < VEH.enterR * VEH.enterR ? j : null;
+}
+function enterVehicle(j) {
+  const P = S.player;
+  P.driveVeh = j; if (j.userData.speed == null) j.userData.speed = 0;
+  P.driveYaw = Math.atan2(Math.cos(j.rotation.y), -Math.sin(j.rotation.y));   // adopt the jeep's current facing (model +x = forward)
+  cam.yaw = P.driveYaw; cam.pitch = -0.12;
+  if (playerMesh) playerMesh.visible = false;
+  Audio.step("run"); toast("DRIVING · W/S throttle · A/D steer · " + (isTouch ? "ACTION" : "E") + " to exit");
+}
+function exitVehicle() {
+  const P = S.player, j = P.driveVeh; P.driveVeh = null;
+  if (j) j.userData.speed = 0;
+  const e = { x: (j ? j.position.x : P.x) + Math.cos(P.driveYaw) * 3.2, z: (j ? j.position.z : P.z) - Math.sin(P.driveYaw) * 3.2 };   // step out beside the cab
+  resolveColliders(e, 0.5);
+  const half = BIOME.map.size / 2 - 4; P.x = clamp(e.x, -half, half); P.z = clamp(e.z, -half, half); P.yaw = P.driveYaw;
+  cam.pitch = -0.18;
+  if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); }
+  toast("ON FOOT");
+}
+function updateDriving(dt) {
+  const P = S.player, j = P.driveVeh; if (!j) { P.driveVeh = null; return; }
+  let ix = input.mx, iz = input.mz;
+  if (keys.has("KeyW") || keys.has("ArrowUp")) iz -= 1;
+  if (keys.has("KeyS") || keys.has("ArrowDown")) iz += 1;
+  if (keys.has("KeyA") || keys.has("ArrowLeft")) ix -= 1;
+  if (keys.has("KeyD") || keys.has("ArrowRight")) ix += 1;
+  const brake = input.crouch || keys.has("ControlLeft") || keys.has("ControlRight");
+  let v = j.userData.speed || 0;
+  if (brake) v -= Math.sign(v) * VEH.brake * dt;
+  else v += (-iz) * VEH.accel * dt;                 // W (iz=-1) accelerates forward
+  v -= v * VEH.drag * dt;                            // rolling resistance
+  v = clamp(v, -VEH.maxRev, VEH.maxFwd);
+  if (Math.abs(v) < 0.06) v = 0;
+  if (Math.abs(v) > 0.25) P.driveYaw += ix * VEH.turn * dt * (v >= 0 ? 1 : -1) * Math.min(1, Math.abs(v) / 6 + 0.4);   // steer scales with speed; reverse inverts
+  const sin = Math.sin(P.driveYaw), cos = Math.cos(P.driveYaw);
+  const e = { x: j.position.x + sin * v * dt, z: j.position.z + cos * v * dt };
+  if (resolveColliders(e, VEH.bodyR)) v *= 0.4;      // shoved off a rock/ruin/building — bleed momentum
+  const half = BIOME.map.size / 2 - 4; e.x = clamp(e.x, -half, half); e.z = clamp(e.z, -half, half);
+  j.position.set(e.x, groundH(e.x, e.z), e.z);
+  j.rotation.y = Math.atan2(-cos, sin);
+  j.userData.speed = v;
+  // ride the jeep: keep the player anchored to it, noise rises with speed, camera trails the heading
+  P.x = e.x; P.z = e.z; P.yaw = P.driveYaw; P.gait = "idle"; P.air = 0; P.onProp = null;
+  P.noise = lerp(P.noise, Math.min(1, 0.35 + Math.abs(v) / VEH.maxFwd * 0.65), 0.1);
+  cam.yaw = lerp2angle(cam.yaw, P.driveYaw, 0.1);
+  if (j.userData.lights) for (const b of j.userData.lights) if (b.intensity != null) b.intensity = 5;   // headlights on while driving
 }
 
 /* ── shared intro helpers (used by the boat & monorail cinematics) ── */
@@ -3583,7 +3644,7 @@ function startRun() {
   applyUnlocks();                                                                     // persistent progression: veteran loadout bonuses
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
-  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole, onTower: null, zip: null, air: 0, vy: 0, onProp: null, eyeY: null, swim: false, dive: false, oxygen: 100, hunger: 100, thirst: 100, temp: 0, injured: false, moveYaw: 0, _moving: false, _lastStick: 0 });
+  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole, onTower: null, zip: null, air: 0, vy: 0, onProp: null, eyeY: null, swim: false, dive: false, oxygen: 100, hunger: 100, thirst: 100, temp: 0, injured: false, moveYaw: 0, _moving: false, _lastStick: 0, driveVeh: null, driveYaw: 0 });
   if (Net.on) {   // co-op: spawn beside each other like a squad — a small cluster, same facing, no overlap
     const a = (Net.id || 1) * 2.39996;   // golden-angle spread → distinct, non-overlapping spots
     S.player.x = Math.cos(a) * 3.0; S.player.z = Math.sin(a) * 3.0; S.player.yaw = 0;
@@ -4073,7 +4134,14 @@ function updateCamera() {
     if (beaconRing) beaconRing.rotation.z += (S.extraction.called ? 0.08 : 0.02);
     return;
   }
-  if (playerMesh && !playerMesh.visible && S.phase === "playing") playerMesh.visible = true;
+  if (P.driveVeh) {   // chase cam behind/above the jeep, looking down the road
+    const j = P.driveVeh, s = Math.sin(P.driveYaw), c = Math.cos(P.driveYaw), hy = j.position.y;
+    camera.position.lerp(tmp.set(j.position.x - s * 9.5, hy + 4.8, j.position.z - c * 9.5), 0.12);
+    camera.lookAt(j.position.x + s * 5, hy + 1.7, j.position.z + c * 5);
+    if (beaconRing) beaconRing.rotation.z += (S.extraction.called ? 0.08 : 0.02);
+    return;
+  }
+  if (playerMesh && !playerMesh.visible && S.phase === "playing" && !P.driveVeh) playerMesh.visible = true;
   const tx = P.x, ty = (P.eyeY != null ? P.eyeY : playerFloorY(P.x, P.z)) + 1.5, tz = P.z;
   const cp = Math.cos(cam.pitch), d = cam.dist * cp;
   let cx = tx - Math.sin(cam.yaw) * d, cz = tz - Math.cos(cam.yaw) * d, cy = ty + cam.height + Math.sin(cam.pitch) * cam.dist * -1 + cam.dist * cp * 0.0;
