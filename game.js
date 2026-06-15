@@ -476,6 +476,8 @@ async function boot() {
   initCharSelect();
   initLobby();
   initOptions();
+  loadProgress();
+  { const cl = $("careerLine"); if (cl) cl.textContent = careerLine(); }
   requestAnimationFrame(frame);
   // stream models in the background so the menu/start button appears instantly;
   // creatures load first (re-skinning as they arrive), player + foliage build inside preloadModels
@@ -1066,7 +1068,7 @@ function buildSiteStory(g) {
   for (let i = 0; i < 3; i++) { const cl = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.02, 0.07), blood); cl.position.set(rand(-2.5, 2.5) + i * 0.18, 0.045, rand(-2, 2)); cl.rotation.y = 0.5; g.add(cl); }   // raked claw gashes
 }
 function buildSiteProp(type, x, z) {
-  const g = new THREE.Group(); g.position.set(x, groundH(x, z), z); scene.add(g); missionSites.push(g);
+  const g = new THREE.Group(); g.position.set(x, groundH(x, z), z); g.userData.site = type; scene.add(g); missionSites.push(g);
   if (type === "outpost") buildCollapsedTower(g);
   else if (type === "generator") buildGenerator(g);
   else if (type === "cave") buildCave(g);
@@ -1501,6 +1503,7 @@ function updatePlayer(dt) {
   speed *= rmod.speed || 1;                                       // role perk: movement (navigator)
   const inWater = (WATER_Y - groundH(P.x, P.z)) > 1.1 && !P.onTower && !P.onProp;   // deep water → swim drag
   if (inWater) speed *= 0.55;
+  speed *= (P.survSpeedMul || 1);   // survival: injury / cold slow you down
   const targetNoise = (cfg.noise[gait] ?? 0) * (rmod.noise || 1); // role perk: stealth/noise (research)
   P.noise = lerp(P.noise, S.extraction.called ? Math.max(targetNoise, 0.6) : targetNoise, 0.15);
 
@@ -1552,6 +1555,7 @@ function updatePlayer(dt) {
   }
   // collide with solid world props (rocks, ruins, mission buildings) — skip while on a tower/zip/prop
   if (!P.onTower && !P.zip && !P.onProp) resolveColliders(P, 0.45, feetY);
+  updateSurvival(dt);   // hunger / thirst / temperature / injury
   const lim = BIOME.map.size / 2 - 3;
   P.x = clamp(P.x, -lim, lim); P.z = clamp(P.z, -lim, lim);
   if (P.onTower) {   // railed on 3 sides; step off the FRONT (ladder side, +Z) to ride the zip down (or press E)
@@ -1605,6 +1609,31 @@ function showHitDir(fromX, fromZ) {
   const rel = Math.atan2((dx / d) * Math.cos(cam.yaw) - (dz / d) * Math.sin(cam.yaw), (dx / d) * Math.sin(cam.yaw) + (dz / d) * Math.cos(cam.yaw));
   el.style.transform = `translate(-50%,-50%) rotate(${(rel * 180 / Math.PI).toFixed(0)}deg)`;
   el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+}
+
+/* ==================================================== survival systems === *
+ * A light layer on top of the core loop — gentle drains (minutes to matter), surfaced in the HUD only
+ * when something's wrong, with natural refills (water, rations, warmth, the safe zone). */
+function nearSite(types, r) {
+  for (const g of missionSites) { if (!g.userData || !types.includes(g.userData.site)) continue; if (dist2(S.player.x, S.player.z, g.position.x, g.position.z) < r * r) return true; }
+  return false;
+}
+function updateSurvival(dt) {
+  const P = S.player; if (!P.alive) return;
+  const wet = (WATER_Y - groundH(P.x, P.z)) > 0.3;
+  P.thirst = wet ? Math.min(100, P.thirst + 25 * dt) : Math.max(0, P.thirst - dt * (100 / 420));        // water refills thirst
+  P.hunger = nearSite(["supply", "campsite", "safehouse"], 6) ? Math.min(100, P.hunger + 12 * dt) : Math.max(0, P.hunger - dt * (100 / 780));   // rations at sites
+  const warming = playerSafe() || nearSite(["campsite"], 7);
+  P.temp = P.swim ? Math.max(-100, P.temp - 18 * dt) : Math.min(0, P.temp + (warming ? 16 : 7) * dt);    // wet = cold; dry/fire/safe = warm
+  if (!P.injured && P.hp <= 28) P.injured = true;
+  if (P.injured && (P.hp >= 48 || playerSafe())) P.injured = false;
+  if (P.injured && !playerSafe()) P.hp = Math.max(1, P.hp - 0.9 * dt);                                   // bleed — never lethal by itself
+  let mul = 1;
+  if (P.injured) mul *= 0.78;
+  if (P.temp < -45) { mul *= 0.9; P.stamina = Math.max(0, P.stamina - 2 * dt); }
+  if (P.thirst < 25) P.stamina = Math.max(0, P.stamina - 1.5 * dt);
+  if (P.hunger < 20 && P.stamina > 60) P.stamina = 60;                                                   // exhaustion cap
+  P.survSpeedMul = mul;
 }
 
 /* ==================================================== dino AI (pillars) === */
@@ -3353,9 +3382,10 @@ function startRun() {
   for (const d of dinos) scene.remove(d.mesh); dinos = [];
   clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField(); clearIntroProp(); clearMissionSites(); clearBoss(); preloadRadio();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
+  applyUnlocks();                                                                     // persistent progression: veteran loadout bonuses
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
-  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole, onTower: null, zip: null, air: 0, vy: 0, onProp: null, eyeY: null, swim: false, dive: false, oxygen: 100 });
+  Object.assign(S.player, { x: 0, z: 0, yaw: 0, hp: 100, stamina: 100, noise: 0, fear: 0, gait: "idle", alive: true, role: selectedRole, onTower: null, zip: null, air: 0, vy: 0, onProp: null, eyeY: null, swim: false, dive: false, oxygen: 100, hunger: 100, thirst: 100, temp: 0, injured: false });
   if (Net.on) {   // co-op: spawn beside each other like a squad — a small cluster, same facing, no overlap
     const a = (Net.id || 1) * 2.39996;   // golden-angle spread → distinct, non-overlapping spots
     S.player.x = Math.cos(a) * 3.0; S.player.z = Math.sin(a) * 3.0; S.player.yaw = 0;
@@ -3392,9 +3422,36 @@ const ENDINGS = {   // EXTINCTION PROTOCOL branching finales
   B: { cls: "win", title: "INTO THE DEEP", body: "You opened the lagoon. The Mosasaurus took the Indominus under in a single strike and the water went still. You flew out alive — but the island belongs to them now." },
   C: { cls: "lose", title: "YOU GOT OUT", body: "You ran. The last helicopter cleared the trees as containment failed behind you. You survived — but nothing else did, and the cargo is loose." },
 };
+/* ================================================== progression (saved) == *
+ * Persistent career across runs (localStorage): extractions, runs, and the species you've cataloged
+ * carry over, and wins unlock a veteran loadout (bonus deterrent charges). Fully additive. */
+const PROGRESS = { runs: 0, wins: 0, ids: [], bestS: 0 };
+function loadProgress() {
+  try { Object.assign(PROGRESS, JSON.parse(localStorage.getItem("jws_progress") || "{}")); } catch {}
+  (PROGRESS.ids || []).forEach(id => identified.add(id));   // Field Guide remembers what you've seen
+}
+function saveProgress() {
+  PROGRESS.ids = [...identified];
+  try { localStorage.setItem("jws_progress", JSON.stringify(PROGRESS)); } catch {}
+}
+function applyUnlocks() {   // veteran loadout: extra charges earned by extracting
+  const w = PROGRESS.wins || 0;
+  const flare = TOOLS.find(t => t.id === "flare"), decoy = TOOLS.find(t => t.id === "decoy");
+  if (flare && w >= 1) { flare.max = 4; flare.charges = 4; }
+  if (decoy && w >= 3) { decoy.max = 8; decoy.charges = 8; }
+}
+function careerLine() {
+  const n = identified.size, total = Object.keys(SPECIES).length;
+  return `CAREER · ${PROGRESS.wins || 0} extraction${PROGRESS.wins === 1 ? "" : "s"} · ${PROGRESS.runs || 0} runs · ${n}/${total} species cataloged` +
+    (PROGRESS.wins >= 3 ? " · VETERAN loadout" : PROGRESS.wins >= 1 ? " · +1 flare unlocked" : "");
+}
 function endRun(won, ending) {
   if (S.phase !== "playing") return;
   S.phase = won ? "won" : "lost";
+  PROGRESS.runs = (PROGRESS.runs || 0) + 1; if (won) PROGRESS.wins = (PROGRESS.wins || 0) + 1;
+  if (won && S.t && (!PROGRESS.bestS || S.t < PROGRESS.bestS)) PROGRESS.bestS = Math.round(S.t);
+  saveProgress();
+  const cl = $("careerLine"); if (cl) cl.textContent = careerLine();
   Audio.ambient(false); won ? Audio.win() : Audio.lose();
   if (pointerLocked) document.exitPointerLock();
   const t = $("endTitle"), b = $("endBody");
@@ -3565,6 +3622,16 @@ function updateHUD() {
   const oxRow = $("vOxyRow");
   if (oxRow) { const inW = !!P.swim; oxRow.style.display = inW ? "" : "none"; if (inW) setBar("vOxy", "vOxyN", P.oxygen == null ? 100 : P.oxygen, (P.oxygen || 0) < 30 ? "var(--hud-alert)" : "var(--hud-water)"); }
   const dt2 = $("diveTint"); if (dt2) dt2.classList.toggle("on", !!P.dive);   // underwater tint while submerged
+  // survival status chips — surfaced only when something needs attention (no clutter in normal play)
+  const sv = $("survHud");
+  if (sv) {
+    let chips = "";
+    if (P.injured) chips += `<span class="sv alert">⚕ INJURED · BLEEDING</span>`;
+    if ((P.thirst ?? 100) < 25) chips += `<span class="sv">💧 THIRSTY</span>`;
+    if ((P.hunger ?? 100) < 25) chips += `<span class="sv">🍖 HUNGRY</span>`;
+    if ((P.temp ?? 0) < -45) chips += `<span class="sv">❄ COLD</span>`;
+    sv.innerHTML = chips; sv.style.display = chips ? "flex" : "none";
+  }
 
   // extraction window
   const ex = $("exfil"), btn = $("exfilBtn");
@@ -3787,6 +3854,17 @@ function updateCamera() {
     if (beaconRing) beaconRing.rotation.z += 0.08;
     return;
   }
+  // binoculars = FIRST PERSON from the operative's eyes (don't stare at your own back). Hide the avatar
+  // so it never blocks the glass; restored the moment you lower them.
+  if (binoc) {
+    if (playerMesh) playerMesh.visible = false;
+    const ey = (P.eyeY != null ? P.eyeY : playerFloorY(P.x, P.z)) + 1.55, cpb = Math.cos(cam.pitch);
+    camera.position.set(P.x + Math.sin(cam.yaw) * 0.15, ey, P.z + Math.cos(cam.yaw) * 0.15);
+    camera.lookAt(P.x + Math.sin(cam.yaw) * cpb * 12, ey + Math.sin(cam.pitch) * 12, P.z + Math.cos(cam.yaw) * cpb * 12);
+    if (beaconRing) beaconRing.rotation.z += (S.extraction.called ? 0.08 : 0.02);
+    return;
+  }
+  if (playerMesh && !playerMesh.visible && S.phase === "playing") playerMesh.visible = true;
   const tx = P.x, ty = (P.eyeY != null ? P.eyeY : playerFloorY(P.x, P.z)) + 1.5, tz = P.z;
   const cp = Math.cos(cam.pitch), d = cam.dist * cp;
   let cx = tx - Math.sin(cam.yaw) * d, cz = tz - Math.cos(cam.yaw) * d, cy = ty + cam.height + Math.sin(cam.pitch) * cam.dist * -1 + cam.dist * cp * 0.0;

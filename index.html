@@ -28,6 +28,11 @@
     -webkit-mask:radial-gradient(circle,transparent 86px,#000 90px);mask:radial-gradient(circle,transparent 86px,#000 90px);}
   #hitDir.show{animation:hitdir 1s ease-out;}
   @keyframes hitdir{0%{opacity:.95;}100%{opacity:0;}}
+  /* survival status chips (shown only when something is wrong) */
+  #survHud{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:41;display:none;gap:8px;pointer-events:none;}
+  #survHud .sv{font:10px ui-monospace,monospace;letter-spacing:.1em;color:#e7d8c8;background:rgba(8,11,10,.72);
+    border:1px solid var(--hud-line);border-radius:4px;padding:4px 9px;}
+  #survHud .sv.alert{color:#fff;border-color:var(--hud-alert);background:rgba(214,86,47,.22);}
 
   /* opening crash intro */
   #intro{position:fixed;inset:0;z-index:70;pointer-events:none;overflow:hidden;font-family:ui-monospace,monospace;}
@@ -472,6 +477,7 @@
 <div id="flash"></div>
 <div id="diveTint"></div>
 <div id="hitDir"></div>
+<div id="survHud"></div>
 <div id="dev"></div>
 
 <!-- opening helicopter-crash intro (cinematic overlay) -->
@@ -725,6 +731,7 @@
     <button class="bigbtn" id="startBtn"></button>
     <button class="bigbtn ghost" id="guideBtn">📖 FIELD GUIDE</button>
   </div>
+  <div id="careerLine" style="margin-top:14px;font-size:11px;letter-spacing:.1em;color:#8a978f;"></div>
 </div>
 
 <div id="codex">
