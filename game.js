@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-j";
+const BUILD = "2026-06-15-k";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -1895,7 +1895,7 @@ function perceive(a, P) {
  * Deterrence, not action-hero firepower: a flare scares predators off, a thrown
  * decoy lures them away, melee is a risky last resort. The beacon is a SAFE ZONE. */
 const SAFE_R = 18;                                  // beacon safe-zone radius (m)
-function playerSafe() { const b = S.extraction.beacon; return dist2(S.player.x, S.player.z, b.x, b.z) < SAFE_R * SAFE_R; }
+function playerSafe() { if (S.player.driveVeh) return true; const b = S.extraction.beacon; return dist2(S.player.x, S.player.z, b.x, b.z) < SAFE_R * SAFE_R; }   // inside the jeep = a mobile safe zone (no damage, predators disengage)
 /* ---- world FX so tool use + dino reactions are actually VISIBLE in the scene ---- */
 const fxList = [];
 function addFx(obj, life, update) { scene.add(obj); fxList.push({ obj, life, t: 0, update }); }
