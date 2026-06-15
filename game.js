@@ -11,6 +11,12 @@ import { clone as skeletonClone } from "./vendor/SkeletonUtils.js";
 import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
+// Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
+const BUILD = "2026-06-15-b";
+console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
+addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
+addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
+
 /* ============================================================================
    Jurassic Survival: Island Alpha — single-player vertical slice.
    Architecture note: this is the SOLO port of a server-authoritative co-op
