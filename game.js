@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-g";
+const BUILD = "2026-06-15-h";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -1553,6 +1553,7 @@ let hitCooldownVisual = 0, stepPhase = 0;
 function updatePlayer(dt) {
   const P = S.player, cfg = BIOME.player;
   if (evacCine()) return;   // evac cinematic drives the player (boarding); ignore input
+  if (!worldJeep) ensureDriveJeep();   // guarantee a drivable jeep parked nearby in every mission (spawns once)
   if (P.driveVeh) { updateDriving(dt); return; }   // driving the jeep — input steers the vehicle, not the avatar
   if (P.zip) { updateZip(dt); return; }   // riding the zipline down (brief, ~1.7s)
   // intent from keyboard + touch/gamepad (input.mx/mz already set for touch/pad)
@@ -2579,6 +2580,7 @@ function clearEvac() { if (evac) { scene.remove(evac.heli.group); evac = null; }
  * mission update -> jungle silence + distant roar -> hand control to the player.
  * Skippable; auto-skips on later runs in the same session (you've seen it). */
 let intro = null, wreckMesh = null, introSeen = false, introProp = null, introExtra = [];
+let worldJeep = null;   // the drivable ranger jeep parked in-world (every mission gets one near the player)
 function clearIntroProp() { if (introProp) { scene.remove(introProp); introProp = null; } for (const e of introExtra) scene.remove(e); introExtra = []; }   // parked intro vehicle + props (jeep/boat/dock) left in-world
 function coopSpread(bx, bz) {   // fan co-op players out from a shared hand-off point so they don't stack on each other
   if (!Net.on) return { x: bx, z: bz };
@@ -3040,7 +3042,7 @@ function startIntroJeep() {
   const j = buildJeep();
   j.position.set(2, groundH(2, 56), 56); j.rotation.y = Math.PI / 2;   // front (+x local) points toward −z = direction of travel
   buildJeepRiders(j); scene.add(j); introProp = j;
-  j.userData.drivable = true; j.userData.speed = 0;   // left parked & drivable once the mission begins
+  j.userData.drivable = true; j.userData.speed = 0; worldJeep = j;   // the intro jeep is the drivable one in this mission
   intro = { kind: "jeep", t: 0, phase: "drive", jeep: j, line: -1, shake: 0, camActive: true, stopped: false };
   if (playerMesh) playerMesh.visible = false;
   ["introTint", "introVig", "introBlack", "introRadio", "introBig"].forEach(k => { const e = $(k); if (e) e.style.opacity = "0"; });
@@ -3093,9 +3095,21 @@ function endIntroJeep() {                                 // step out beside the
 const VEH = { accel: 12, drag: 1.1, brake: 18, maxFwd: 17, maxRev: 5, turn: 1.5, enterR: 4.6, bodyR: 2.2 };
 function nearVehicle(P) {   // the parked drivable jeep, if you're standing next to it (on foot, in play)
   if (S.phase !== "playing" || P.driveVeh) return null;
-  const j = introProp;
+  const j = worldJeep;
   if (!j || !j.userData || !j.userData.drivable) return null;
   return dist2(P.x, P.z, j.position.x, j.position.z) < VEH.enterR * VEH.enterR ? j : null;
+}
+function ensureDriveJeep() {   // make sure a drivable jeep is parked near the player in EVERY mission (spawns once)
+  if (worldJeep || S.phase !== "playing") return;
+  const P = S.player;
+  let jx = P.x + Math.sin(P.yaw) * 7, jz = P.z + Math.cos(P.yaw) * 7;   // a few metres ahead, in view
+  const e = { x: jx, z: jz }; resolveColliders(e, 2.6); jx = e.x; jz = e.z;
+  const half = BIOME.map.size / 2 - 6; jx = clamp(jx, -half, half); jz = clamp(jz, -half, half);
+  const j = buildJeep();
+  j.position.set(jx, groundH(jx, jz), jz);
+  j.rotation.y = Math.atan2(-Math.cos(P.yaw), Math.sin(P.yaw));   // face the player's heading
+  j.userData.drivable = true; j.userData.speed = 0;
+  scene.add(j); worldJeep = j;
 }
 function enterVehicle(j) {
   const P = S.player;
@@ -3639,6 +3653,7 @@ function skipIntro() {
 function startRun() {
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = []; dinosByNetId.clear(); _netDinoId = 0;   // P-09: recycle net-ids each run so they don't grow unbounded across replays
+  if (worldJeep) { scene.remove(worldJeep); worldJeep = null; }   // clear last run's drivable jeep
   clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField(); clearIntroProp(); clearMissionSites(); clearBoss(); preloadRadio();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   applyUnlocks();                                                                     // persistent progression: veteran loadout bonuses
