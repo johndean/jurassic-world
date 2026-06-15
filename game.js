@@ -12,10 +12,23 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-e";
+const BUILD = "2026-06-15-f";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
+
+// Object.assign-like helper that is SAFE for Three.js read-only transform props. Object3D defines
+// position/rotation/scale/quaternion non-writable, so a bare `Object.assign(mesh,{position:v})` THROWS
+// in strict mode (ES modules) — which silently broke building/boat/trooper cosmetics and all intros.
+// This copies those props by value and assigns everything else normally.
+function mk3(o, p) {
+  if (p) for (const k in p) {
+    const cur = o[k];
+    if (cur && typeof cur.copy === "function" && (k === "position" || k === "rotation" || k === "scale" || k === "quaternion")) cur.copy(p[k]);
+    else o[k] = p[k];
+  }
+  return o;
+}
 
 /* ============================================================================
    Jurassic Survival: Island Alpha — single-player vertical slice.
@@ -261,7 +274,7 @@ function setObjMarker(x, z, color, kind) {
   const ring = new THREE.Mesh(new THREE.RingGeometry(2.0, 2.5, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12; g.add(ring);
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 18, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false })); beam.position.y = 9; g.add(beam);
-  g.add(Object.assign(new THREE.PointLight(color, 1.5, 44), { position: new THREE.Vector3(0, 5, 0) }));
+  g.add(mk3(new THREE.PointLight(color, 1.5, 44), { position: new THREE.Vector3(0, 5, 0) }));
   if (kind === "interact") {   // a physical console you walk up to and operate (button glows)
     const metal = new THREE.MeshStandardMaterial({ color: 0x3c4038, roughness: 0.7, metalness: 0.4 });
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 1.1, 8), metal); post.position.y = 0.55; g.add(post);
@@ -1054,43 +1067,43 @@ function buildSurvivor(x, z, col) {                       // a survivor — slum
 function buildGenerator(g) {                              // power-station generator (BLACKOUT)
   const metal = _mm(0x6a6e68, 0.6, 0.6), dark = _mm(0x2a2d28, 0.8, 0.4);
   const house = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.0, 2.2), metal); house.position.y = 1.0; g.add(house);
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.3, 1.7), dark), { position: new THREE.Vector3(1.62, 1.1, 0) }));
-  for (const px of [-0.8, 0, 0.8]) g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 8), dark), { position: new THREE.Vector3(px, 2.4, 0) }));
-  g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 2.2, 8), dark), { position: new THREE.Vector3(-1.0, 2.6, -0.6) }));
+  g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.3, 1.7), dark), { position: new THREE.Vector3(1.62, 1.1, 0) }));
+  for (const px of [-0.8, 0, 0.8]) g.add(mk3(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 8), dark), { position: new THREE.Vector3(px, 2.4, 0) }));
+  g.add(mk3(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 2.2, 8), dark), { position: new THREE.Vector3(-1.0, 2.6, -0.6) }));
   const warn = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), new THREE.MeshStandardMaterial({ color: 0xc9a23a, emissive: 0x3a2e08, roughness: 0.5 })); warn.position.set(0, 2.25, 1.2); g.add(warn);
-  for (let i = 0; i < 4; i++) g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.4, 0.1), dark), { position: new THREE.Vector3(-2.4 + i * 1.6, 0.7, 2.2) }));
+  for (let i = 0; i < 4; i++) g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.4, 0.1), dark), { position: new THREE.Vector3(-2.4 + i * 1.6, 0.7, 2.2) }));
 }
 function buildCave(g) {                                   // cave mouth (GHOSTS — Spinosaurus territory)
   const rock = _mm(0x4a4f4a, 1);
   for (let i = 0; i < 7; i++) { const a = (i / 6) * Math.PI - Math.PI / 2; const r = new THREE.Mesh(new THREE.IcosahedronGeometry(rand(1.3, 2.3), 0), rock); r.position.set(Math.cos(a) * 3.3, 0.4 + Math.sin(a) * 3.2, -1 + Math.sin(a) * 0.4); g.add(r); }
-  g.add(Object.assign(new THREE.Mesh(new THREE.CircleGeometry(2.5, 20), new THREE.MeshBasicMaterial({ color: 0x05060a })), { position: new THREE.Vector3(0, 2.0, -1.1) }));
+  g.add(mk3(new THREE.Mesh(new THREE.CircleGeometry(2.5, 20), new THREE.MeshBasicMaterial({ color: 0x05060a })), { position: new THREE.Vector3(0, 2.0, -1.1) }));
 }
 function buildBuilding(g, kind) {                         // generic structure: supply / safehouse / facility / command / campsite
   const big = kind === "command" || kind === "facility";
   const wall = _mm(kind === "command" ? 0x555a52 : 0x55503f, 1), wood = _mm(0x4a3c28, 0.95), metal = _mm(0x6e736f, 0.6, 0.6);
   const w = big ? 5 : 3.4, h = big ? 3.0 : 2.2, d = big ? 4 : 2.6;
   const bld = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wall); bld.position.y = h / 2; g.add(bld);
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.2, d + 0.4), wood), { position: new THREE.Vector3(0, h + 0.1, 0) }));
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.6, 0.1), _mm(0x20231d, 0.9)), { position: new THREE.Vector3(0, 0.8, d / 2 + 0.02) }));
+  g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.2, d + 0.4), wood), { position: new THREE.Vector3(0, h + 0.1, 0) }));
+  g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.6, 0.1), _mm(0x20231d, 0.9)), { position: new THREE.Vector3(0, 0.8, d / 2 + 0.02) }));
   const winMat = big ? new THREE.MeshStandardMaterial({ color: 0x1d6b76, emissive: 0x1d6b76, emissiveIntensity: 0.7 }) : _mm(0x3a3026, 1);
-  for (const sx of [-1, 1]) g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.06), winMat), { position: new THREE.Vector3(sx * w * 0.28, h * 0.6, d / 2 + 0.03) }));
-  if (kind === "command") { const dish = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), metal); dish.rotation.x = -0.7; dish.position.set(1.3, h + 1.0, -1); g.add(dish); g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.0, 6), metal), { position: new THREE.Vector3(1.3, h + 0.5, -1) })); }
-  if (kind === "campsite") { for (const c of [[2.6, 1], [-2.6, -1.4]]) { const tent = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.4, 4), _mm(0x4a5236, 0.95)); tent.position.set(c[0], 0.7, c[1]); tent.rotation.y = 0.5; g.add(tent); } const fire = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 6), new THREE.MeshStandardMaterial({ color: 0xff7e2a, emissive: 0xff5a1e, emissiveIntensity: 1.2 })); fire.position.set(0, 0.25, 2.8); g.add(fire); g.add(Object.assign(new THREE.PointLight(0xff7e2a, 1.0, 10), { position: new THREE.Vector3(0, 0.7, 2.8) })); }
-  for (const c of [[w * 0.5 + 0.7, 1], [-w * 0.5 - 0.7, -1]]) g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), wood), { position: new THREE.Vector3(c[0], 0.45, c[1]) }));
+  for (const sx of [-1, 1]) g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.06), winMat), { position: new THREE.Vector3(sx * w * 0.28, h * 0.6, d / 2 + 0.03) }));
+  if (kind === "command") { const dish = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), metal); dish.rotation.x = -0.7; dish.position.set(1.3, h + 1.0, -1); g.add(dish); g.add(mk3(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.0, 6), metal), { position: new THREE.Vector3(1.3, h + 0.5, -1) })); }
+  if (kind === "campsite") { for (const c of [[2.6, 1], [-2.6, -1.4]]) { const tent = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.4, 4), _mm(0x4a5236, 0.95)); tent.position.set(c[0], 0.7, c[1]); tent.rotation.y = 0.5; g.add(tent); } const fire = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 6), new THREE.MeshStandardMaterial({ color: 0xff7e2a, emissive: 0xff5a1e, emissiveIntensity: 1.2 })); fire.position.set(0, 0.25, 2.8); g.add(fire); g.add(mk3(new THREE.PointLight(0xff7e2a, 1.0, 10), { position: new THREE.Vector3(0, 0.7, 2.8) })); }
+  for (const c of [[w * 0.5 + 0.7, 1], [-w * 0.5 - 0.7, -1]]) g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), wood), { position: new THREE.Vector3(c[0], 0.45, c[1]) }));
   // ---- believable structure dressing (so it reads as a real outpost, not a bare box) ----
   const trim = _mm(0x2c2f28, 0.8, 0.3), glow = c => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 1.4 });
   const roof = new THREE.Mesh(new THREE.CylinderGeometry(0.05, w * 0.62, 0.9, 4), wall); roof.rotation.y = Math.PI / 4; roof.position.y = h + 0.55; g.add(roof);   // low pitched/ridged roof
   // entrance: recessed lit doorway + a porch overhang on posts
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.9, 0.12), glow(0xffb86a)), { position: new THREE.Vector3(0, 0.95, d / 2 + 0.04) }));   // warm-lit doorway
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.7, 0.04), _mm(0x14150f, 0.9)), { position: new THREE.Vector3(0, 0.85, d / 2 + 0.07) }));   // door panel
+  g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.9, 0.12), glow(0xffb86a)), { position: new THREE.Vector3(0, 0.95, d / 2 + 0.04) }));   // warm-lit doorway
+  g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.7, 0.04), _mm(0x14150f, 0.9)), { position: new THREE.Vector3(0, 0.85, d / 2 + 0.07) }));   // door panel
   const porch = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, 0.12, 1.2), wood); porch.position.set(0, h * 0.82, d / 2 + 0.6); g.add(porch);
   for (const px of [-w * 0.28, w * 0.28]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, h * 0.8, 6), trim); post.position.set(px, h * 0.4, d / 2 + 1.1); g.add(post); }
-  g.add(Object.assign(new THREE.PointLight(0xffb86a, 1.1, 12), { position: new THREE.Vector3(0, 1.9, d / 2 + 0.7) }));   // porch light
+  g.add(mk3(new THREE.PointLight(0xffb86a, 1.1, 12), { position: new THREE.Vector3(0, 1.9, d / 2 + 0.7) }));   // porch light
   // rooftop comms whip + a blinking locator beacon (also helps you spot the objective)
-  g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.8, 4), trim), { position: new THREE.Vector3(-w * 0.35, h + 1.4, -d * 0.3) }));
+  g.add(mk3(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.8, 4), trim), { position: new THREE.Vector3(-w * 0.35, h + 1.4, -d * 0.3) }));
   const bcn = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), glow(0xff4030)); bcn.position.set(-w * 0.35, h + 2.3, -d * 0.3); g.add(bcn); g.userData.beaconBlink = bcn;
   // weathered signboard over the door
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.4, 0.08), new THREE.MeshStandardMaterial({ color: 0x1a1d18, emissive: 0x0a3a2e, emissiveIntensity: 0.45 })), { position: new THREE.Vector3(0, h * 0.92, d / 2 + 0.05) }));
+  g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.4, 0.08), new THREE.MeshStandardMaterial({ color: 0x1a1d18, emissive: 0x0a3a2e, emissiveIntensity: 0.45 })), { position: new THREE.Vector3(0, h * 0.92, d / 2 + 0.05) }));
 }
 // Environmental storytelling: scatter readable evidence of what happened here — blood smears,
 // dropped gear, spent shells, raked claw-gashes — so a site tells its story without exposition.
@@ -1176,7 +1189,7 @@ function buildMosasaurus() {
   const head = new THREE.Mesh(new THREE.ConeGeometry(1.3, 3.2, 12), mat); head.rotation.z = -Math.PI / 2; head.position.set(5.6, 0, 0); g.add(head);
   const jaw = new THREE.Mesh(new THREE.ConeGeometry(1.05, 2.6, 10), mat); jaw.rotation.z = -Math.PI / 2; jaw.position.set(5.3, -0.5, 0); g.add(jaw);
   for (const s of [1, -1]) { const fin = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.2, 1.1), mat); fin.position.set(1.4, -0.7, s * 1.5); fin.rotation.y = s * 0.4; g.add(fin); }
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.8, 0.2), mat), { position: new THREE.Vector3(-5, 0, 0) }));   // tail fluke
+  g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.8, 0.2), mat), { position: new THREE.Vector3(-5, 0, 0) }));   // tail fluke
   scene.add(g); return { group: g };
 }
 function buildContainmentWalls(cx, cz) {
@@ -2741,8 +2754,8 @@ function makeTrooper(color) {
   const skin = new THREE.MeshStandardMaterial({ color: 0xb88a66, roughness: 0.72 });
   const vest = new THREE.MeshStandardMaterial({ color: 0x2c322a, roughness: 0.85, metalness: 0.15 });
   // bucket seat (cushion + back) so the figure clearly rests ON something
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.48), dark), { position: new THREE.Vector3(0, -0.06, 0.08) }));
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.52, 0.1), dark), { position: new THREE.Vector3(0, 0.2, -0.18) }));
+  g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.48), dark), { position: new THREE.Vector3(0, -0.06, 0.08) }));
+  g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.52, 0.1), dark), { position: new THREE.Vector3(0, 0.2, -0.18) }));
   // seated body
   const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.19, 0.4, 4, 8), mat); torso.position.set(0, 0.3, 0.0); torso.rotation.x = 0.1; g.add(torso);
   const rig = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.32, 0.16), vest); rig.position.set(0, 0.32, 0.12); g.add(rig);
@@ -2751,7 +2764,7 @@ function makeTrooper(color) {
   // arms resting forward on the lap
   for (const sx of [-1, 1]) { const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.065, 0.32, 4, 6), mat); arm.position.set(sx * 0.24, 0.26, 0.16); arm.rotation.x = 1.0; g.add(arm); }
   // thighs forward + shins down (the seated L) + boots
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.15, 0.4), mat), { position: new THREE.Vector3(0, 0.05, 0.24) }));
+  g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.15, 0.4), mat), { position: new THREE.Vector3(0, 0.05, 0.24) }));
   for (const sx of [-1, 1]) {
     const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.42, 6), dark); shin.position.set(sx * 0.11, -0.18, 0.42); g.add(shin);
     const boot = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.1, 0.24), dark); boot.position.set(sx * 0.11, -0.4, 0.5); g.add(boot);
@@ -3125,20 +3138,20 @@ function buildBoat() {                                    // detailed armored ri
   const ramp = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.5, 2.1), hullMat); ramp.position.set(2.9, 1.05, 0); ramp.rotation.z = 0.12; b.add(ramp);
   // pintle .50-cal gun mount on the bow deck
   const mount = new THREE.Group();
-  mount.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.7, 8), metalMat), { position: new THREE.Vector3(0, 0.35, 0) }));
-  mount.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.22, 0.22), trimMat), { position: new THREE.Vector3(0, 0.72, 0) }));
+  mount.add(mk3(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.7, 8), metalMat), { position: new THREE.Vector3(0, 0.35, 0) }));
+  mount.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.22, 0.22), trimMat), { position: new THREE.Vector3(0, 0.72, 0) }));
   const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 8), trimMat); barrel.rotation.z = Math.PI / 2; barrel.position.set(0.7, 0.72, 0); mount.add(barrel);
-  mount.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.7), hullDk), { position: new THREE.Vector3(-0.1, 0.78, 0) }));
+  mount.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.7), hullDk), { position: new THREE.Vector3(-0.1, 0.78, 0) }));
   mount.position.set(1.5, 0.94, 0); b.add(mount);
   // searchlight on the house roof (real spot, forward)
   const lampHead = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.18, 14), new THREE.MeshStandardMaterial({ color: 0xfff3d0, emissive: 0xfff3d0, emissiveIntensity: 1.6, roughness: 0.3 }));
   lampHead.rotation.z = Math.PI / 2; lampHead.position.set(-0.9, 2.6, 0); b.add(lampHead);
   const beam = new THREE.SpotLight(0xfff0c4, 5, 50, 0.45, 0.5, 1.1); beam.position.set(-0.8, 2.6, 0); beam.target.position.set(20, -0.5, 0); b.add(beam); b.add(beam.target);
   // antenna whip, life ring, cleats, stern engine + wake foam
-  b.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 2.0, 4), trimMat), { position: new THREE.Vector3(-2.5, 3.0, 0.6) }));
+  b.add(mk3(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 2.0, 4), trimMat), { position: new THREE.Vector3(-2.5, 3.0, 0.6) }));
   const lr = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.09, 8, 16), new THREE.MeshStandardMaterial({ color: 0xd6562f, roughness: 0.8 })); lr.position.set(-2.7, 1.3, 1.0); lr.rotation.y = Math.PI / 2; b.add(lr);
   for (const px of [3.0, -3.0]) for (const s of [1, -1]) { const cl = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.22, 6), metalMat); cl.position.set(px, 0.97, s * 1.15); b.add(cl); }
-  b.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 1.6), trimMat), { position: new THREE.Vector3(-3.3, 0.9, 0) }));
+  b.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 1.6), trimMat), { position: new THREE.Vector3(-3.3, 0.9, 0) }));
   const wake = new THREE.Mesh(new THREE.CircleGeometry(3.4, 24, 0, Math.PI), new THREE.MeshBasicMaterial({ color: 0xcfe0dc, transparent: true, opacity: 0.3, depthWrite: false }));
   wake.rotation.x = -Math.PI / 2; wake.rotation.z = -Math.PI / 2; wake.position.set(-5.4, -0.18, 0); b.add(wake); b.userData.wake = wake;
   b.userData.beam = beam;
@@ -3153,12 +3166,12 @@ function buildDock(dx) {                                  // a proper jetty: pla
   g.add(new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.28, len), wood));
   for (let i = 0; i < 11; i++) { const pl = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.3, 0.12), woodDk); pl.position.set(0, 0.01, -len / 2 + 0.6 + i * (len - 1.2) / 10); g.add(pl); }
   for (let zz = -len / 2 + 1; zz <= len / 2 - 1; zz += 3) for (const px of [-1.55, 1.55]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 4.2, 8), woodDk); post.position.set(px, -2.0, zz); g.add(post); }
-  for (const px of [-1.7, 1.7]) { g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, len), woodDk), { position: new THREE.Vector3(px, 0.7, 0) }));
+  for (const px of [-1.7, 1.7]) { g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, len), woodDk), { position: new THREE.Vector3(px, 0.7, 0) }));
     for (let zz = -len / 2 + 1; zz <= len / 2 - 1; zz += 2.4) { const rp = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.7, 0.08), woodDk); rp.position.set(px, 0.35, zz); g.add(rp); } }
   for (const px of [-1.3, 1.3]) { const bol = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.7, 8), metal); bol.position.set(px, 0.5, -len / 2 + 0.7); g.add(bol); }
-  g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.6, 6), metal), { position: new THREE.Vector3(1.6, 1.3, -len / 2 + 0.7) }));
+  g.add(mk3(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.6, 6), metal), { position: new THREE.Vector3(1.6, 1.3, -len / 2 + 0.7) }));
   const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), new THREE.MeshStandardMaterial({ color: 0xffe6a8, emissive: 0xffd070, emissiveIntensity: 1.3 })); lamp.position.set(1.6, 2.5, -len / 2 + 0.7); g.add(lamp);
-  g.add(Object.assign(new THREE.PointLight(0xffd9a0, 1.1, 18), { position: new THREE.Vector3(1.6, 2.5, -len / 2 + 0.7) }));
+  g.add(mk3(new THREE.PointLight(0xffd9a0, 1.1, 18), { position: new THREE.Vector3(1.6, 2.5, -len / 2 + 0.7) }));
   for (const c of [[-1, 5.5], [1.1, 6.4]]) { const cr = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.9, 1.0), woodDk); cr.position.set(c[0], 0.6, c[1]); g.add(cr); }
   g.position.set(dx, 1.4, cz);
   g.userData.standZ = cz + len / 2 + 1.6;                 // landward end → solid ground
@@ -3337,8 +3350,8 @@ function buildTransportBay() {                            // C-130-style fuselag
   const front = new THREE.Mesh(new THREE.BoxGeometry(0.2, H, W), mat); front.position.set(-L / 2, H / 2, 0); g.add(front);   // cockpit bulkhead
   const ramp = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.18, W - 0.2), dark); ramp.position.set(L / 2 + 1.1, -0.5, 0); ramp.rotation.z = 0.5; g.add(ramp);   // lowered rear ramp
   for (let i = -1; i <= 1; i++) { const rib = new THREE.Mesh(new THREE.TorusGeometry(W * 0.52, 0.08, 6, 14, Math.PI), mat); rib.position.set(i * 3, 0.1, 0); rib.rotation.z = -Math.PI / 2; g.add(rib); }
-  g.add(Object.assign(new THREE.PointLight(0x9fb0c0, 0.7, 13), { position: new THREE.Vector3(0, H - 0.4, 0) }));
-  g.add(Object.assign(new THREE.PointLight(0xbcd0e6, 1.6, 22), { position: new THREE.Vector3(L / 2 + 2, 1, 0) }));   // storm light through the open ramp
+  g.add(mk3(new THREE.PointLight(0x9fb0c0, 0.7, 13), { position: new THREE.Vector3(0, H - 0.4, 0) }));
+  g.add(mk3(new THREE.PointLight(0xbcd0e6, 1.6, 22), { position: new THREE.Vector3(L / 2 + 2, 1, 0) }));   // storm light through the open ramp
   const jl = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), new THREE.MeshStandardMaterial({ color: 0xd6562f, emissive: 0xd6562f, emissiveIntensity: 1.6 }));
   jl.position.set(L / 2 - 0.7, H - 0.5, W / 2 - 0.3); g.add(jl); g.userData.jumpLight = jl;
   return g;
@@ -3353,8 +3366,8 @@ function buildAirshipDeck() {                             // open flight deck of
   for (const px of [-6, -3, 0, 3, 6]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.0, 6), dark); post.position.set(px, 0.7, 3.7); g.add(post); }
   const rail = new THREE.Mesh(new THREE.BoxGeometry(13, 0.1, 0.1), dark); rail.position.set(0, 1.2, 3.7); g.add(rail);
   for (const c of [[5, -2], [-5, 1]]) { const cr = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 1.2), dark); cr.position.set(c[0], 0.7, c[1]); g.add(cr); }
-  g.add(Object.assign(new THREE.PointLight(0xffb070, 1.3, 26), { position: new THREE.Vector3(0, 1.5, 9) }));   // burning island glow from below the bow
-  g.add(Object.assign(new THREE.PointLight(0xcfe0ff, 0.6, 16), { position: new THREE.Vector3(0, 3, -2) }));
+  g.add(mk3(new THREE.PointLight(0xffb070, 1.3, 26), { position: new THREE.Vector3(0, 1.5, 9) }));   // burning island glow from below the bow
+  g.add(mk3(new THREE.PointLight(0xcfe0ff, 0.6, 16), { position: new THREE.Vector3(0, 3, -2) }));
   return g;
 }
 function buildParachute() {
