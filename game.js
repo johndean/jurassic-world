@@ -453,6 +453,7 @@ const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 let trees = [];         // {x,z,r}
 let foliageGroup = null;
 let dinos = [];         // active dino agents
+let dinosByNetId = new Map();   // co-op client only: _netId → puppet, for O(1) snapshot reconciliation
 let blobPool = [];
 let beaconMesh, beaconRing, beaconGlow, playerMesh;
 
@@ -1581,7 +1582,8 @@ function updatePlayer(dt) {
   // pushes you downstream so a crossing is a real "do I risk it?" decision, not free movement.
   const depth = WATER_Y - groundH(P.x, P.z);
   P.swim = inWater;
-  if (P.swim) {
+  const vaulting = P.air > 0.02 || P.vy > 0;   // F-15: mid jump/vault over the water's edge — let the arc finish before swim cancels it
+  if (P.swim && !vaulting) {
     P.air = 0; P.vy = 0; P.onProp = null;
     P.dive = crouch && depth > 2.0;
     const sl = riverSlope(P.x), cl = Math.hypot(1, sl), cur = 1.5 * dt;   // gentle downstream drift along the channel
@@ -1589,7 +1591,7 @@ function updatePlayer(dt) {
     P.stamina = Math.max(0, P.stamina - 4 * dt);
     if (P.dive) { P.oxygen = Math.max(0, (P.oxygen == null ? 100 : P.oxygen) - 14 * dt); if (P.oxygen <= 0) { P.hp = Math.max(0, P.hp - 9 * dt); flash(); if (P.hp <= 0 && P.alive) { P.alive = false; S.killedBy = null; endRun(false); } } }
     else P.oxygen = Math.min(100, (P.oxygen == null ? 100 : P.oxygen) + 24 * dt);
-  } else { P.dive = false; P.oxygen = Math.min(100, (P.oxygen == null ? 100 : P.oxygen) + 30 * dt); }
+  } else if (!P.swim) { P.dive = false; P.oxygen = Math.min(100, (P.oxygen == null ? 100 : P.oxygen) + 30 * dt); }
   // collide with trees (height-aware: a jump/mantle that clears the canopy base won't be wall-stopped)
   const feetY = (P.onProp ? P.propTopY : playerFloorY(P.x, P.z)) + (P.air || 0);
   for (let i = 0; i < trees.length; i++) {
@@ -1810,6 +1812,11 @@ function buildDinoMesh(sp) {
   if (gb.crest) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.5, 1.0), new THREE.MeshStandardMaterial({ color: 0xb98a4a, flatShading: true })); c.position.set(0, scale * 0.95, gb.bodyL * 0.7); c.rotation.x = 0.5; g.add(c); }
   const blob = new THREE.Mesh(new THREE.CircleGeometry(gb.bodyL * 0.9, 14), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.3, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; blob.position.y = 0.03; g.add(blob);
+  // F-16: normalise the greybox to EXACTLY standH (the same height buildModelMesh fits the .glb to),
+  // so a dino doesn't visibly resize when its textured model streams in and reskinDinos swaps it.
+  g.updateMatrixWorld(true);
+  const _gbb = new THREE.Box3().setFromObject(g), _gsz = new THREE.Vector3(); _gbb.getSize(_gsz);
+  if (_gsz.y > 0.01) g.scale.multiplyScalar(scale / _gsz.y);
   g.userData.greybox = true;   // flag so we can upgrade to the textured model once it streams in
   return g;
 }
@@ -2080,7 +2087,16 @@ function decide(a, P) {
     if ((per.seen || (bb.hasTarget && rng() < aggr)) && per.d < sp.senses.sightRangeM * 1.4) { a.state = (usesPackTactics(sp) ? "Chase" : (per.seen ? "Chase" : "Stalk")); return; }
     if (bb.hasTarget && (per.heard || rng() < aggr * 0.6)) { a.state = "Investigate"; return; }
   }
-  if (playerSafe()) bb.hasTarget = false;   // lose interest once you reach the beacon
+  if (playerSafe()) {
+    // hysteresis: don't blank the hunt the instant the player crosses the safe line. A predator that was
+    // chasing paces the boundary toward where it last saw them for a few seconds, then loses interest —
+    // no arcade on/off "sanctuary wall". (decide() runs ~4 Hz, so 6 / 0.25 ≈ 6 s of prowling.)
+    if (bb.hasTarget) {
+      bb.safeLingerT = (bb.safeLingerT == null ? 6 : bb.safeLingerT) - 0.25;
+      if (bb.safeLingerT > 0) { a.state = "Investigate"; return; }
+      bb.hasTarget = false; bb.safeLingerT = null;
+    }
+  } else if (bb.safeLingerT != null) bb.safeLingerT = null;   // left the zone → re-arm the linger timer
   // predator hierarchy: yield ground to a much stronger predator (emergent, not scripted)
   const rival = strongerRivalNear(a);
   if (rival) { a.state = "Retreat"; bb.lastSeenX = rival.x; bb.lastSeenZ = rival.z; bb.preyHunt = null; return; }
@@ -2597,7 +2613,7 @@ function pickRadioVoice() {
 }
 function speakRadio(text, opt) {
   try {
-    const ss = window.speechSynthesis; if (!ss) return;
+    const ss = window.speechSynthesis; if (!ss || !text) return;   // no text (e.g. a clip-only line whose clip failed) → stay silent, never speak "undefined"
     opt = opt || {};
     if (!_radioVoice) _radioVoice = pickRadioVoice();
     const u = new SpeechSynthesisUtterance(text);
@@ -3519,7 +3535,7 @@ function skipIntro() {
 /* ================================================== run lifecycle ======== */
 function startRun() {
   // reset
-  for (const d of dinos) scene.remove(d.mesh); dinos = [];
+  for (const d of dinos) scene.remove(d.mesh); dinos = []; dinosByNetId.clear();
   clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField(); clearIntroProp(); clearMissionSites(); clearBoss(); preloadRadio();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   applyUnlocks();                                                                     // persistent progression: veteran loadout bonuses
@@ -4159,13 +4175,20 @@ function netSendDinos() {           // HOST → clients: compact transform snaps
 function netApplyDinos(m) {          // CLIENT: reconcile puppets to the host snapshot
   if (Net.isHost || !m.d) return;
   const seen = new Set();
+  let built = 0;
   for (const e of m.d) {
     seen.add(e.i);
-    let a = dinos.find(d => d._netId === e.i);
-    if (!a) { if (!SPECIES[e.s]) continue; a = spawnDino(e.s, e.x, e.z); a._netId = e.i; a.yaw = e.y; dinos.push(a); }
+    let a = dinosByNetId.get(e.i);                       // O(1) lookup (no scan over dead puppets)
+    if (!a) {
+      if (!SPECIES[e.s] || built >= 8) continue;         // F-13: cap new puppet builds per snapshot so a join-burst spreads over a few frames instead of stalling one
+      a = spawnDino(e.s, e.x, e.z); a._netId = e.i; a.yaw = e.y; dinos.push(a); dinosByNetId.set(e.i, a); built++;
+    }
     a._netX = e.x; a._netZ = e.z; a._netYaw = e.y; a.state = e.st; a.hp = e.hp; if (e.an > 0) a.anim = Math.max(a.anim, e.an); a.alive = true;
   }
-  for (const a of dinos) { if (a._netId != null && !seen.has(a._netId) && a.alive) { a.alive = false; scene.remove(a.mesh); } }   // host culled it
+  for (let i = dinos.length - 1; i >= 0; i--) {           // host culled it → remove the puppet entirely (compact, so the array can't grow across waves)
+    const a = dinos[i];
+    if (a._netId != null && !seen.has(a._netId)) { scene.remove(a.mesh); dinos.splice(i, 1); dinosByNetId.delete(a._netId); }
+  }
 }
 function updateNetDinos(dt) {        // CLIENT: interpolate puppets toward host transforms + animate
   const k = Math.min(1, dt * 9), idt = Math.max(dt, 0.016);
