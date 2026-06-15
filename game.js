@@ -475,6 +475,7 @@ async function boot() {
   initTabs();
   initCharSelect();
   initLobby();
+  initOptions();
   requestAnimationFrame(frame);
   // stream models in the background so the menu/start button appears instantly;
   // creatures load first (re-skinning as they arrive), player + foliage build inside preloadModels
@@ -1336,6 +1337,7 @@ function initInput() {
   });
   const mo = $("mapOverlay"); if (mo) mo.addEventListener("pointerdown", e => { if (e.target === mo && mapOpen) toggleMap(); });   // tap backdrop to close
   const mm = document.querySelector(".minimap"); if (mm) mm.addEventListener("click", () => { if (!mapOpen) toggleMap(); });   // desktop: click minimap to expand
+  const me = $("mmEnlarge"); if (me) me.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); if (!mapOpen) toggleMap(); });   // explicit ENLARGE button (all platforms)
 
   // keyboard reference slideout — desktop only (touch users have on-screen labels + the joystick affordance)
   if (!isTouch) { const kb = $("keyHelpBtn"); if (kb) { kb.style.display = "block"; kb.addEventListener("click", toggleKeyHelp); } }
@@ -1379,7 +1381,7 @@ function setupTouch() {
     ["pointerup", "pointercancel", "pointerleave"].forEach(ev => ba.addEventListener(ev, () => input.action = false)); }
 }
 
-let _padJump = false;
+let _padJump = false, _padMap = false;
 function pollGamepad() {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   for (const gp of pads) {
@@ -1391,6 +1393,7 @@ function pollGamepad() {
     input.crouch = gp.buttons[1]?.pressed || false;   // B
     if (gp.buttons[2]?.pressed) tryCall();             // X
     const yb = gp.buttons[3]?.pressed || false; if (yb && !_padJump) tryJump(); _padJump = yb;   // Y (edge) → jump/climb
+    const mb = (gp.buttons[9]?.pressed || gp.buttons[8]?.pressed) || false; if (mb && !_padMap) toggleMap(); _padMap = mb;   // Start/Select (edge) → map
     return;
   }
 }
@@ -2462,7 +2465,44 @@ const _radioClips = {};
 function radioClip(name) { if (!_radioClips[name]) { const a = new window.Audio(RADIO_DIR + name + ".m4a"); a.preload = "auto"; a.volume = 0.95; _radioClips[name] = a; } return _radioClips[name]; }
 function preloadRadio() { try { ["pilot_mayday","pilot_brace","ranger_enter","ranger_thermal","soto_cleared","soto_alive","soto_samples","pilot_skids","convoy_sector","ranger2_ping","convoy_wrecked","convoy_tracks","boat_approach","boat_stations","boat_tunnel","boat_dock","mono_transit","mono_power","mono_restore","mono_doors","cmd_echo","cmd_halo","cmd_ramp","cmd_canopy","cmd_lastcarrier","cmd_apex","cmd_breach","cmd_ridedown"].forEach(radioClip); } catch (e) {} }
 function stopRadioClips() { for (const k in _radioClips) { try { _radioClips[k].pause(); _radioClips[k].currentTime = 0; } catch (e) {} } }
+/* ===================================================== accessibility ===== */
+const OPTS = { cb: "", scale: "1", subs: "0", hc: "0" };
+function applyOpts() {
+  document.body.classList.remove("cb-deut", "cb-prot", "cb-trit");
+  if (OPTS.cb) document.body.classList.add(OPTS.cb);
+  document.body.style.setProperty("--hud-zoom", OPTS.scale);
+  document.body.classList.toggle("subs-on", OPTS.subs === "1");
+  document.body.classList.toggle("hc", OPTS.hc === "1");
+}
+// iOS Safari ignores user-scalable=no, so block the pinch/double-tap gestures that otherwise zoom the
+// page and leave the player stuck zoomed-in. touch-action:manipulation (CSS) kills the double-tap zoom;
+// these kill pinch-zoom + any residual double-tap without breaking single taps on buttons.
+function blockPageZoom() {
+  ["gesturestart", "gesturechange", "gestureend"].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+  let lastEnd = 0;
+  document.addEventListener("touchend", e => { const now = e.timeStamp || performance.now(); if (now - lastEnd < 300) e.preventDefault(); lastEnd = now; }, { passive: false });
+  document.addEventListener("touchmove", e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+}
+function initOptions() {
+  blockPageZoom();
+  try { Object.assign(OPTS, JSON.parse(localStorage.getItem("jws_opts") || "{}")); } catch {}
+  applyOpts();
+  const save = () => { try { localStorage.setItem("jws_opts", JSON.stringify(OPTS)); } catch {} };
+  const rows = [["optCB", "cb"], ["optScale", "scale"], ["optSubs", "subs"], ["optHC", "hc"]];
+  const refresh = () => rows.forEach(([id, key]) => { const r = $(id); if (r) [...r.children].forEach(b => b.classList.toggle("on", b.dataset[key] === String(OPTS[key]))); });
+  rows.forEach(([id, key]) => { const r = $(id); if (r) r.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; OPTS[key] = b.dataset[key]; applyOpts(); refresh(); save(); }); });
+  refresh();
+  const ob = $("optBtn"); if (ob) { ob.style.display = "block"; ob.addEventListener("click", () => $("opts").classList.toggle("on")); }
+  const oc = $("optsClose"); if (oc) oc.addEventListener("click", () => $("opts").classList.remove("on"));
+}
+let _subTimer = null;
+function showSubtitle(text) {   // VO/radio caption when subtitles are enabled
+  const el = $("subtitle"); if (!el || !text || OPTS.subs !== "1") return;
+  el.textContent = text; el.classList.add("show");
+  clearTimeout(_subTimer); _subTimer = setTimeout(() => el.classList.remove("show"), 2600 + Math.min(4200, text.length * 45));
+}
 function playRadio(e) {   // e = { say, voice, clip }
+  if (e && e.say) showSubtitle(e.say);
   if (e && e.clip) {
     try { const a = radioClip(e.clip); a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => speakRadio(e.say, e.voice)); return; } catch (err) {}
   }
@@ -3592,6 +3632,21 @@ function mapSVG(big) {
   s += `<circle cx="${bx.toFixed(1)}" cy="${bz.toFixed(1)}" r="${safeR}" fill="rgba(111,174,107,0.06)" stroke="#6fae6b" stroke-width="0.5" stroke-dasharray="1.4 1.2" opacity="0.75"/>`;
   // ranger watchtowers — safe vantage points
   for (const t of TOWERS) { const [tx, tz] = toMM(t.x, t.z); s += `<polygon points="${tx.toFixed(1)},${(tz - 2).toFixed(1)} ${(tx - 1.7).toFixed(1)},${(tz + 1.4).toFixed(1)} ${(tx + 1.7).toFixed(1)},${(tz + 1.4).toFixed(1)}" fill="none" stroke="#8fb8c4" stroke-width="0.6"/>`; }
+  // ENLARGED map only: surface the WHOLE objective chain + range rings for complete awareness
+  if (big) {
+    const [pmx0, pmz0] = toMM(P.x, P.z);
+    for (const rm of [40, 80, 120]) { const rr = ((rm / half) * 46).toFixed(1); s += `<circle cx="${pmx0.toFixed(1)}" cy="${pmz0.toFixed(1)}" r="${rr}" fill="none" stroke="#6b7d6e" stroke-width="0.25" stroke-dasharray="0.6 1.4" opacity="0.4"/>`; }
+    const cm = activeCampaign();
+    if (cm && cm.phases && MC) {
+      cm.phases.forEach((ph, i) => {
+        if (ph.t === "extract" || ph.atBeacon) return;        // beacon drawn separately
+        const site = phaseSite(ph); const [px, pz] = toMM(site[0], site[1]);
+        const done = i < MC.idx, cur = i === MC.idx, col = done ? "#6fae6b" : (cur ? "#bfe2ea" : "#9aa6a0");
+        s += `<circle cx="${px.toFixed(1)}" cy="${pz.toFixed(1)}" r="1.7" fill="${cur ? "rgba(191,226,234,0.18)" : "none"}" stroke="${col}" stroke-width="0.6" opacity="${done ? 0.6 : 1}"><title>${i + 1}. ${typeof ph.l === "function" ? ph.l() : ph.l}</title></circle>`;
+        s += `<text x="${px.toFixed(1)}" y="${(pz + 0.9).toFixed(1)}" fill="${col}" font-size="2.6" font-weight="700" text-anchor="middle" opacity="${done ? 0.6 : 1}">${i + 1}</text>`;
+      });
+    }
+  }
   // active mission objective — tracks the CURRENT step for every mission type (not the fixed beacon)
   const obj = currentObjective();
   if (obj && !obj.roaming) {
