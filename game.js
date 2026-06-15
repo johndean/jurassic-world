@@ -1166,6 +1166,7 @@ function buildEndingPads(cx, cz) {
   g.userData.pads = pads; return g;
 }
 function startBoss() {
+  if (Net.on && !Net.isHost) return;   // co-op: host runs the finale; the Indominus + waves sync to clients as puppets
   const cx = 0, cz = -86;
   boss = { stage: "arrival", t: 0, cx, cz, chosen: null, outcomeT: 0, outcomeDur: 4, props: [], _cReady: false };
   S.player.noise = 1; spawnTimer = 0; Audio.roar(); flash();
@@ -1343,7 +1344,8 @@ function initInput() {
   const me = $("mmEnlarge"); if (me) me.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); if (!mapOpen) toggleMap(); });   // explicit ENLARGE button (all platforms)
 
   // keyboard reference slideout — desktop only (touch users have on-screen labels + the joystick affordance)
-  if (!isTouch) { const kb = $("keyHelpBtn"); if (kb) { kb.style.display = "block"; kb.addEventListener("click", toggleKeyHelp); } }
+  document.body.classList.toggle("is-touch", isTouch);   // CSS swaps the controls panel to touch mappings
+  { const kb = $("keyHelpBtn"); if (kb) { kb.style.display = "block"; kb.textContent = isTouch ? "❔" : "⌨ CONTROLS"; kb.addEventListener("click", toggleKeyHelp); } }
   const kc = $("keyHelpClose"); if (kc) kc.addEventListener("click", () => $("keyHelp").classList.remove("on"));
 }
 function toggleKeyHelp() { const k = $("keyHelp"); if (k) k.classList.toggle("on"); }
@@ -1384,19 +1386,27 @@ function setupTouch() {
     ["pointerup", "pointercancel", "pointerleave"].forEach(ev => ba.addEventListener(ev, () => input.action = false)); }
 }
 
-let _padJump = false, _padMap = false;
+const _pad = {};   // edge-trigger state for gamepad buttons
 function pollGamepad() {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   for (const gp of pads) {
     if (!gp) continue;
     const dz = v => Math.abs(v) < 0.18 ? 0 : v;
+    const bp = i => !!(gp.buttons[i] && gp.buttons[i].pressed);
+    const edge = (i, key) => { const p = bp(i); const fired = p && !_pad[key]; _pad[key] = p; return fired; };   // rising edge
     input.mx = dz(gp.axes[0] || 0); input.mz = dz(gp.axes[1] || 0);
     cam.yaw -= dz(gp.axes[2] || 0) * 0.05; cam.pitch = clamp(cam.pitch - dz(gp.axes[3] || 0) * 0.04, -0.95, 0.45);
-    input.sprint = gp.buttons[0]?.pressed || false;   // A
-    input.crouch = gp.buttons[1]?.pressed || false;   // B
-    if (gp.buttons[2]?.pressed) tryCall();             // X
-    const yb = gp.buttons[3]?.pressed || false; if (yb && !_padJump) tryJump(); _padJump = yb;   // Y (edge) → jump/climb
-    const mb = (gp.buttons[9]?.pressed || gp.buttons[8]?.pressed) || false; if (mb && !_padMap) toggleMap(); _padMap = mb;   // Start/Select (edge) → map
+    input.sprint = bp(0);                              // A
+    input.crouch = bp(1);                              // B
+    if (bp(2)) tryCall();                              // X
+    if (edge(3, "jump")) tryJump();                    // Y → jump/climb
+    if (edge(9, "map") || edge(8, "map2")) toggleMap();// Start/Select → map
+    if (edge(4, "toolPrev")) selectTool((selTool + TOOLS.length - 1) % TOOLS.length);   // LB → prev tool
+    if (edge(5, "toolNext")) selectTool((selTool + 1) % TOOLS.length);                   // RB → next tool
+    if (edge(7, "use")) useTool();                     // RT → use selected tool
+    if (edge(6, "binoc")) toggleBinoc();               // LT → binoculars
+    if (binoc && edge(12, "zin")) binocZoom(1);        // D-pad up → zoom in
+    if (binoc && edge(13, "zout")) binocZoom(-1);      // D-pad down → zoom out
     return;
   }
 }
@@ -2275,6 +2285,7 @@ function updateSpawnDirector(dt, P) {
   }
 }
 function spawnAtEdge(species, P) {
+  if (Net.on && !Net.isHost) return;   // co-op: extract waves are host-authoritative (sync to clients)
   const half = BIOME.map.size / 2 - 6;
   let x, z, tries = 0;
   do { x = rand(-half, half); z = rand(-half, half); tries++; } while (dist2(x, z, P.x, P.z) < 35 * 35 && tries < 12);
@@ -2586,7 +2597,7 @@ function initOptions() {
   const refresh = () => rows.forEach(([id, key]) => { const r = $(id); if (r) [...r.children].forEach(b => b.classList.toggle("on", b.dataset[key] === String(OPTS[key]))); });
   rows.forEach(([id, key]) => { const r = $(id); if (r) r.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; OPTS[key] = b.dataset[key]; applyOpts(); refresh(); save(); }); });
   refresh();
-  const ob = $("optBtn"); if (ob) { ob.style.display = "block"; ob.addEventListener("click", () => $("opts").classList.toggle("on")); }
+  const ob = $("optBtn"); if (ob) { ob.style.display = "block"; if (isTouch) ob.textContent = "⚙"; ob.addEventListener("click", () => $("opts").classList.toggle("on")); }
   const oc = $("optsClose"); if (oc) oc.addEventListener("click", () => $("opts").classList.remove("on"));
 }
 let _subTimer = null;

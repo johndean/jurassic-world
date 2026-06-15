@@ -14,13 +14,13 @@
 | Crouch (quieter) | `Ctrl` | B | CROUCH button |
 | **Jump / vault / climb** | `Space` | Y (edge) | **JUMP** button |
 | Interact (climb tower · zip · call) | `E` | X (call) | CALL button |
-| Use selected tool | `F` | — (tap tool) | USE button |
-| Select tool 1–6 | `1`–`6` | — | Tap a tool chip (tap again = use) |
-| Binoculars | `B` | — | 👁 button |
-| Binocular zoom | mouse wheel / `+` `-` | — | on-screen `+ / −` (bnIn/bnOut) |
+| Use selected tool | `F` | RT (edge) | USE button |
+| Select tool 1–6 | `1`–`6` | LB / RB cycle | Tap a tool chip (tap again = use) |
+| Binoculars | `B` | LT (edge) | 👁 button |
+| Binocular zoom | mouse wheel / `+` `-` | D-pad ↑ / ↓ | on-screen `+ / −` (bnIn/bnOut) |
 | **Open / ENLARGE map** | `M` / click minimap | Start/Select (edge) | 🗺 button **and ⛶ ENLARGE** button |
 | Close map | `M` / `Esc` / ✕ / tap backdrop | Start/Select | ✕ / tap backdrop |
-| Controls reference | `H` / `?` | — | (hidden — touch is self-evident) |
+| Controls reference | `H` / `?` | — | ❔ button (touch-mapping panel) |
 | **Options / accessibility** | ⚙ OPTIONS button | — | ⚙ OPTIONS button |
 | Map layer toggles (THREAT/TERRITORY/LAST-SEEN) | click chips | — | tap chips |
 
@@ -72,12 +72,23 @@ that is resolved: those elements now reflow compact instead of disappearing.
 - **Co-op lobby:** name/room text fields accept native keyboard on all platforms (typing guard prevents
   WASD/Space from leaking into gameplay while typing).
 
-## Known gaps / asymmetries (honest)
+## Full parity — all prior gaps CLOSED ✅
 
-- **Gamepad:** no dedicated binocular-zoom or tool-cycle button (use touch/keyboard for those); jump=Y,
-  map=Start, call=X, sprint=A, crouch=B are mapped.
-- **Controls reference (H panel):** desktop-only by design; touch controls are labeled on-screen.
-- **Co-op finale (boss/extract waves):** still spawns client-side; common missions are fully host-synced.
+- **Gamepad** is now fully mapped: move/look (sticks), A sprint · B crouch · Y jump · X call ·
+  **LB/RB cycle tools · RT use · LT binoculars · D-pad ↑↓ zoom** · Start map. No action requires
+  another input device.
+- **Controls reference** is reachable on **every** platform: desktop `H`/`?` + ⌨ button shows the
+  keyboard+gamepad panel; touch shows a dedicated **touch-mapping panel** via the ❔ button.
+- **Co-op finale** is now **host-authoritative**: `startBoss`, `spawnAtEdge` (extract waves) and
+  `spawnDrawn` (defend waves) are host-only; the Indominus + every wave is a normal `dinos[]` entry, so
+  it syncs to clients as a puppet. Clients no longer spawn anything locally. *(Co-op design note: in a
+  shared run the host drives the EXTINCTION ending choice; all players share the outcome.)*
+
+### Mobile layout notes (this pass)
+- The redundant 🗺 map button is hidden on touch — the minimap's **⛶ ENLARGE** button opens the map.
+- **Options (⚙)** and **Controls (❔)** are compact icon buttons in the clear bottom-right corner,
+  below the action buttons, so they never collide with the squad/compass/contact HUD that was un-hidden
+  for parity.
 
 ## Verification checklist (per platform)
 

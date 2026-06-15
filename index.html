@@ -441,6 +441,9 @@
   #keyHelpClose{font:inherit;color:#d7e0da;background:transparent;border:1px solid var(--hud-line);border-radius:5px;width:30px;height:30px;cursor:pointer;}
   #keyHelpClose:hover{border-color:#e0772f;color:#fff;}
   .kh-body{padding:14px 18px;overflow-y:auto;}
+  .kh-touch{padding:14px 18px;overflow-y:auto;display:none;}
+  body.is-touch .kh-touch{display:block;}
+  body.is-touch .kh-body{display:none;}
   .kh-sec{font-size:9px;letter-spacing:.22em;color:#8a978f;margin:16px 0 8px;border-bottom:1px dashed var(--hud-line);padding-bottom:5px;}
   .kh-sec:first-child{margin-top:0;}
   .kh-row{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;color:#c2ccc4;margin:7px 0;}
@@ -467,6 +470,11 @@
     .map-title{font-size:11px;letter-spacing:.1em;padding:8px 42px 8px 10px;}
     .map-legend{font-size:10px;gap:6px 12px;background:rgba(8,11,10,.82);left:8px;right:8px;}
     .map-hint{display:none;}
+    /* the minimap ⛶ ENLARGE button replaces the redundant 🗺 map button on touch */
+    #btnMap{display:none;}
+    /* Options + Controls as compact icon buttons in the clear bottom-right corner (clear of action buttons) */
+    #optBtn{top:auto;bottom:14px;right:14px;left:auto;width:44px;height:44px;padding:0;font-size:19px;text-align:center;line-height:44px;}
+    #keyHelpBtn{top:auto;bottom:64px;right:14px;width:44px;height:44px;padding:0;font-size:19px;text-align:center;line-height:44px;}
   }
   @media (prefers-reduced-motion:reduce){.contact{animation:none;}}
 </style>
@@ -669,6 +677,20 @@
 <button id="keyHelpBtn" title="Controls (H)">⌨ CONTROLS</button>
 <div id="keyHelp">
   <div class="kh-head">CONTROLS <button id="keyHelpClose">✕</button></div>
+  <div class="kh-touch">
+    <div class="kh-sec">TOUCH CONTROLS</div>
+    <div class="kh-row"><span class="keys"><kbd>L-STICK</kbd></span><span>Move (drag, bottom-left)</span></div>
+    <div class="kh-row"><span class="keys"><kbd>R-PAD</kbd></span><span>Look / aim (drag, right)</span></div>
+    <div class="kh-row"><span class="keys"><kbd>SPRINT</kbd></span><span>Run</span></div>
+    <div class="kh-row"><span class="keys"><kbd>CROUCH</kbd></span><span>Crouch (quieter)</span></div>
+    <div class="kh-row"><span class="keys"><kbd>JUMP</kbd></span><span>Jump · vault · climb a ledge you face</span></div>
+    <div class="kh-row"><span class="keys"><kbd>CALL</kbd></span><span>Climb tower · zip · call evac (context)</span></div>
+    <div class="kh-row"><span class="keys"><kbd>tool ▦</kbd></span><span>Tap a tool to select · tap again to USE (or the USE button)</span></div>
+    <div class="kh-row"><span class="keys"><kbd>👁</kbd></span><span>Binoculars · the on-screen <kbd>+ −</kbd> zoom</span></div>
+    <div class="kh-row"><span class="keys"><kbd>🗺 / ⛶</kbd></span><span>Open / ENLARGE the tactical map</span></div>
+    <div class="kh-row"><span class="keys"><kbd>⚙</kbd></span><span>Options — colorblind, HUD size, subtitles</span></div>
+    <div class="kh-tip">Everything the desktop build does is reachable by touch. Reach the <b>beacon</b> = safe zone.</div>
+  </div>
   <div class="kh-body">
     <div class="kh-sec">MOVEMENT</div>
     <div class="kh-row"><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>Move</span></div>
@@ -689,6 +711,12 @@
     <div class="kh-row"><span class="keys"><kbd>E</kbd></span><span>Climb tower · zip down · call evac (context)</span></div>
     <div class="kh-row"><span class="keys"><kbd>M</kbd></span><span>Toggle tactical map</span></div>
     <div class="kh-row"><span class="keys"><kbd>H</kbd> / <kbd>?</kbd></span><span>Toggle this panel</span></div>
+    <div class="kh-sec">GAMEPAD</div>
+    <div class="kh-row"><span class="keys"><kbd>L-stick</kbd> <kbd>R-stick</kbd></span><span>Move · Look</span></div>
+    <div class="kh-row"><span class="keys"><kbd>A</kbd> <kbd>B</kbd> <kbd>Y</kbd> <kbd>X</kbd></span><span>Sprint · Crouch · Jump · Call</span></div>
+    <div class="kh-row"><span class="keys"><kbd>LB</kbd> <kbd>RB</kbd> <kbd>RT</kbd></span><span>Prev tool · Next tool · Use tool</span></div>
+    <div class="kh-row"><span class="keys"><kbd>LT</kbd> <kbd>D-pad ↑↓</kbd></span><span>Binoculars · Zoom</span></div>
+    <div class="kh-row"><span class="keys"><kbd>Start</kbd></span><span>Tactical map</span></div>
     <div class="kh-tip">Reach the <b>beacon</b> = safe zone. Call evac, survive the hold, then board the chopper.</div>
   </div>
 </div>
