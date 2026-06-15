@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-h";
+const BUILD = "2026-06-15-i";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -3092,7 +3092,7 @@ function endIntroJeep() {                                 // step out beside the
 }
 
 /* ── drivable vehicle (the parked ranger jeep) — additive: a deliberate enter/exit mode, free-walk untouched ── */
-const VEH = { accel: 12, drag: 1.1, brake: 18, maxFwd: 17, maxRev: 5, turn: 1.5, enterR: 4.6, bodyR: 2.2 };
+const VEH = { accel: 12, drag: 1.1, brake: 18, maxFwd: 17, maxRev: 5, turn: 1.5, enterR: 6.5, bodyR: 2.2 };
 function nearVehicle(P) {   // the parked drivable jeep, if you're standing next to it (on foot, in play)
   if (S.phase !== "playing" || P.driveVeh) return null;
   const j = worldJeep;
@@ -4183,7 +4183,7 @@ function diagSizes() {   // write actual rendered player/nearest-dino heights to
   for (const a of dinos) { if (!a.alive) continue; const d = dist2(a.x, a.z, P.x, P.z); if (d < ndd) { ndd = d; nd = a; } }
   let info = "B:" + BUILD + " player=" + ph.toFixed(2) + "m";
   if (nd) { _b.setFromObject(nd.mesh); _b.getSize(_s); info += " | " + nd.sp.id + "=" + _s.y.toFixed(2) + "m feetΔ=" + (_b.min.y - groundH(nd.x, nd.z)).toFixed(2) + " " + (nd.mesh.userData.greybox ? "GREYBOX" : "model"); }
-  info += " | models=" + Object.keys(MODELS).length;
+  info += " | jeep=" + (worldJeep ? Math.sqrt(dist2(P.x, P.z, worldJeep.position.x, worldJeep.position.z)).toFixed(1) + "m" + (worldJeep.userData && worldJeep.userData.drivable ? "" : "(!drv)") : "none");
   if (_introErrMsg) { info = "⚠ INTRO " + _introErrMsg + "  ·  " + info; tag.style.color = "#ff6b5a"; }
   tag.textContent = info; tag.style.opacity = "0.9";
 }
