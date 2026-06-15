@@ -29,8 +29,21 @@ The game is **functionally sound and shippable as a vertical slice**. The six-cl
 | F-10 colorblind reaches map legend | **Shipped** — legend fills use `--hud` vars | `b8cb868` |
 | F-11 survival chips ignore HUD-zoom | **Shipped** — `#survHud` now scales with `--hud-zoom` | `b8cb868` |
 | F-12 map-layer toggles not persisted | **Shipped** — `localStorage` round-trip | `b8cb868` |
+| F-03 beacon aggression hysteresis | **Shipped** — predators pace the safe-zone perimeter ~6 s before disengaging; re-arm on exit | `67f4168` |
+| F-08 voice/subtitle fallback | **Shipped** — `speakRadio` guards empty text (subtitle path was already guarded) | `67f4168` |
+| F-13 co-op spawn-burst cap | **Shipped** — ≤8 new puppet builds per snapshot | `67f4168` |
+| F-14 O(n) sync + dead-puppet leak | **Shipped** — `_netId` Map (O(1)) + array compaction | `67f4168` |
+| F-15 vault cancelled at water's edge | **Shipped** — ballistic arc finishes before swim physics take over | `67f4168` |
+| F-16 greybox→model size pop | **Shipped** — greybox normalised to exact `standH` | `67f4168` |
 | F-04 collision cell-boundary clip | **Closed — false positive** (see §4) | — |
 | F-06 jeep intro silent-jungle | **Closed — false positive** (see §4) | — |
+| F-07 oxygen-death respawn dive-state | **Closed — false positive** (see §4) | — |
+| P-01 intro first radio line skipped | **Closed — false positive** (see §4) | — |
+| P-02 crash heli sinks below terrain | **Closed — false positive** (see §4) | — |
+| P-03 boat wake not animated | **Closed — false positive** (see §4) | — |
+| P-04 monorail camera null guard | **Closed — already present** (see §4) | — |
+
+**Tally:** 14 findings actioned — **8 shipped**, **6 closed as false-positive/already-handled**. The high false-positive share is concentrated in the §2 polish set and the pre-existing F-0x items, which predate this session's earlier fixes; every high-severity correctness finding (F-01/F-02/F-03/F-05/F-13/F-14/F-15) was real and is shipped.
 
 ### System scorecard
 
@@ -209,12 +222,12 @@ The game is **functionally sound and shippable as a vertical slice**. The six-cl
 
 ## §3 — IMMERSION / "FEELS GAMEY" REGISTER
 
-| What reads as artificial | Fix direction |
-|---|---|
-| Predators "switch off" when you out-run LOD (F-02) and "freeze" at the safe-zone line (F-03) | Persist hunt memory off-LOD; decay aggression at the ring, don't zero it |
-| `strongerRivalNear` exists and works, but most ecosystem fields (`social`, `packRoles`, `noiseDrawWeight`, `turnRate`) are unread | Wire them incrementally for species personality (additive, no balance break) |
-| Static boat wake, possible heli terrain-sink, skippable first radio line | The §2 P-01..P-04 cinematic polish set |
-| Silent jungle after jeep intro (F-06) | One-line ambient restore |
+| What reads as artificial | Fix direction | Status |
+|---|---|---|
+| Predators "switch off" when you out-run LOD (F-02) and "freeze" at the safe-zone line (F-03) | Persist hunt memory off-LOD; decay aggression at the ring, don't zero it | **Both shipped** (`b8cb868`/`67f4168`) |
+| `strongerRivalNear` works, but most ecosystem fields (`social`, `packRoles`, `noiseDrawWeight`, `turnRate`) are unread | Wire them incrementally for species personality (additive, no balance break) | Open (P-06, low) |
+| Static boat wake / heli terrain-sink / skippable first radio line | — | **Closed — all false positives** (§4) |
+| Silent jungle after jeep intro (F-06) | — | **Closed — false positive** (§4) |
 
 ---
 
@@ -232,6 +245,11 @@ Recording these so they aren't "fixed" into new bugs:
 | SAFE ZONE ring "never drawn on minimap" | **Unconfirmed** — ring draw is unconditional in `mapSVG`; agent's own analysis retracted to "possibly clipped." Treat as visual-confirm item, not a code bug. |
 | **F-04** collision spatial-hash misses adjacent-cell colliders → clip | **FALSE** — `addCollider` registers each proxy into every cell within `pad = r + 2` (game.js:866). A collision needs `dist < c.r + pr` and max body radius `pr ≤ 2`, so `dist < c.r + 2 = pad` ⇒ the entity's own cell is always registered. Single-cell `queryColliders` is provably sufficient; a 3×3 query would be redundant + a perf cost. |
 | **F-06** jeep intro kills ambient and never restores it | **FALSE** — `endIntroJeep()` calls `finishIntroCommon()` (game.js), which calls `Audio.ambient(true)`. Ambient is restored ~5 s after the dramatic cut. Audit agent missed the indirection. |
+| **F-07** oxygen-death respawn doesn't reset dive/oxygen | **FALSE** — `startRun` (game.js:3528) already resets `swim:false, dive:false, oxygen:100`, and there is no mid-run respawn (death → end screen → fresh `startRun` at origin). |
+| **P-01** intro first radio line is skipped | **FALSE** — each intro inits `line:-1` and the update checks `INTRO_RADIO[line+1]`, i.e. index 0 against line-0's own scheduled time. Line 0 displays correctly at its `t`. |
+| **P-02** crash heli sinks below terrain before fade | **FALSE** — the heli lerps *toward* `groundH(wx,wz)` and `fitModel` puts the model's base at the group origin, so at `group.y = groundH` it rests on the surface; lerp never overshoots below. |
+| **P-03** boat wake mesh is static | **FALSE** — `updateIntroBoat` animates it: `b.userData.wake.material.opacity = 0.22 + abs(sin(T*4))*0.12` (game.js:3168). |
+| **P-04** monorail camera has no null guard | **FALSE (already present)** — `updateIntroCameraMonorail` opens with `const c = intro.car; if (!c) return;` (game.js:3287), added in the monorail rigid-camera fix. |
 
 ---
 
