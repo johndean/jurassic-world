@@ -1341,7 +1341,9 @@ function initInput() {
   });
   const mo = $("mapOverlay"); if (mo) mo.addEventListener("pointerdown", e => { if (e.target === mo && mapOpen) toggleMap(); });   // tap backdrop to close
   const mm = document.querySelector(".minimap"); if (mm) mm.addEventListener("click", () => { if (!mapOpen) toggleMap(); });   // desktop: click minimap to expand
-  const me = $("mmEnlarge"); if (me) me.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); if (!mapOpen) toggleMap(); });   // explicit ENLARGE button (all platforms)
+  // explicit ENLARGE button (all platforms). Use click (iOS-reliable, no preventDefault so the tap isn't
+  // eaten); stopPropagation so the minimap's own click handler doesn't immediately toggle it back.
+  const me = $("mmEnlarge"); if (me) ["click", "pointerup"].forEach(ev => me.addEventListener(ev, e => { e.stopPropagation(); if (!mapOpen) toggleMap(); }));
 
   // keyboard reference slideout — desktop only (touch users have on-screen labels + the joystick affordance)
   document.body.classList.toggle("is-touch", isTouch);   // CSS swaps the controls panel to touch mappings
@@ -2583,10 +2585,12 @@ function applyOpts() {
 // page and leave the player stuck zoomed-in. touch-action:manipulation (CSS) kills the double-tap zoom;
 // these kill pinch-zoom + any residual double-tap without breaking single taps on buttons.
 function blockPageZoom() {
-  ["gesturestart", "gesturechange", "gestureend"].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
-  let lastEnd = 0;
-  document.addEventListener("touchend", e => { const now = e.timeStamp || performance.now(); if (now - lastEnd < 300) e.preventDefault(); lastEnd = now; }, { passive: false });
-  document.addEventListener("touchmove", e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+  // Stop pinch zoom at its START only (gesturestart + a 2-finger touchstart) so the page can never get
+  // zoomed in the first place. Crucially we do NOT touch touchend / single-finger touchmove — doing so
+  // ate button taps (ENLARGE) and trapped the user when already zoomed. touch-action:manipulation (CSS)
+  // handles double-tap zoom. If a stale zoom persists, a reload resets to scale 1.
+  ["gesturestart", "gesturechange"].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+  document.addEventListener("touchstart", e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
 }
 function initOptions() {
   blockPageZoom();
