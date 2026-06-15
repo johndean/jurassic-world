@@ -1714,14 +1714,24 @@ function measureBox(obj) {
 }
 function fitModel(model, targetH, yawOffset) {
   const g = new THREE.Group();
+  model.scale.setScalar(1); model.updateMatrixWorld(true);   // clear any baked root scale for a clean measure
   let box = measureBox(model);
   const size = new THREE.Vector3(); box.getSize(size);
   model.scale.setScalar(targetH / (size.y || 1));
+  model.updateMatrixWorld(true);
   box = measureBox(model);
   const c = new THREE.Vector3(); box.getCenter(c);
   model.position.x -= c.x; model.position.z -= c.z; model.position.y -= box.min.y;  // center + drop feet to 0
   model.rotation.y = yawOffset || 0;     // facing correction (model forward axis vs game +Z)
   g.add(model);
+  // GROUND-TRUTH height correction: skinned/armature exports (player, T-Rex use Armature scale 0.01) can
+  // bind-pose-mis-measure and come out the wrong size; force the actual rendered world height to targetH.
+  g.updateMatrixWorld(true);
+  const wb = new THREE.Box3().setFromObject(g), ws = new THREE.Vector3(); wb.getSize(ws);
+  if (ws.y > 0.02 && Math.abs(ws.y / targetH - 1) > 0.12) {
+    model.scale.multiplyScalar(targetH / ws.y); model.updateMatrixWorld(true);
+    const b2 = new THREE.Box3().setFromObject(model); model.position.y -= b2.min.y;
+  }
   return g;
 }
 // Locate the main rotor hub on a helicopter model: average x/z of the top vertex band.
@@ -3193,10 +3203,11 @@ function buildMonorailStation(x, z) {
 }
 function startIntroMonorail() {
   const y0 = groundH(0, 30);
-  const c = buildMonorail(); c.position.set(0, y0, 60); c.rotation.y = Math.PI / 2;   // front (+x) → world −z
-  seatTroopers(c, [[-1.5, 1.16, 0.78], [-1.5, 1.16, -0.78], [0.1, 1.16, 0.78]], Math.PI / 2, 0.82);
-  const rail = buildMonorailRail(0, -16, 92), stn = buildMonorailStation(0, 2);   // visible guideway + ruined station
-  scene.add(rail); scene.add(stn); introExtra.push(rail, stn);
+  let c;
+  try { c = buildMonorail(); } catch (e) { console.warn("monorail car", e); c = new THREE.Group(); }   // never let a decoration kill the intro
+  c.position.set(0, y0, 60); c.rotation.y = Math.PI / 2;   // front (+x) → world −z
+  try { seatTroopers(c, [[-1.5, 1.16, 0.78], [-1.5, 1.16, -0.78], [0.1, 1.16, 0.78]], Math.PI / 2, 0.82); } catch (e) { console.warn("monorail crew", e); }
+  try { const rail = buildMonorailRail(0, -16, 92), stn = buildMonorailStation(0, 2); scene.add(rail); scene.add(stn); introExtra.push(rail, stn); } catch (e) { console.warn("monorail scene", e); }   // visible guideway + ruined station
   scene.add(c); introProp = c;
   intro = { kind: "monorail", t: 0, phase: "transit", car: c, y0, line: -1, shake: 0, camActive: true };
   introOpen("Jurassic Survival · The Last Sample · Sector 4");
