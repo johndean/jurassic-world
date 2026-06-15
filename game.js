@@ -359,10 +359,15 @@ function updateMission(dt) {
   else if (ph.t === "collect") { if (dnaSamples >= (ph.count || 3)) done = true; }
   else if (ph.t === "defend") {   // hold the line: survive a timed predator assault at the site
     const [x, z] = phaseSite(ph);
-    if (!MC.started) { MC.started = true; MC.defendT = ph.dur || 45; MC.spawnAcc = 0; S.player.noise = 1; spawnTimer = 0; Audio.roar(); for (let i = 0; i < (ph.n || 3); i++) spawnDrawn(ph.species || "deinonychus", P); toast("⚠ HOLD THE LINE — " + Math.ceil(MC.defendT) + "s"); }
-    MC.defendT -= dt; MC.spawnAcc += dt;
-    if (MC.spawnAcc >= (ph.every || 8)) { MC.spawnAcc = 0; spawnDrawn(ph.species || "deinonychus", P); }
-    if (MC.defendT <= 0 && dist2(P.x, P.z, x, z) < ((ph.r || 9) + 6) * ((ph.r || 9) + 6)) done = true;   // survived + held the position
+    if (!MC.started) { MC.started = true; MC.defendT = ph.dur || 45; MC.spawnAcc = 0; MC.heldOk = false; S.player.noise = 1; spawnTimer = 0; Audio.roar(); for (let i = 0; i < (ph.n || 3); i++) spawnDrawn(ph.species || "deinonychus", P); toast("⚠ HOLD THE LINE — " + Math.ceil(MC.defendT) + "s"); }
+    const inZone = dist2(P.x, P.z, x, z) < ((ph.r || 9) + 6) * ((ph.r || 9) + 6);
+    if (MC.defendT > 0) {                                        // still holding: count down and keep the assault coming
+      MC.defendT -= dt; MC.spawnAcc += dt;
+      if (MC.spawnAcc >= (ph.every || 8)) { MC.spawnAcc = 0; spawnDrawn(ph.species || "deinonychus", P); }
+      if (MC.defendT <= 0) { MC.heldOk = inZone; if (!inZone) toast("⚠ RETURN TO THE POST TO SECURE IT"); }   // bell rung: snapshot whether you held, prompt if knocked off
+    }
+    // timer done → no more waves (no infinite spawns while a knocked-back player scrambles back); complete if you held at the bell or step back in
+    if (MC.defendT <= 0 && (MC.heldOk || inZone)) done = true;
   }
   else if (ph.t === "boss") {   // EXTINCTION finale — Indominus encounter + branching endings (resolves the run itself)
     if (!MC.started) { MC.started = true; startBoss(); }
@@ -1353,6 +1358,7 @@ function initInput() {
     const b = e.target.closest("button"); if (!b) return; e.preventDefault();
     const k = b.dataset.layer; if (!(k in mapLayers)) return;
     mapLayers[k] = !mapLayers[k]; b.classList.toggle("on", mapLayers[k]);
+    try { localStorage.setItem("jws_mapLayers", JSON.stringify(mapLayers)); } catch (e) {}   // remember the overlay choice across sessions
     if (mapOpen) $("mapBigSvg").innerHTML = mapSVG(true);
   });
   const mo = $("mapOverlay"); if (mo) mo.addEventListener("pointerdown", e => { if (e.target === mo && mapOpen) toggleMap(); });   // tap backdrop to close
@@ -2265,7 +2271,17 @@ function updateDinos(dt, P) {
     if (!a.alive) continue;
     a.lod = dist2(a.x, a.z, P.x, P.z) < BIOME.spawnDirector.activeRadiusM ** 2 ? "full" : "background";
     a.decideIn -= dt;
-    if (a.decideIn <= 0) { a.decideIn = 0.25; if (a.lod === "full") decide(a, P); else { a.state = baseStateFor(a.sp); } }
+    if (a.decideIn <= 0) {
+      a.decideIn = 0.25;
+      if (a.lod === "full") { decide(a, P); a.bgSinceT = 0; }
+      else {
+        // off-LOD: don't blank an active hunt every frame — keep target memory for a short grace so a
+        // predator the player out-ran resumes the chase on re-entry, then settle to base behaviour.
+        a.bgSinceT = (a.bgSinceT || 0) + 0.25;
+        const hunting = a.bb.hasTarget && (a.state === "Chase" || a.state === "Attack" || a.state === "Stalk" || a.state === "Investigate");
+        if (!hunting || a.bgSinceT > 2) a.state = baseStateFor(a.sp);
+      }
+    }
     steer(a, dt, P);
     // dinos obey the same solid world — push out of props (full LOD only; big bodies use bigger radii
     // so they naturally can't squeeze through tight gaps). Downed/sedated dinos are frozen, so skip.
@@ -3866,7 +3882,7 @@ let mapOpen = false;
 // are toggleable layers on the fullscreen map.
 const MAP_SIGHT_R = 62;        // player auto-detect radius for live map intel (m)
 const MAP_GHOST_TTL = 28;      // last-seen ghost lifetime before it drops off the map (s)
-let mapLayers = { threat: true, territory: false, ghosts: true };
+let mapLayers = (() => { try { return Object.assign({ threat: true, territory: false, ghosts: true }, JSON.parse(localStorage.getItem("jws_mapLayers") || "{}")); } catch (e) { return { threat: true, territory: false, ghosts: true }; } })();   // persisted tactical-overlay preference
 // Internal AI state -> readable field label for the tactical map.
 function dinoMapState(d) {
   if (isDown(d)) return d.sedated ? "SEDATED" : "TRAPPED";
@@ -3970,6 +3986,7 @@ function mapSVG(big) {
 function toggleMap() {
   if (S.phase !== "playing" && !mapOpen) return;
   mapOpen = !mapOpen;
+  if (mapOpen) { const ml = $("mapLayers"); if (ml) ml.querySelectorAll("button[data-layer]").forEach(b => { const k = b.dataset.layer; if (k in mapLayers) b.classList.toggle("on", !!mapLayers[k]); }); }   // reflect the persisted overlay choice on the toggle buttons
   $("mapOverlay").classList.toggle("open", mapOpen);
 }
 
@@ -4166,14 +4183,21 @@ function updateNetDinos(dt) {        // CLIENT: interpolate puppets toward host 
 }
 function netSendWorld() {            // HOST → clients: mission phase + extraction + survivor (cohesion)
   Net.send({ t: "exfil", idx: MC ? MC.idx : -1, started: MC ? (MC.started ? 1 : 0) : 0,
-    called: S.extraction.called ? 1 : 0, hold: +(S.extraction.hold || 0).toFixed(1), threat: S.threat,
+    called: S.extraction.called ? 1 : 0, hold: +(S.extraction.hold || 0).toFixed(1), threat: S.threat, dna: dnaSamples,
     surv: survivor ? { f: survivor.following ? 1 : 0, x: +survivor.x.toFixed(1), z: +survivor.z.toFixed(1) } : 0 });
 }
 function netApplyWorld(m) {          // CLIENT: apply host's authoritative mission/extraction/survivor state
   if (Net.isHost) return;
   _netWorldLast = m; _netWorldLastT = performance.now();   // remember it so a late joiner can bootstrap to the live phase
-  if (m.idx != null && m.idx >= 0 && MC && m.idx !== MC.idx) { MC.idx = m.idx; try { applyPhaseMarker(); } catch (e) {} }
+  if (m.idx != null && m.idx >= 0 && MC && m.idx !== MC.idx) {
+    MC.idx = m.idx;
+    // replay completed-phase deltas so a late joiner's world matches: mark earlier consoles/objectives done
+    const cm = activeCampaign();
+    if (cm && cm.phases) for (let i = 0; i < m.idx && i < cm.phases.length; i++) cm.phases[i]._done = true;
+    try { applyPhaseMarker(); } catch (e) {}
+  }
   if (MC && m.started) MC.started = true;
+  if (m.dna != null && m.dna > dnaSamples) dnaSamples = m.dna;   // adopt the squad's DNA-collection progress (never drop our own)
   S.extraction.called = !!m.called; if (m.hold != null) S.extraction.hold = m.hold;
   if (m.threat != null) S.threat = m.threat;
   if (m.surv && survivor) { survivor.following = !!m.surv.f; survivor.x = m.surv.x; survivor.z = m.surv.z; }

@@ -29,7 +29,7 @@
   #hitDir.show{animation:hitdir 1s ease-out;}
   @keyframes hitdir{0%{opacity:.95;}100%{opacity:0;}}
   /* survival status chips (shown only when something is wrong) */
-  #survHud{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:41;display:none;gap:8px;pointer-events:none;}
+  #survHud{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:41;display:none;gap:8px;pointer-events:none;zoom:var(--hud-zoom,1);}
   #survHud .sv{font:10px ui-monospace,monospace;letter-spacing:.1em;color:#e7d8c8;background:rgba(8,11,10,.72);
     border:1px solid var(--hud-line);border-radius:4px;padding:4px 9px;}
   #survHud .sv.alert{color:#fff;border-color:var(--hud-alert);background:rgba(214,86,47,.22);}
@@ -191,9 +191,15 @@
   .lg-threat{background:var(--hud-alert);clip-path:polygon(50% 0,100% 100%,0 100%);}
   .lg-prey{background:var(--hud-stam);border-radius:50%;}
   .lg-exfil{background:none;border:1px solid var(--hud-accent);}
-  .lg-obj{background:#8fb8c4;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);}
-  .lg-tower{background:none;border:1px solid #8fb8c4;clip-path:polygon(50% 0,100% 100%,0 100%);}
-  .lg-safe{background:none;border:1px dashed #6fae6b;border-radius:50%;}
+  .lg-obj{background:var(--hud-stam);clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);}
+  .lg-tower{background:none;border:1px solid var(--hud-stam);clip-path:polygon(50% 0,100% 100%,0 100%);}
+  .lg-safe{background:none;border:1px dashed var(--hud-good);border-radius:50%;}
+  .lg-apex{background:var(--hud-alert);clip-path:polygon(50% 0,100% 100%,0 100%);box-shadow:0 0 0 1px #fff inset;}
+  .lg-trad{background:none;border:1px dashed var(--hud-alert);border-radius:50%;}
+  .lg-terr{background:none;border:1px dashed var(--hud-warn);border-radius:50%;}
+  .lg-seen{background:none;border:1px dotted var(--hud-alert);border-radius:50%;}
+  .lg-river{background:var(--hud-water);height:2px !important;align-self:center;}
+  .lg-valley{background:none;border:1px dotted #7d8a72;border-radius:50%;}
   .mm-hint{position:absolute;bottom:5px;right:7px;font-size:7px;letter-spacing:.1em;color:var(--hud-dim);opacity:.7;}
   .mm-enlarge{position:absolute;bottom:5px;right:6px;z-index:3;pointer-events:auto;cursor:pointer;
     font:9px ui-monospace,monospace;letter-spacing:.12em;color:#fff;background:rgba(224,119,47,.22);
@@ -561,10 +567,16 @@
       <span><i class="lg lg-self"></i>YOU</span>
       <span><i class="lg lg-obj"></i>OBJECTIVE</span>
       <span><i class="lg lg-threat"></i>PREDATOR</span>
+      <span><i class="lg lg-apex"></i>APEX</span>
       <span><i class="lg lg-prey"></i>HERBIVORE</span>
       <span><i class="lg lg-tower"></i>WATCHTOWER</span>
       <span><i class="lg lg-exfil"></i>EXTRACTION</span>
       <span><i class="lg lg-safe"></i>SAFE ZONE</span>
+      <span><i class="lg lg-trad"></i>THREAT RADIUS</span>
+      <span><i class="lg lg-terr"></i>TERRITORY</span>
+      <span><i class="lg lg-seen"></i>LAST SEEN</span>
+      <span><i class="lg lg-river"></i>RIVER</span>
+      <span><i class="lg lg-valley"></i>VALLEY EDGE</span>
     </div>
     <div class="mm-label" id="mmLabel"></div>
     <button class="mm-enlarge" id="mmEnlarge">⛶ ENLARGE</button>
@@ -582,19 +594,19 @@
     <div class="mm-grid"></div>
     <svg viewBox="0 0 100 100" class="mm-svg" id="mapBigSvg"></svg>
     <div class="map-legend">
-      <span><svg viewBox="0 0 10 10"><polygon points="5,1 9,5 5,9 1,5" fill="#8fb8c4"/></svg>OBJECTIVE</span>
-      <span><svg viewBox="0 0 10 10"><polygon points="5,1 9,9 1,9" fill="#6fae6b"/></svg>YOU</span>
-      <span><svg viewBox="0 0 10 10"><polygon points="5,1 9,9 1,9" fill="#d6562f"/></svg>PREDATOR</span>
-      <span><svg viewBox="0 0 10 10"><polygon points="5,1.2 8.8,8.8 1.2,8.8" fill="#d6562f" stroke="#fff" stroke-width="0.9"/></svg>APEX</span>
-      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.4" fill="#8fb8c4"/></svg>HERBIVORE</span>
-      <span><svg viewBox="0 0 10 10"><polygon points="5,1.2 8.8,8.8 1.2,8.8" fill="none" stroke="#8fb8c4" stroke-width="1.1"/></svg>WATCHTOWER</span>
-      <span><svg viewBox="0 0 10 10"><rect x="1.4" y="1.4" width="7.2" height="7.2" fill="none" stroke="#e0772f" stroke-width="1.1"/></svg>EXTRACTION</span>
-      <span><svg viewBox="0 0 10 10"><g stroke="#fff" stroke-width="0.9"><line x1="1" y1="5" x2="9" y2="5"/><line x1="5" y1="1" x2="5" y2="9"/></g><circle cx="5" cy="5" r="1.7" fill="#e0772f"/></svg>EVAC INBOUND</span>
-      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.6" fill="none" stroke="#6fae6b" stroke-width="1.1" stroke-dasharray="1.4 1.2"/></svg>SAFE ZONE</span>
-      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.8" fill="none" stroke="#d6562f" stroke-width="0.8" stroke-dasharray="1 1.2"/></svg>THREAT RADIUS</span>
-      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.8" fill="none" stroke="#c9a23a" stroke-width="0.8" stroke-dasharray="1.2 1.6"/></svg>TERRITORY</span>
-      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.2" fill="none" stroke="#d6562f" stroke-width="1" stroke-dasharray="1.4 1.4"/></svg>LAST SEEN</span>
-      <span><svg viewBox="0 0 10 10"><line x1="1" y1="3" x2="9" y2="7" stroke="#5b9fd6" stroke-width="1.3"/></svg>RIVER</span>
+      <span><svg viewBox="0 0 10 10"><polygon points="5,1 9,5 5,9 1,5" fill="var(--hud-stam)"/></svg>OBJECTIVE</span>
+      <span><svg viewBox="0 0 10 10"><polygon points="5,1 9,9 1,9" fill="var(--hud-good)"/></svg>YOU</span>
+      <span><svg viewBox="0 0 10 10"><polygon points="5,1 9,9 1,9" fill="var(--hud-alert)"/></svg>PREDATOR</span>
+      <span><svg viewBox="0 0 10 10"><polygon points="5,1.2 8.8,8.8 1.2,8.8" fill="var(--hud-alert)" stroke="#fff" stroke-width="0.9"/></svg>APEX</span>
+      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.4" fill="var(--hud-stam)"/></svg>HERBIVORE</span>
+      <span><svg viewBox="0 0 10 10"><polygon points="5,1.2 8.8,8.8 1.2,8.8" fill="none" stroke="var(--hud-stam)" stroke-width="1.1"/></svg>WATCHTOWER</span>
+      <span><svg viewBox="0 0 10 10"><rect x="1.4" y="1.4" width="7.2" height="7.2" fill="none" stroke="var(--hud-accent)" stroke-width="1.1"/></svg>EXTRACTION</span>
+      <span><svg viewBox="0 0 10 10"><g stroke="#fff" stroke-width="0.9"><line x1="1" y1="5" x2="9" y2="5"/><line x1="5" y1="1" x2="5" y2="9"/></g><circle cx="5" cy="5" r="1.7" fill="var(--hud-accent)"/></svg>EVAC INBOUND</span>
+      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.6" fill="none" stroke="var(--hud-good)" stroke-width="1.1" stroke-dasharray="1.4 1.2"/></svg>SAFE ZONE</span>
+      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.8" fill="none" stroke="var(--hud-alert)" stroke-width="0.8" stroke-dasharray="1 1.2"/></svg>THREAT RADIUS</span>
+      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.8" fill="none" stroke="var(--hud-warn)" stroke-width="0.8" stroke-dasharray="1.2 1.6"/></svg>TERRITORY</span>
+      <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.2" fill="none" stroke="var(--hud-alert)" stroke-width="1" stroke-dasharray="1.4 1.4"/></svg>LAST SEEN</span>
+      <span><svg viewBox="0 0 10 10"><line x1="1" y1="3" x2="9" y2="7" stroke="var(--hud-water)" stroke-width="1.3"/></svg>RIVER</span>
       <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.8" fill="none" stroke="#7d8a72" stroke-width="0.9" stroke-dasharray="1.6 1.6"/></svg>VALLEY EDGE</span>
     </div>
     <div class="map-hint">TAP OUTSIDE / ✕ / M / ESC TO CLOSE</div>
