@@ -1588,12 +1588,23 @@ function updatePlayer(dt) {
 }
 function lerp2angle(a, b) { let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI; return a + d * 0.25; }
 
-function damagePlayer(amount, bySpecies) {
+let camShake = 0;
+function damagePlayer(amount, bySpecies, fromX, fromZ) {
   const P = S.player; if (!P.alive) return;
   if (evacCine() || playerSafe() || P.onTower || P.zip) return;   // safe boarding / in beacon zone / up a watchtower / ziplining
   P.hp = Math.max(0, P.hp - amount);
   hitCooldownVisual = 3.0; flash(); Audio.hit();
+  camShake = Math.min(0.6, camShake + 0.35);                       // felt impact
+  if (fromX != null) showHitDir(fromX, fromZ);                     // directional damage indicator (which way the bite came from)
   if (P.hp <= 0) { P.alive = false; S.killedBy = bySpecies; endRun(false); }
+}
+// red chevron at the screen edge pointing toward the attacker, relative to where you're looking
+function showHitDir(fromX, fromZ) {
+  const el = $("hitDir"); if (!el) return;
+  const P = S.player, dx = fromX - P.x, dz = fromZ - P.z, d = Math.hypot(dx, dz) || 1;
+  const rel = Math.atan2((dx / d) * Math.cos(cam.yaw) - (dz / d) * Math.sin(cam.yaw), (dx / d) * Math.sin(cam.yaw) + (dz / d) * Math.cos(cam.yaw));
+  el.style.transform = `translate(-50%,-50%) rotate(${(rel * 180 / Math.PI).toFixed(0)}deg)`;
+  el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
 }
 
 /* ==================================================== dino AI (pillars) === */
@@ -1711,6 +1722,18 @@ function buildDinoMesh(sp) {
 }
 
 // perception: vision cone + hearing (no per-frame raycast; cost-bounded)
+// Line-of-sight: false if a tall solid prop (ruin/building/big rock) sits between two points — the
+// basis for real cover. Skips low props you can see over. Coarse-sampled, cost-bounded.
+function losClear(ax, az, bx, bz) {
+  const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz) || 1, steps = Math.min(14, Math.ceil(len / 4));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps, x = ax + dx * t, z = az + dz * t;
+    const near = queryColliders(x, z);
+    for (let j = 0; j < near.length; j++) { const c = near[j]; if (c.top != null && c.top < 1.4) continue; if (dist2(x, z, c.x, c.z) < c.r * c.r) return false; }
+    for (let j = 0; j < missionColliders.length; j++) { const c = missionColliders[j]; if (c.top != null && c.top < 1.4) continue; if (dist2(x, z, c.x, c.z) < c.r * c.r) return false; }
+  }
+  return true;
+}
 function perceive(a, P) {
   const dx = P.x - a.x, dz = P.z - a.z, d = Math.hypot(dx, dz) || 1;
   const s = a.sp.senses;
@@ -1720,7 +1743,7 @@ function perceive(a, P) {
   if (d < effRange) {
     const fwdx = Math.sin(a.yaw), fwdz = Math.cos(a.yaw);
     const dot = (dx / d) * fwdx + (dz / d) * fwdz;
-    if (dot > Math.cos(s.sightFovDeg * 0.5 * DEG)) seen = true;
+    if (dot > Math.cos(s.sightFovDeg * 0.5 * DEG) && losClear(a.x, a.z, P.x, P.z)) seen = true;   // solid cover breaks the sightline
   }
   // hearing: radius scales with player noise
   const heard = d < s.hearingRangeM * (0.35 + P.noise * 0.9);
@@ -1838,8 +1861,17 @@ function useTool() {
     t.cd = t.cdMax; let hit = null, hd = 99;
     const fx = Math.sin(P.yaw), fz = Math.cos(P.yaw);
     for (const a of dinos) { if (!a.alive || a.sp.diet !== "carnivore") continue; const rx = a.x - P.x, rz = a.z - P.z, dd = Math.hypot(rx, rz) || 1; if (dd < 3.6 && (rx * fx + rz * fz) / dd > 0.25 && dd < hd) { hd = dd; hit = a; } }
-    fxMelee(P.x, P.z, P.yaw);
-    if (hit) { hit.hp -= 22; hit.bb.scared = Math.max(hit.bb.scared, 1.8); hit.bb.lastSeenX = P.x; hit.bb.lastSeenZ = P.z; hit.state = "Retreat"; hit.anim = 0.3; Audio.hit(); flash(); fxReact(hit, hit.hp <= 0 ? "✕" : "!", "#e8907a"); if (hit.hp <= 0) killDino(hit); toast("STRUCK · " + hit.sp.displayName); }
+    fxMelee(P.x, P.z, P.yaw); camShake = Math.min(0.5, camShake + 0.28);
+    if (hit) {
+      // lethal last resort: heavier on small/wounded predators (a desperate, decisive blow)
+      const light = (hit.sp.combat.health || 100) < 140;
+      hit.hp -= light ? 40 : 22;
+      const kx = (hit.x - P.x), kz = (hit.z - P.z), kl = Math.hypot(kx, kz) || 1, kb = light ? 2.6 : 1.4;   // knockback
+      hit.x += kx / kl * kb; hit.z += kz / kl * kb;
+      hit.bb.scared = Math.max(hit.bb.scared, 2.2); hit.bb.lastSeenX = P.x; hit.bb.lastSeenZ = P.z; hit.state = "Retreat"; hit.anim = 0.3;
+      Audio.hit(); flash(); fxReact(hit, hit.hp <= 0 ? "✕" : "!", "#e8907a");
+      if (hit.hp <= 0) { killDino(hit); toast("DOWNED · " + hit.sp.displayName); } else toast("STRUCK · " + hit.sp.displayName + (light ? " — it reels" : " — it shrugs it off"));
+    }
     else toast("MELEE · nothing in reach");
   }
   else if (t.id === "tranq") {                                  // fire a sedative dart at whatever you're aiming at
@@ -2055,7 +2087,7 @@ function steer(a, dt, P) {
       run = true; tx = bb.hasTarget ? bb.lastSeenX : P.x; tz = bb.hasTarget ? bb.lastSeenZ : P.z;
       a.cd -= dt;
       const d = Math.hypot(P.x - a.x, P.z - a.z);
-      if (d < sp.combat.attackRangeM && a.cd <= 0 && S.player.alive) { a.cd = sp.combat.attackCooldownS; a.anim = 0.4; damagePlayer(sp.combat.damage, sp.displayName); }
+      if (d < sp.combat.attackRangeM && a.cd <= 0 && S.player.alive) { a.cd = sp.combat.attackCooldownS; a.anim = 0.4; damagePlayer(sp.combat.damage, sp.displayName, a.x, a.z); }
       // also can kill prey
       if (bb.preyHunt && Math.hypot(bb.preyHunt.x - a.x, bb.preyHunt.z - a.z) < sp.combat.attackRangeM + 1 && a.cd <= 0) { a.cd = 1; bb.preyHunt.hp -= 30; if (bb.preyHunt.hp <= 0) { a.feedT = rand(4, 7); a.state = "Feed"; bb.preyHunt = null; } }   // kill → feed at the carcass
       break;
@@ -2102,7 +2134,16 @@ function steer(a, dt, P) {
   // ---- roar: apex / heavy predators bellow periodically while engaged (with a camera-felt audio cue) ----
   if ((isApex(sp) || sp.combat.health >= 300) && a.lod === "full" && (a.state === "Chase" || a.state === "Attack")) {
     a.roarCd -= dt;
-    if (a.roarCd <= 0) { a.roar = 1.1; a.roarCd = rand(6, 11); if (dist2(a.x, a.z, P.x, P.z) < 62 * 62) Audio.roar(); }
+    if (a.roarCd <= 0) {
+      a.roar = 1.1; a.roarCd = rand(6, 11);
+      const dxp = a.x - P.x, dzp = a.z - P.z, dd = Math.hypot(dxp, dzp) || 1;
+      if (dd < 130) Audio.roarAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw));   // attenuated + panned by bearing
+    }
+  }
+  // heavy-predator footfalls thud through the ground when one is close (positional)
+  if (sp.combat.health >= 260 && a.lod === "full" && vmag > 0.5) {
+    a.footPhase = (a.footPhase || 0) + vmag * dt;
+    if (a.footPhase > 1.5) { a.footPhase = 0; const dxp = a.x - P.x, dzp = a.z - P.z, dd = Math.hypot(dxp, dzp) || 1; if (dd < 45) Audio.thudAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw)); }
   }
   // ---- procedural action overlays (additive on top of the gait) ----
   if (body) {
@@ -3398,6 +3439,30 @@ const Audio = (() => {
     },
     step(gait) { noise(0.09, gait === "run" ? 0.10 : 0.045, gait === "run" ? 1600 : 900); },
     roar() { ensure(); blip(110, 1.3, "sawtooth", 0.32, 42); noise(1.2, 0.18, 700); },
+    // positional roar: attenuate by distance (~to 130m) + stereo-pan by bearing relative to facing
+    roarAt(dist, pan) {
+      ensure(); if (!ctx) return;
+      const vol = Math.max(0.05, Math.min(1, 1 - dist / 130));
+      let out = ctx.destination;
+      if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan || 0)); p.connect(ctx.destination); out = p; }
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sawtooth"; o.frequency.value = 110; o.frequency.exponentialRampToValueAtTime(42, ctx.currentTime + 1.3);
+      g.gain.value = 0.32 * vol; g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1.3);
+      o.connect(g).connect(out); o.start(); o.stop(ctx.currentTime + 1.3);
+      const nb = ctx.createBufferSource(), buf = ctx.createBuffer(1, (ctx.sampleRate * 1.2) | 0, ctx.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      nb.buffer = buf; const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 700;
+      const ng = ctx.createGain(); ng.gain.value = 0.18 * vol; ng.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1.2);
+      nb.connect(f).connect(ng).connect(out); nb.start(); nb.stop(ctx.currentTime + 1.2);
+    },
+    // heavy footfall thud, positional — big predators stomping near you
+    thudAt(dist, pan) {
+      ensure(); if (!ctx) return; const vol = Math.max(0, Math.min(0.5, (1 - dist / 45) * 0.5)); if (vol < 0.03) return;
+      let out = ctx.destination;
+      if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan || 0)); p.connect(ctx.destination); out = p; }
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = 70; o.frequency.exponentialRampToValueAtTime(38, ctx.currentTime + 0.18);
+      g.gain.value = vol; g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22); o.connect(g).connect(out); o.start(); o.stop(ctx.currentTime + 0.22);
+    },
     hit() { noise(0.18, 0.3, 2200); blip(90, 0.18, "square", 0.12, 50); },
     beacon(call) { blip(call ? 880 : 1320, call ? 0.4 : 0.12, "square", 0.12, call ? 660 : null); },
     win() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => blip(f, 0.4, "triangle", 0.18), i * 130)); },
@@ -3727,6 +3792,7 @@ function updateCamera() {
   let cx = tx - Math.sin(cam.yaw) * d, cz = tz - Math.cos(cam.yaw) * d, cy = ty + cam.height + Math.sin(cam.pitch) * cam.dist * -1 + cam.dist * cp * 0.0;
   cy = ty + cam.height - Math.sin(cam.pitch) * cam.dist;
   const gh = (P.onTower ? P.onTower.platformY : groundH(cx, cz)) + 0.6; if (cy < gh) cy = gh;
+  if (camShake > 0) { cx += (Math.random() - 0.5) * camShake; cy += (Math.random() - 0.5) * camShake; cz += (Math.random() - 0.5) * camShake; camShake = Math.max(0, camShake - 0.045); }
   camera.position.set(cx, cy, cz);
   camera.lookAt(tx, ty, tz);
   // beacon spin + glow pulse

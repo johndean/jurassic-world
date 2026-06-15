@@ -21,6 +21,13 @@
   #diveTint{position:fixed;inset:0;pointer-events:none;z-index:30;opacity:0;transition:opacity .4s;
     background:radial-gradient(ellipse at center,rgba(20,80,120,.25),rgba(8,30,55,.72));}
   #diveTint.on{opacity:1;}
+  /* directional damage indicator — a red arc at screen-centre that rotates toward the attacker */
+  #hitDir{position:fixed;left:50%;top:50%;width:240px;height:240px;z-index:32;pointer-events:none;opacity:0;
+    transform:translate(-50%,-50%);border-radius:50%;
+    background:conic-gradient(from -20deg,rgba(214,86,47,0) 0deg,rgba(214,86,47,.55) 18deg,rgba(214,86,47,0) 36deg);
+    -webkit-mask:radial-gradient(circle,transparent 86px,#000 90px);mask:radial-gradient(circle,transparent 86px,#000 90px);}
+  #hitDir.show{animation:hitdir 1s ease-out;}
+  @keyframes hitdir{0%{opacity:.95;}100%{opacity:0;}}
 
   /* opening crash intro */
   #intro{position:fixed;inset:0;z-index:70;pointer-events:none;overflow:hidden;font-family:ui-monospace,monospace;}
@@ -464,6 +471,7 @@
 <div id="vig"></div>
 <div id="flash"></div>
 <div id="diveTint"></div>
+<div id="hitDir"></div>
 <div id="dev"></div>
 
 <!-- opening helicopter-crash intro (cinematic overlay) -->
