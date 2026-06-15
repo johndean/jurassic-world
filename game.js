@@ -3253,8 +3253,10 @@ function updateIntroMonorail(dt) {
 }
 function updateIntroCameraMonorail() {
   const c = intro.car; if (!c) return;
-  camera.position.lerp(tmp.set(c.position.x, c.position.y + 1.55, c.position.z + 1.5), 0.12);   // inside, near the rear, looking forward
-  camera.lookAt(c.position.x, c.position.y + 1.25, c.position.z - 9);
+  // RIGID follow (no lerp) so the camera moves exactly with the moving car — a lerping camera trailed
+  // the car as it drove, so the car kept sliding out of frame & back ("disappears and reappears").
+  camera.position.set(c.position.x + 0.55, c.position.y + 1.5, c.position.z + 1.7);   // inside, just behind the seated crew, looking forward
+  camera.lookAt(c.position.x, c.position.y + 1.2, c.position.z - 9);
   if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake * 0.6; }
 }
 function endIntroMonorail() { introProp = null; endIntroAtOrigin("THE LAST SAMPLE · restore power & retrieve the sample — reach the objective"); }
