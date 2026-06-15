@@ -994,6 +994,7 @@ const SURVIVORS = {
 };
 function clearMissionSites() { for (const s of missionSites) scene.remove(s); missionSites = []; survivor = null; missionColliders.length = 0; }
 function spawnDrawn(species, P) {   // a predator pulled toward the player by noise — spawns mid-range, already hunting
+  if (Net.on && !Net.isHost) return null;   // co-op: only the host spawns; clients receive dinos via sync
   if (!SPECIES[species]) return null;
   if (dinos.filter(d => d.alive).length >= BIOME.spawnDirector.maxActiveAI + 6) return null;   // hard cap (no runaway)
   const half = BIOME.map.size / 2 - 6, ang = rand(0, Math.PI * 2), d = rand(40, 60);
@@ -1405,6 +1406,12 @@ function pollGamepad() {
 // Everything (ground mesh, foliage, rocks, dinos, player) is placed by this single function.
 const RIVER_HALF = 17;                                             // navigable channel half-width (wide enough for the patrol boat)
 const WATER_Y = -0.55;                                             // river surface height (boat rides on this)
+// terrain pitch along a heading — used to tilt the player + dinos to the slope (foot adaptation)
+function terrainPitch(x, z, yaw) {
+  const s = Math.sin(yaw), c = Math.cos(yaw), a = 1.3;
+  const hF = groundH(x + s * a, z + c * a), hB = groundH(x - s * a, z - c * a);
+  return clamp(Math.atan2(hF - hB, a * 2) * 0.6, -0.5, 0.5);
+}
 function riverCenter(x) { return 48 + Math.sin(x * 0.02) * 28; }   // river centerline z(x)
 function riverSlope(x) { return Math.cos(x * 0.02) * 28 * 0.02; }  // d(riverCenter)/dx — used to align the boat to the current
 function groundH(x, z) {
@@ -1581,7 +1588,16 @@ function updatePlayer(dt) {
   P.eyeY = standY;                                                                 // camera follows jumps/climbs/swim
   playerMesh.position.set(P.x, standY + 0.9 - crouchDrop + idleBob + runBounce, P.z);
   playerMesh.rotation.y = P.yaw;
-  playerMesh.rotation.x = (P.gait === "run" ? 0.16 : 0) + (P.gait === "crouch" ? 0.22 : 0) + (P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.012 : 0);
+  const slopeP = (P.onProp || P.air > 0.05 || P.swim) ? 0 : terrainPitch(P.x, P.z, P.yaw) * 0.7;   // lean to the hillside
+  playerMesh.rotation.x = (P.gait === "run" ? 0.16 : 0) + (P.gait === "crouch" ? 0.22 : 0) + (P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.012 : 0) + slopeP;
+
+  // anti-stuck safeguard: if you're trying to move but wedged between colliders, nudge free toward open ground
+  if (moving && !P.onTower && !P.zip) {
+    const moved = dist2(P.x, P.z, P._lastX == null ? P.x : P._lastX, P._lastZ == null ? P.z : P._lastZ);
+    if (moved < (speed * dt * 0.25) ** 2) { P._stuckT = (P._stuckT || 0) + dt; if (P._stuckT > 0.7) { const c = queryColliders(P.x, P.z)[0]; if (c) { const ux = P.x - c.x, uz = P.z - c.z, ul = Math.hypot(ux, uz) || 1; P.x += ux / ul * 0.6; P.z += uz / ul * 0.6; } else { P.x += wx * 0.4; P.z += wz * 0.4; } P._stuckT = 0; } }
+    else P._stuckT = 0;
+  } else P._stuckT = 0;
+  P._lastX = P.x; P._lastZ = P.z;
 
   // extraction proximity
   const bd = Math.sqrt(dist2(P.x, P.z, S.extraction.beacon.x, S.extraction.beacon.z));
@@ -2135,12 +2151,20 @@ function steer(a, dt, P) {
   a.x += a.vx * dt; a.z += a.vz * dt;
   const lim = BIOME.map.size / 2 - 3; a.x = clamp(a.x, -lim, lim); a.z = clamp(a.z, -lim, lim);
   if (Math.hypot(a.vx, a.vz) > 0.2) a.yaw = lerp2angle(a.yaw, Math.atan2(a.vx, a.vz));
+  animateDino(a, dt);
+}
+// Drive a dino's mesh placement + procedural animation from its current x/z/yaw/vx/vz/state. Shared by
+// the AI path (steer) and the co-op CLIENT puppet path (host-authoritative transforms, no local AI).
+function animateDino(a, dt) {
+  const sp = a.sp, P = S.player;
   // place + animate (fliers cruise/dive, aquatic species float in the channel)
   a.mesh.position.set(a.x, dinoY(a), a.z);
   a.mesh.rotation.y = a.yaw;
+  a.mesh.rotation.x = (isFlier(sp) || isAquatic(sp)) ? 0 : terrainPitch(a.x, a.z, a.yaw) * 0.5;   // foot/terrain adaptation on slopes
   a.anim = Math.max(0, a.anim - dt);
   if (a.roar > 0) a.roar = Math.max(0, a.roar - dt);
   const vmag = Math.hypot(a.vx, a.vz);
+  const run = a.state === "Chase" || a.state === "Attack" || a.state === "Flee" || a.state === "Retreat";
   const moveAmt = Math.min(1, vmag / sp.move.run);
   const body = a.mesh.children[0];
   // ---- base locomotion ----
@@ -3915,8 +3939,11 @@ let devFrames = 0, devAt = performance.now(), devFps = 0;
 function simulate(dt) {
   S.t += dt;
   updatePlayer(dt);
-  updateDinos(dt, S.player);
-  updateSpawnDirector(dt, S.player);
+  // co-op CLIENT: dinos are host-authoritative — puppet them, don't run a local spawn director or AI
+  // (that's what made the world diverge between players). HOST + solo run the full sim.
+  const coopClient = Net.on && !Net.isHost;
+  if (coopClient) updateNetDinos(dt);
+  else { updateDinos(dt, S.player); updateSpawnDirector(dt, S.player); }
   updateThreat(dt, S.player);
   updateExtraction(dt);
   updateEvac(dt);
@@ -3994,11 +4021,60 @@ function updateRemotes(dt) {
     if (r.mixer) r.mixer.update(dt);
   }
 }
+/* ---- host-authoritative world sync (dinos + mission/extraction + survivor) ---- */
+let _netDinoId = 0, _netDinoAcc = 0, _netWorldAcc = 0;
+function netSendDinos() {           // HOST → clients: compact transform snapshot of every live dino
+  const d = [];
+  for (const a of dinos) { if (!a.alive) continue; if (a._netId == null) a._netId = ++_netDinoId; d.push({ i: a._netId, s: a.sp.id, x: +a.x.toFixed(1), z: +a.z.toFixed(1), y: +a.yaw.toFixed(2), st: a.state, hp: Math.round(a.hp), an: +(a.anim || 0).toFixed(2) }); }
+  Net.send({ t: "dinos", d });
+}
+function netApplyDinos(m) {          // CLIENT: reconcile puppets to the host snapshot
+  if (Net.isHost || !m.d) return;
+  const seen = new Set();
+  for (const e of m.d) {
+    seen.add(e.i);
+    let a = dinos.find(d => d._netId === e.i);
+    if (!a) { if (!SPECIES[e.s]) continue; a = spawnDino(e.s, e.x, e.z); a._netId = e.i; a.yaw = e.y; dinos.push(a); }
+    a._netX = e.x; a._netZ = e.z; a._netYaw = e.y; a.state = e.st; a.hp = e.hp; if (e.an > 0) a.anim = Math.max(a.anim, e.an); a.alive = true;
+  }
+  for (const a of dinos) { if (a._netId != null && !seen.has(a._netId) && a.alive) { a.alive = false; scene.remove(a.mesh); } }   // host culled it
+}
+function updateNetDinos(dt) {        // CLIENT: interpolate puppets toward host transforms + animate
+  const k = Math.min(1, dt * 9), idt = Math.max(dt, 0.016);
+  for (const a of dinos) {
+    if (!a.alive) continue;
+    if (a._netX != null) {
+      a.vx = (a._netX - a.x) / idt; a.vz = (a._netZ - a.z) / idt;
+      a.x += (a._netX - a.x) * k; a.z += (a._netZ - a.z) * k;
+      let dy = a._netYaw - a.yaw; while (dy > Math.PI) dy -= 6.2832; while (dy < -Math.PI) dy += 6.2832; a.yaw += dy * k;
+    }
+    a.lod = dist2(a.x, a.z, S.player.x, S.player.z) < BIOME.spawnDirector.activeRadiusM ** 2 ? "full" : "background";
+    animateDino(a, dt);
+    if (a.hp <= 0) killDino(a);
+  }
+}
+function netSendWorld() {            // HOST → clients: mission phase + extraction + survivor (cohesion)
+  Net.send({ t: "exfil", idx: MC ? MC.idx : -1, started: MC ? (MC.started ? 1 : 0) : 0,
+    called: S.extraction.called ? 1 : 0, hold: +(S.extraction.hold || 0).toFixed(1), threat: S.threat,
+    surv: survivor ? { f: survivor.following ? 1 : 0, x: +survivor.x.toFixed(1), z: +survivor.z.toFixed(1) } : 0 });
+}
+function netApplyWorld(m) {          // CLIENT: apply host's authoritative mission/extraction/survivor state
+  if (Net.isHost) return;
+  if (m.idx != null && m.idx >= 0 && MC && m.idx !== MC.idx) { MC.idx = m.idx; try { applyPhaseMarker(); } catch (e) {} }
+  if (MC && m.started) MC.started = true;
+  S.extraction.called = !!m.called; if (m.hold != null) S.extraction.hold = m.hold;
+  if (m.threat != null) S.threat = m.threat;
+  if (m.surv && survivor) { survivor.following = !!m.surv.f; survivor.x = m.surv.x; survivor.z = m.surv.z; }
+}
 function netTick(dt) {
   netSendAcc += dt;
-  if (netSendAcc >= 0.08) {   // ~12 Hz
+  if (netSendAcc >= 0.08) {   // ~12 Hz: own avatar
     netSendAcc = 0; const P = S.player;
     Net.sendState({ x: +P.x.toFixed(2), z: +P.z.toFixed(2), yaw: +P.yaw.toFixed(2), gait: P.gait, hp: Math.round(P.hp), alive: P.alive });
+  }
+  if (Net.isHost) {
+    _netDinoAcc += dt; if (_netDinoAcc >= 0.12) { _netDinoAcc = 0; netSendDinos(); }       // ~8 Hz dinos
+    _netWorldAcc += dt; if (_netWorldAcc >= 0.3) { _netWorldAcc = 0; netSendWorld(); }      // ~3 Hz world
   }
   updateRemotes(dt);
 }
@@ -4026,6 +4102,8 @@ function initLobby() {
   });
   Net.onEvent("peers", renderPeers);
   Net.onEvent("state", netUpsertState);
+  Net.onEvent("dinos", netApplyDinos);     // host-authoritative dino transforms
+  Net.onEvent("exfil", netApplyWorld);     // host-authoritative mission / extraction / survivor
   Net.onEvent("leave", removeRemote);
   Net.onEvent("full", () => { status.textContent = "That room is full (16 max)"; });
   Net.onEvent("error", () => { status.textContent = "Connection error — playing solo"; });
