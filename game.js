@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-k";
+const BUILD = "2026-06-15-l";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -371,10 +371,9 @@ function updateAction(dt) {
   // aiming reticle: a center crosshair while the tranq/sample is selected, green when a valid target is locked
   const ret = $("reticle");
   if (ret) {
-    const tool = TOOLS[selTool];
-    const aiming = S.phase === "playing" && !binoc && tool && (tool.id === "tranq" || tool.id === "sample");
+    const aiming = aimMode();
     ret.style.display = aiming ? "block" : "none";
-    if (aiming) { const tgt = aimTarget(tool.id === "sample" ? 4.2 : 72, tool.id === "sample"); ret.style.color = tgt ? "#7ef08a" : "rgba(255,255,255,.55)"; }
+    if (aiming) { const tool = TOOLS[selTool]; const tgt = aimTarget(tool.id === "sample" ? 4.2 : 72, tool.id === "sample"); ret.style.color = tgt ? "#7ef08a" : "rgba(255,255,255,.7)"; ret.classList.toggle("locked", !!tgt); }
   }
 }
 function updateMission(dt) {
@@ -1368,7 +1367,7 @@ function initInput() {
   addEventListener("blur", () => keys.clear());
 
   // mouse look via pointer lock
-  canvas.addEventListener("click", () => { if (S.phase === "playing" && !isTouch) canvas.requestPointerLock(); });
+  canvas.addEventListener("click", () => { if (S.phase !== "playing" || isTouch) return; if (aimMode() && pointerLocked) { useTool(); return; } canvas.requestPointerLock(); });   // scoped + mouselooking → click = FIRE
   document.addEventListener("pointerlockchange", () => pointerLocked = (document.pointerLockElement === canvas));
   addEventListener("mousemove", e => {
     if (!pointerLocked) return;
@@ -1956,7 +1955,14 @@ const TOOLS = [
   { id: "sample", name: "SAMPLE", icon: "⚗", charges: Infinity, max: Infinity, cd: 0, cdMax: 1.4 },  // syringe — draw DNA
 ];
 let selTool = 0;
-function selectTool(i) { if (i >= 0 && i < TOOLS.length) selTool = i; }
+function selectTool(i) {
+  if (i < 0 || i >= TOOLS.length) return;
+  const prev = selTool; selTool = i; const t = TOOLS[i];
+  if (t && (t.id === "tranq" || t.id === "sample") && prev !== i) toast("SCOPE UP · look to aim the reticle · " + (isTouch ? "tap USE" : "click / F") + " to FIRE");
+}
+// aiming a ranged field tool (tranq dart / sample) raises a first-person SCOPE so you can look-to-aim
+// the reticle onto a dinosaur, then FIRE — instead of a fixed centre crosshair stuck on a 3rd-person camera.
+function aimMode() { const t = TOOLS[selTool]; return S.phase === "playing" && !S.player.driveVeh && !binoc && !!t && (t.id === "tranq" || t.id === "sample"); }
 /* ---- field-science kit (DNA collection): tranq → sedate, trap → snare, syringe → draw blood ---- */
 const traps = [];                 // { mesh, x, z, r, armed }
 let dnaSamples = 0;               // collected blood/DNA samples this run
@@ -4145,6 +4151,14 @@ function updateCamera() {
   // binoculars = FIRST PERSON from the operative's eyes (don't stare at your own back). Hide the avatar
   // so it never blocks the glass; restored the moment you lower them.
   if (binoc) {
+    if (playerMesh) playerMesh.visible = false;
+    const ey = (P.eyeY != null ? P.eyeY : playerFloorY(P.x, P.z)) + 1.55, cpb = Math.cos(cam.pitch);
+    camera.position.set(P.x + Math.sin(cam.yaw) * 0.15, ey, P.z + Math.cos(cam.yaw) * 0.15);
+    camera.lookAt(P.x + Math.sin(cam.yaw) * cpb * 12, ey + Math.sin(cam.pitch) * 12, P.z + Math.cos(cam.yaw) * cpb * 12);
+    if (beaconRing) beaconRing.rotation.z += (S.extraction.called ? 0.08 : 0.02);
+    return;
+  }
+  if (aimMode()) {   // tranq/sample SCOPE — first person from the operative's eyes; look to aim the reticle, then FIRE
     if (playerMesh) playerMesh.visible = false;
     const ey = (P.eyeY != null ? P.eyeY : playerFloorY(P.x, P.z)) + 1.55, cpb = Math.cos(cam.pitch);
     camera.position.set(P.x + Math.sin(cam.yaw) * 0.15, ey, P.z + Math.cos(cam.yaw) * 0.15);

@@ -798,12 +798,13 @@
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
 </script>
-<div id="reticle" style="position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:40;display:none;pointer-events:none;width:34px;height:34px;">
-  <div style="position:absolute;left:50%;top:50%;width:2px;height:10px;background:currentColor;transform:translate(-50%,-160%);"></div>
-  <div style="position:absolute;left:50%;top:50%;width:2px;height:10px;background:currentColor;transform:translate(-50%,60%);"></div>
-  <div style="position:absolute;left:50%;top:50%;width:10px;height:2px;background:currentColor;transform:translate(-160%,-50%);"></div>
-  <div style="position:absolute;left:50%;top:50%;width:10px;height:2px;background:currentColor;transform:translate(60%,-50%);"></div>
-  <div style="position:absolute;left:50%;top:50%;width:3px;height:3px;border-radius:50%;background:currentColor;transform:translate(-50%,-50%);"></div>
+<div id="reticle" style="position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:40;display:none;pointer-events:none;width:84px;height:84px;">
+  <div style="position:absolute;inset:0;border:2px solid currentColor;border-radius:50%;opacity:.55;"></div>
+  <div style="position:absolute;left:50%;top:50%;width:2px;height:18px;background:currentColor;transform:translate(-50%,-200%);"></div>
+  <div style="position:absolute;left:50%;top:50%;width:2px;height:18px;background:currentColor;transform:translate(-50%,100%);"></div>
+  <div style="position:absolute;left:50%;top:50%;width:18px;height:2px;background:currentColor;transform:translate(-200%,-50%);"></div>
+  <div style="position:absolute;left:50%;top:50%;width:18px;height:2px;background:currentColor;transform:translate(100%,-50%);"></div>
+  <div style="position:absolute;left:50%;top:50%;width:4px;height:4px;border-radius:50%;background:currentColor;transform:translate(-50%,-50%);"></div>
 </div>
 <div id="buildTag" style="position:fixed;left:6px;bottom:4px;z-index:9999;font:10px ui-monospace,monospace;color:#5a7a5a;opacity:.7;pointer-events:none;letter-spacing:.05em;">BUILD …</div>
 <script type="module" src="./game.js"></script>
