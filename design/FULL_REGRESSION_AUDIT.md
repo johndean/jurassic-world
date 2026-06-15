@@ -42,8 +42,17 @@ The game is **functionally sound and shippable as a vertical slice**. The six-cl
 | P-02 crash heli sinks below terrain | **Closed — false positive** (see §4) | — |
 | P-03 boat wake not animated | **Closed — false positive** (see §4) | — |
 | P-04 monorail camera null guard | **Closed — already present** (see §4) | — |
+| P-05 remote-player extrapolation | **Shipped** — velocity-lead puppets (clamped, moving-only) | `99d8e46` |
+| P-06 unread ecosystem fields | **Shipped (partial)** — `turnRate` wired into yaw lerp; `social`/`packRoles`/`noiseDrawWeight` were already read | `99d8e46` |
+| P-07 collision radius from width | **Shipped** — width-aware `max(length×0.1, ½ bodyW)`, never shrinks | `99d8e46` |
+| P-08 options a11y | **Shipped** — `:focus-visible` ring + Esc-to-close | `99d8e46` |
+| P-09 net-id never reset | **Shipped** — recycles each run | `99d8e46` |
+| P-10 host-flag spawn race | **Shipped** — defensive guard in `updateSpawnDirector` | `99d8e46` |
+| P-11 opaque swim stamina | **Shipped** — label reads SWIM while swimming | `99d8e46` |
+| P-12 contact overlap ≤375px | **Shipped** — tucks below compass at ≤400px | `99d8e46` |
+| P-13 dead-state sim runs after death | **Closed — false positive** (see §4) | — |
 
-**Tally:** 14 findings actioned — **8 shipped**, **6 closed as false-positive/already-handled**. The high false-positive share is concentrated in the §2 polish set and the pre-existing F-0x items, which predate this session's earlier fixes; every high-severity correctness finding (F-01/F-02/F-03/F-05/F-13/F-14/F-15) was real and is shipped.
+**Tally:** 24 findings actioned — **15 shipped**, **9 closed as false-positive/already-handled**. The false-positive share is concentrated in the §2 polish set and the pre-existing F-0x items (which predate this session's earlier fixes); **every high-severity correctness finding (F-01/F-02/F-03/F-05/F-13/F-14/F-15) was real and is shipped.** The audit backlog is now fully resolved — nothing open remains.
 
 ### System scorecard
 
@@ -250,6 +259,8 @@ Recording these so they aren't "fixed" into new bugs:
 | **P-02** crash heli sinks below terrain before fade | **FALSE** — the heli lerps *toward* `groundH(wx,wz)` and `fitModel` puts the model's base at the group origin, so at `group.y = groundH` it rests on the surface; lerp never overshoots below. |
 | **P-03** boat wake mesh is static | **FALSE** — `updateIntroBoat` animates it: `b.userData.wake.material.opacity = 0.22 + abs(sin(T*4))*0.12` (game.js:3168). |
 | **P-04** monorail camera has no null guard | **FALSE (already present)** — `updateIntroCameraMonorail` opens with `const c = intro.car; if (!c) return;` (game.js:3287), added in the monorail rigid-camera fix. |
+| **P-13** `updatePlayer` keeps running after death | **FALSE** — `simulate()` (which calls `updatePlayer`) is invoked only under `if (S.phase === "playing")` (game.js:4061); it never runs in the `lost`/`won`/`intro` phases. |
+| **P-06 (3 of 4 fields)** `social`/`packRoles`/`noiseDrawWeight` unread | **FALSE** — all three are read today: `social` at game.js:2157, `packRoles` at 2133, `noiseDrawWeight` at 2337. Only `turnRate` was genuinely unread (now wired). |
 
 ---
 
