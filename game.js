@@ -1328,6 +1328,7 @@ function initInput() {
     if (intro && (e.code === "Escape" || e.code === "Enter" || e.code === "Space")) { skipIntro(); return; }
     if (e.code === "Space") tryJump();   // jump / vault / climb (mantle onto a ledge you're facing)
     if (e.code === "Escape" && mapOpen) toggleMap();
+    if (e.code === "Escape") { const o = $("opts"); if (o && o.classList.contains("on")) o.classList.remove("on"); }   // P-08: Esc closes the options panel
     if (e.code === "Escape") $("keyHelp").classList.remove("on");
   });
   addEventListener("keyup", e => { if (typing(e)) return; keys.delete(e.code); });
@@ -1646,7 +1647,7 @@ function updatePlayer(dt) {
   if (S.extraction.inRange && !wasIn && !S.extraction.called) toast(STR.beaconReached);
   if (S.extraction.inRange) S._everInRange = true;
 }
-function lerp2angle(a, b) { let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI; return a + d * 0.25; }
+function lerp2angle(a, b, f) { let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI; return a + d * (f || 0.25); }
 
 let camShake = 0;
 function damagePlayer(amount, bySpecies, fromX, fromZ) {
@@ -2214,7 +2215,9 @@ function steer(a, dt, P) {
   a.vx = lerp(a.vx, dx * spd, 0.12); a.vz = lerp(a.vz, dz * spd, 0.12);
   a.x += a.vx * dt; a.z += a.vz * dt;
   const lim = BIOME.map.size / 2 - 3; a.x = clamp(a.x, -lim, lim); a.z = clamp(a.z, -lim, lim);
-  if (Math.hypot(a.vx, a.vz) > 0.2) a.yaw = lerp2angle(a.yaw, Math.atan2(a.vx, a.vz));
+  // P-06: turn speed scales with the species' declared agility (move.turnRate, deg/s; 180 = neutral),
+  // so a Velociraptor (340) pivots far quicker than a T-Rex (110). Clamped so it stays stable.
+  if (Math.hypot(a.vx, a.vz) > 0.2) a.yaw = lerp2angle(a.yaw, Math.atan2(a.vx, a.vz), 0.25 * Math.min(2.2, ((a.sp.move && a.sp.move.turnRate) || 180) / 180));
   animateDino(a, dt);
 }
 // Drive a dino's mesh placement + procedural animation from its current x/z/yaw/vx/vz/state. Shared by
@@ -2311,7 +2314,10 @@ function updateDinos(dt, P) {
   }
 }
 function killDino(a) { a.alive = false; scene.remove(a.mesh); }
-function dinoBodyR(a) { return clamp((a.sp.size && a.sp.size.lengthM || 4) * 0.1, 0.4, 2.0); }   // body radius for collision push-out
+function dinoBodyR(a) {   // collision push-out radius: length-scaled, but never thinner than the actual body width (P-07)
+  const byLen = (a.sp.size && a.sp.size.lengthM || 4) * 0.1, gb = a.sp.greybox, byWidth = gb && gb.bodyW ? gb.bodyW * 0.5 : 0;
+  return clamp(Math.max(byLen, byWidth), 0.4, 2.0);
+}
 const isAquatic = sp => sp.archetype === "water";   // semi-/fully-aquatic: floats & swims in the channel
 const isFlier = sp => sp.role === "flier";          // wheels overhead, dives to strike
 // Per-archetype vertical placement: fliers cruise at altitude (dive when hunting), aquatic species
@@ -2326,6 +2332,7 @@ function dinoY(a) {
 /* ================================================== spawn director ======= */
 let spawnTimer = 0;
 function updateSpawnDirector(dt, P) {
+  if (Net.on && !Net.isHost) return;   // P-10: spawning is host-authoritative — defensive guard against a stale host flag making a client spawn ghosts
   const sd = BIOME.spawnDirector;
   spawnTimer -= dt;
   if (spawnTimer > 0) return;
@@ -3535,7 +3542,7 @@ function skipIntro() {
 /* ================================================== run lifecycle ======== */
 function startRun() {
   // reset
-  for (const d of dinos) scene.remove(d.mesh); dinos = []; dinosByNetId.clear();
+  for (const d of dinos) scene.remove(d.mesh); dinos = []; dinosByNetId.clear(); _netDinoId = 0;   // P-09: recycle net-ids each run so they don't grow unbounded across replays
   clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField(); clearIntroProp(); clearMissionSites(); clearBoss(); preloadRadio();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   applyUnlocks();                                                                     // persistent progression: veteran loadout bonuses
@@ -3717,7 +3724,7 @@ function buildStaticHUD() {
   $("objTitle").textContent = STR.objMission;
   $("sqTitle").textContent = STR.squadStatus;
   $("thrTitle").textContent = STR.threatLevel;
-  $("vHealthL").textContent = STR.vHealth; $("vStaminaL").textContent = STR.vStamina; $("vNoiseL").textContent = STR.vNoise;
+  $("vHealthL").textContent = STR.vHealth; $("vStaminaL").textContent = S.player.swim ? "SWIM" : STR.vStamina; $("vNoiseL").textContent = STR.vNoise;   // P-11: makes the swim exertion drain legible
   $("mmLabel").textContent = STR.gps;
   $("contactTxt").textContent = "";
   const tm = $("thrMeter"); tm.innerHTML = ""; for (let i = 0; i < 10; i++) tm.appendChild(document.createElement("span"));
@@ -4142,10 +4149,13 @@ function netUpsertState(msg) {
   let r = remotePlayers.get(msg.id);
   if (!r) {
     const peer = Net.peers.get(msg.id) || {};
-    r = Object.assign(buildCharMesh(peer.role || "navigator"), { tx: p.x, tz: p.z, tyaw: p.yaw || 0, gait: p.gait || "idle", hp: p.hp ?? 100, alive: p.alive !== false });
+    r = Object.assign(buildCharMesh(peer.role || "navigator"), { tx: p.x, tz: p.z, tyaw: p.yaw || 0, gait: p.gait || "idle", hp: p.hp ?? 100, alive: p.alive !== false, vx: 0, vz: 0, _lastT: performance.now() });
     r.group.add(makeNameTag(peer.name));
     r.group.position.set(p.x, groundH(p.x, p.z) + 0.9, p.z);
     remotePlayers.set(msg.id, r);
+  } else {
+    const now = performance.now(), dtg = Math.max(0.03, (now - (r._lastT || now)) / 1000);   // velocity between snapshots → lets updateRemotes extrapolate so a ~12 Hz peer doesn't render a frame behind
+    r.vx = (p.x - r.tx) / dtg; r.vz = (p.z - r.tz) / dtg; r._lastT = now;
   }
   r.tx = p.x; r.tz = p.z; r.tyaw = p.yaw || 0; r.gait = p.gait || "idle"; r.hp = p.hp ?? 100; r.alive = p.alive !== false;
 }
@@ -4153,9 +4163,14 @@ function updateRemotes(dt) {
   const k = Math.min(1, dt * 10);
   for (const r of remotePlayers.values()) {
     r.group.visible = r.alive;
-    const gy = groundH(r.tx, r.tz) + 0.9 - (r.gait === "crouch" ? 0.4 : 0);
-    r.group.position.x += (r.tx - r.group.position.x) * k;
-    r.group.position.z += (r.tz - r.group.position.z) * k;
+    // P-05: lead the target slightly along last-known velocity (only while moving; clamped) so the puppet
+    // tracks where the peer actually is, not where their last packet said. Snapping is avoided by the clamp.
+    const lead = r.gait && r.gait !== "idle" ? 0.08 : 0;
+    const tx = r.tx + Math.max(-2, Math.min(2, (r.vx || 0) * lead));
+    const tz = r.tz + Math.max(-2, Math.min(2, (r.vz || 0) * lead));
+    const gy = groundH(tx, tz) + 0.9 - (r.gait === "crouch" ? 0.4 : 0);
+    r.group.position.x += (tx - r.group.position.x) * k;
+    r.group.position.z += (tz - r.group.position.z) * k;
     r.group.position.y += (gy - r.group.position.y) * k;
     let dy = r.tyaw - r.group.rotation.y; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
     r.group.rotation.y += dy * k;
