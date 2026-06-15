@@ -17,6 +17,21 @@
 
 The game is **functionally sound and shippable as a vertical slice**. The six-cluster sweep surfaced **zero confirmed launch-blocking crashes** — notably, four "CRITICAL crash" claims raised during the sweep were **debunked on re-verification** (see §4, False Positives). What remains is a tail of **edge-case softlocks, AI-immersion regressions, mobile/parity polish, and co-op join-in-progress desync** — real, worth fixing, but none catastrophic.
 
+### ✅ Resolution log (shipped live since this audit)
+
+| ID | Status | Commit |
+|---|---|---|
+| F-05 co-op join-in-progress bootstrap | **Shipped** — late joiners skip the cinematic, adopt host phase + extraction timer; host pushes immediate snapshot on join | `1a6199b` |
+| Co-op world-delta replay (squad DNA count + completed-phase flags) | **Shipped** — world tick carries `dna`; late joiner marks earlier phases done | `b8cb868` |
+| F-02 off-LOD predators reset to idle | **Shipped** — 2 s hunt-memory grace before settling to base state | `b8cb868` |
+| F-01 defend-phase completion gate | **Shipped** — waves stop at the bell; success latches; re-entry completes | `b8cb868` |
+| F-09 minimap legend parity | **Shipped** — 7 → 13 entries | `b8cb868` |
+| F-10 colorblind reaches map legend | **Shipped** — legend fills use `--hud` vars | `b8cb868` |
+| F-11 survival chips ignore HUD-zoom | **Shipped** — `#survHud` now scales with `--hud-zoom` | `b8cb868` |
+| F-12 map-layer toggles not persisted | **Shipped** — `localStorage` round-trip | `b8cb868` |
+| F-04 collision cell-boundary clip | **Closed — false positive** (see §4) | — |
+| F-06 jeep intro silent-jungle | **Closed — false positive** (see §4) | — |
+
 ### System scorecard
 
 | System | Grade | Biggest gap |
@@ -215,6 +230,8 @@ Recording these so they aren't "fixed" into new bugs:
 | Phase-completion toast OOB on final phase | **FALSE** — guarded by `if (MC.idx >= m.phases.length)`. |
 | Escort survivor follows a dead player → softlock | **Effectively false** — run ends on death and restarts fresh; `P.alive` guard is tidy-up, not a fix for a live softlock. Downgraded to a nice-to-have. |
 | SAFE ZONE ring "never drawn on minimap" | **Unconfirmed** — ring draw is unconditional in `mapSVG`; agent's own analysis retracted to "possibly clipped." Treat as visual-confirm item, not a code bug. |
+| **F-04** collision spatial-hash misses adjacent-cell colliders → clip | **FALSE** — `addCollider` registers each proxy into every cell within `pad = r + 2` (game.js:866). A collision needs `dist < c.r + pr` and max body radius `pr ≤ 2`, so `dist < c.r + 2 = pad` ⇒ the entity's own cell is always registered. Single-cell `queryColliders` is provably sufficient; a 3×3 query would be redundant + a perf cost. |
+| **F-06** jeep intro kills ambient and never restores it | **FALSE** — `endIntroJeep()` calls `finishIntroCommon()` (game.js), which calls `Audio.ambient(true)`. Ambient is restored ~5 s after the dramatic cut. Audit agent missed the indirection. |
 
 ---
 
