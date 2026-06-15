@@ -105,7 +105,7 @@
     "bodyL": 1.1,
     "bodyW": 0.45,
     "bodyH": 0.55,
-    "standH": 1.4,
+    "standH": 2.0,
     "crest": false
    }
   },
@@ -214,7 +214,7 @@
     "bodyL": 0.9,
     "bodyW": 0.4,
     "bodyH": 0.45,
-    "standH": 1,
+    "standH": 1.9,
     "crest": false
    }
   },
@@ -428,7 +428,7 @@
     "bodyL": 0.65,
     "bodyW": 0.29,
     "bodyH": 0.36,
-    "standH": 1.01,
+    "standH": 1.5,
     "crest": false
    }
   },
@@ -484,7 +484,7 @@
     "bodyL": 0.81,
     "bodyW": 0.36,
     "bodyH": 0.45,
-    "standH": 1.12,
+    "standH": 1.95,
     "crest": false
    }
   },
@@ -540,7 +540,7 @@
     "bodyL": 0.68,
     "bodyW": 0.3,
     "bodyH": 0.38,
-    "standH": 1.01,
+    "standH": 1.8,
     "crest": false
    }
   },
@@ -592,7 +592,7 @@
     "bodyL": 1.62,
     "bodyW": 0.72,
     "bodyH": 0.9,
-    "standH": 2.24,
+    "standH": 2.4,
     "crest": true
    }
   },

@@ -377,6 +377,8 @@
   #btnCrouch{right:104px;bottom:170px;}
   #btnJump{right:104px;bottom:256px;border-color:rgba(143,184,196,.6);}
   #btnCall{right:18px;bottom:144px;border-color:rgba(224,119,47,.7);}
+  #btnCall.act-ready{border-color:#fff;color:#fff;background:rgba(224,119,47,.55);animation:actpulse 1s ease-in-out infinite;}
+  @keyframes actpulse{0%,100%{box-shadow:0 0 0 0 rgba(224,119,47,.6);}50%{box-shadow:0 0 0 10px rgba(224,119,47,0);}}
   #btnUse{right:104px;bottom:260px;border-color:rgba(143,184,196,.7);}
   #btnBinoc{right:18px;bottom:316px;border-color:rgba(143,184,196,.7);font-size:20px;}
   #btnBinoc.on{background:rgba(143,184,196,.45);border-color:#bfe2ea;}
@@ -636,7 +638,7 @@
   <button class="tbtn" id="btnSprint">SPRINT</button>
   <button class="tbtn" id="btnCrouch">CROUCH</button>
   <button class="tbtn" id="btnJump">JUMP</button>
-  <button class="tbtn" id="btnCall">CALL</button>
+  <button class="tbtn" id="btnCall">ACTION</button>
   <button class="tbtn use" id="btnUse">USE</button>
   <button class="tbtn" id="btnBinoc">👁</button>
   <button class="tbtn" id="btnMap">🗺</button>

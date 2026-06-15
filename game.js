@@ -344,6 +344,8 @@ function updateAction(dt) {
   }
   if (label) { prompt.classList.add("on"); $("promptTxt").textContent = label; const bar = $("promptBar"); bar.style.opacity = hold ? "1" : "0"; bar.style.width = (hold ? prog * 100 : 0).toFixed(0) + "%"; }
   else prompt.classList.remove("on");
+  // light up the on-screen ACTION button whenever something can be activated (the "power button" cue)
+  const ba = $("btnCall"); if (ba) ba.classList.toggle("act-ready", !!label);
 }
 function updateMission(dt) {
   const m = activeCampaign(); if (!m || !MC) return;
@@ -1055,6 +1057,20 @@ function buildBuilding(g, kind) {                         // generic structure: 
   if (kind === "command") { const dish = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), metal); dish.rotation.x = -0.7; dish.position.set(1.3, h + 1.0, -1); g.add(dish); g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.0, 6), metal), { position: new THREE.Vector3(1.3, h + 0.5, -1) })); }
   if (kind === "campsite") { for (const c of [[2.6, 1], [-2.6, -1.4]]) { const tent = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.4, 4), _mm(0x4a5236, 0.95)); tent.position.set(c[0], 0.7, c[1]); tent.rotation.y = 0.5; g.add(tent); } const fire = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 6), new THREE.MeshStandardMaterial({ color: 0xff7e2a, emissive: 0xff5a1e, emissiveIntensity: 1.2 })); fire.position.set(0, 0.25, 2.8); g.add(fire); g.add(Object.assign(new THREE.PointLight(0xff7e2a, 1.0, 10), { position: new THREE.Vector3(0, 0.7, 2.8) })); }
   for (const c of [[w * 0.5 + 0.7, 1], [-w * 0.5 - 0.7, -1]]) g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), wood), { position: new THREE.Vector3(c[0], 0.45, c[1]) }));
+  // ---- believable structure dressing (so it reads as a real outpost, not a bare box) ----
+  const trim = _mm(0x2c2f28, 0.8, 0.3), glow = c => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 1.4 });
+  const roof = new THREE.Mesh(new THREE.CylinderGeometry(0.05, w * 0.62, 0.9, 4), wall); roof.rotation.y = Math.PI / 4; roof.position.y = h + 0.55; g.add(roof);   // low pitched/ridged roof
+  // entrance: recessed lit doorway + a porch overhang on posts
+  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.9, 0.12), glow(0xffb86a)), { position: new THREE.Vector3(0, 0.95, d / 2 + 0.04) }));   // warm-lit doorway
+  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.7, 0.04), _mm(0x14150f, 0.9)), { position: new THREE.Vector3(0, 0.85, d / 2 + 0.07) }));   // door panel
+  const porch = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, 0.12, 1.2), wood); porch.position.set(0, h * 0.82, d / 2 + 0.6); g.add(porch);
+  for (const px of [-w * 0.28, w * 0.28]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, h * 0.8, 6), trim); post.position.set(px, h * 0.4, d / 2 + 1.1); g.add(post); }
+  g.add(Object.assign(new THREE.PointLight(0xffb86a, 1.1, 12), { position: new THREE.Vector3(0, 1.9, d / 2 + 0.7) }));   // porch light
+  // rooftop comms whip + a blinking locator beacon (also helps you spot the objective)
+  g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.8, 4), trim), { position: new THREE.Vector3(-w * 0.35, h + 1.4, -d * 0.3) }));
+  const bcn = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), glow(0xff4030)); bcn.position.set(-w * 0.35, h + 2.3, -d * 0.3); g.add(bcn); g.userData.beaconBlink = bcn;
+  // weathered signboard over the door
+  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.4, 0.08), new THREE.MeshStandardMaterial({ color: 0x1a1d18, emissive: 0x0a3a2e, emissiveIntensity: 0.45 })), { position: new THREE.Vector3(0, h * 0.92, d / 2 + 0.05) }));
 }
 // Environmental storytelling: scatter readable evidence of what happened here — blood smears,
 // dropped gear, spent shells, raked claw-gashes — so a site tells its story without exposition.
