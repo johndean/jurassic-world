@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-c";
+const BUILD = "2026-06-15-d";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -2289,11 +2289,17 @@ function animateDino(a, dt) {
       a.mesh.position.x += Math.sin(a.yaw) * snap * 0.5;
       a.mesh.position.z += Math.cos(a.yaw) * snap * 0.5;
     }
+    // roar chest-swell pulses RELATIVE to the element's base scale. For a loaded model, children[0] is the
+    // fitModel-scaled model (scale ≈ standH/modelH); resetting it to 1 (as before) wiped that fit → the model
+    // rendered at its raw ~0.8 m size AND floated (feet offset was computed for the fitted scale). For a greybox,
+    // base scale is 1, so behaviour is unchanged.
+    if (body.userData._baseScale == null) body.userData._baseScale = body.scale.x || 1;
+    const bs = body.userData._baseScale;
     if (a.roar > 0) {                                   // ROAR: rear up + chest swell
       const rp = Math.sin((1 - a.roar / 1.1) * Math.PI);
       if (!a.mixer) body.rotation.x -= rp * 0.3;
-      body.scale.setScalar(1 + rp * 0.06);
-    } else if (body.scale.x !== 1) body.scale.setScalar(1);
+      body.scale.setScalar(bs * (1 + rp * 0.06));
+    } else if (body.scale.x !== bs) body.scale.setScalar(bs);
     if (!a.mixer && a.state === "Flee") body.rotation.x += moveAmt * 0.12;   // FLEE: panic forward lean
   }
   if (a.mesh.userData.jaw) a.mesh.userData.jaw.rotation.x = a.anim > 0 ? 0.6 : 0;
