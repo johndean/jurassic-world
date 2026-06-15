@@ -1569,7 +1569,9 @@ function updatePlayer(dt) {
     if (!P._moving || d > 0.55 || P.moveYaw == null) P.moveYaw = cam.yaw;   // (re)latch on start / new intended direction
     P._lastStick = stickAng; P._moving = true;
     const fy = P.moveYaw, sin = Math.sin(fy), cos = Math.cos(fy);
-    wx = (ix * cos - iz * sin); wz = (ix * sin + iz * cos);
+    // camera-relative: forward (W, iz=-1) → camera-forward (sin,cos); strafe (D, ix=+1) → screen-right (-cos,sin).
+    // (Previously both axes were inverted vs the camera → W walked backward and A/D were swapped.)
+    wx = (-ix * cos - iz * sin); wz = (ix * sin - iz * cos);
     const slope = (groundH(P.x + wx * 2, P.z + wz * 2) - groundH(P.x, P.z)) * 0.5;
     if (slope > 0.04 && !P.onProp) P.stamina = Math.max(0, P.stamina - slope * 9 * dt);
     P.x += wx * speed * dt; P.z += wz * speed * dt;
