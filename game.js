@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-b";
+const BUILD = "2026-06-15-c";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -352,6 +352,14 @@ function updateAction(dt) {
   else prompt.classList.remove("on");
   // light up the on-screen ACTION button whenever something can be activated (the "power button" cue)
   const ba = $("btnCall"); if (ba) ba.classList.toggle("act-ready", !!label);
+  // aiming reticle: a center crosshair while the tranq/sample is selected, green when a valid target is locked
+  const ret = $("reticle");
+  if (ret) {
+    const tool = TOOLS[selTool];
+    const aiming = S.phase === "playing" && !binoc && tool && (tool.id === "tranq" || tool.id === "sample");
+    ret.style.display = aiming ? "block" : "none";
+    if (aiming) { const tgt = aimTarget(tool.id === "sample" ? 4.2 : 72, tool.id === "sample"); ret.style.color = tgt ? "#7ef08a" : "rgba(255,255,255,.55)"; }
+  }
 }
 function updateMission(dt) {
   const m = activeCampaign(); if (!m || !MC) return;
@@ -4064,7 +4072,18 @@ function updateCamera() {
 const STEP = 1 / 60; let acc = 0, last = performance.now(), hudAcc = 0;
 const dev = new URLSearchParams(location.search).has("dev"); if (dev) $("dev").style.display = "block";
 let tickMs = 0;
-
+let _diagAcc = 0;
+function diagSizes() {   // write actual rendered player/nearest-dino heights to the build tag (diagnostic)
+  const tag = document.getElementById("buildTag"); if (!tag || S.phase !== "playing" || !playerMesh) return;
+  const _b = new THREE.Box3(), _s = new THREE.Vector3();
+  _b.setFromObject(playerMesh); _b.getSize(_s); const ph = _s.y;
+  let nd = null, ndd = 1e18; const P = S.player;
+  for (const a of dinos) { if (!a.alive) continue; const d = dist2(a.x, a.z, P.x, P.z); if (d < ndd) { ndd = d; nd = a; } }
+  let info = "B:" + BUILD + " player=" + ph.toFixed(2) + "m";
+  if (nd) { _b.setFromObject(nd.mesh); _b.getSize(_s); info += " | " + nd.sp.id + "=" + _s.y.toFixed(2) + "m feetΔ=" + (_b.min.y - groundH(nd.x, nd.z)).toFixed(2) + " " + (nd.mesh.userData.greybox ? "GREYBOX" : "model"); }
+  info += " | models=" + Object.keys(MODELS).length;
+  tag.textContent = info; tag.style.opacity = "0.85";
+}
 function frame(now) {
   requestAnimationFrame(frame);
   let dtMs = now - last; last = now; if (dtMs > 250) dtMs = 250;
@@ -4083,6 +4102,9 @@ function frame(now) {
   // HUD ~12 Hz
   hudAcc += dtMs / 1000;
   if (hudAcc > 1 / 12) { hudAcc = 0; if (S.phase !== "menu" && S.phase !== "intro") updateHUD(); }
+  // live size readout in the build tag — actual rendered heights so we can see what's really happening in-browser
+  _diagAcc += dtMs / 1000;
+  if (_diagAcc > 1) { _diagAcc = 0; try { diagSizes(); } catch (e) {} }
   // toast fade
   if (toastTimer > 0) { toastTimer -= dtMs / 1000; if (toastTimer <= 0) $("toast").style.opacity = "0"; }
   if (playerMixer) { playerAction.timeScale = GAIT_RATE[S.player.gait] ?? 1; playerMixer.update(dtMs / 1000); }
