@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-i";
+const BUILD = "2026-06-15-j";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -352,6 +352,7 @@ function updateAction(dt) {
   else if (nearVehicle(P)) { label = pressTxt + " · DRIVE JEEP"; actionHold = 0; }
   else if (P.zip) { actionHold = 0; }
   else if (P.onTower) { label = pressTxt + " · ZIP DOWN"; actionHold = 0; }
+  else if (nearTowerBase(P)) { label = pressTxt + " · CLIMB TOWER"; actionHold = 0; }
   else {
     const ph = missionInteractInRange();
     if (ph) {
@@ -1271,13 +1272,14 @@ function playerFloorY(x, z) {   // player's floor: tower platform / zipline cabl
   return P.onTower ? P.onTower.platformY : groundH(x, z);
 }
 function nearTowerBase(P) {
-  for (const t of TOWERS) { if (dist2(P.x, P.z, t.x, t.z + t.half) < 9) return t; }   // within ~3m of the ladder
+  for (const t of TOWERS) { if (dist2(P.x, P.z, t.x, t.z + t.half) < 18) return t; }   // within ~4.2m of the ladder
   return null;
 }
 function climbTower(t) {
   const P = S.player; P.onTower = t; P.zip = null;
   P.x = t.x; P.z = t.z; P.gait = "idle";   // step onto the centre of the deck
-  toast("ON WATCHTOWER · glass (B) & tranq · press E or walk off the front (ladder side) to zip down");
+  P.climbT = 1.1; P.climbY0 = groundH(t.x, t.z);   // brief rise up the ladder (reads as a climb, not a teleport)
+  toast("CLIMBING THE TOWER · glass (B) & tranq up top · press " + (isTouch ? "ACTION" : "E") + " or step off the front to zip down");
 }
 function startZip(t) {
   const P = S.player;
@@ -1661,6 +1663,7 @@ function updatePlayer(dt) {
   const idleBob = P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.02 : 0;
   const runBounce = P.gait === "run" ? Math.abs(Math.sin(S.t * 11)) * 0.05 : 0;   // light foot-strike bob
   let standY = (P.onProp ? P.propTopY : playerFloorY(P.x, P.z)) + (P.air || 0);
+  if (P.onTower && P.climbT > 0) { P.climbT = Math.max(0, P.climbT - dt); const pr = 1 - P.climbT / 1.1; standY = lerp(P.climbY0 != null ? P.climbY0 : standY, P.onTower.platformY, Math.min(1, pr)); }   // climbing the ladder → rise to the deck
   if (P.swim) standY = WATER_Y - (P.dive ? Math.min(3, depth - 0.6) : 0.25) + Math.sin(S.t * 2) * 0.04;   // float / submerge
   P.eyeY = standY;                                                                 // camera follows jumps/climbs/swim
   playerMesh.position.set(P.x, standY + 0.9 - crouchDrop + idleBob + runBounce, P.z);
