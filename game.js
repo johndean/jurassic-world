@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-d";
+const BUILD = "2026-06-15-e";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -3609,7 +3609,7 @@ function startRun() {
     toast("JOINED SQUAD · MISSION IN PROGRESS");
   } else {
     try { startIntro(); }                                                       // play the opening crash cinematic, then hand off to "playing"
-    catch (e) { console.error("startIntro", e); S.phase = "playing"; if (playerMesh) playerMesh.visible = true; $("intro").classList.add("hidden"); $("hud").style.display = ""; Audio.ambient(true); if (!isTouch) lockPointer(); }
+    catch (e) { console.error("startIntro", e); _introErrMsg = "startIntro: " + String((e && e.message) || e).slice(0, 90); S.phase = "playing"; if (playerMesh) playerMesh.visible = true; $("intro").classList.add("hidden"); $("hud").style.display = ""; Audio.ambient(true); if (!isTouch) lockPointer(); }
   }
 }
 const ENDINGS = {   // EXTINCTION PROTOCOL branching finales
@@ -4078,7 +4078,7 @@ function updateCamera() {
 const STEP = 1 / 60; let acc = 0, last = performance.now(), hudAcc = 0;
 const dev = new URLSearchParams(location.search).has("dev"); if (dev) $("dev").style.display = "block";
 let tickMs = 0;
-let _diagAcc = 0;
+let _diagAcc = 0, _introErrMsg = "";
 function diagSizes() {   // write actual rendered player/nearest-dino heights to the build tag (diagnostic)
   const tag = document.getElementById("buildTag"); if (!tag || S.phase !== "playing" || !playerMesh) return;
   const _b = new THREE.Box3(), _s = new THREE.Vector3();
@@ -4088,7 +4088,8 @@ function diagSizes() {   // write actual rendered player/nearest-dino heights to
   let info = "B:" + BUILD + " player=" + ph.toFixed(2) + "m";
   if (nd) { _b.setFromObject(nd.mesh); _b.getSize(_s); info += " | " + nd.sp.id + "=" + _s.y.toFixed(2) + "m feetΔ=" + (_b.min.y - groundH(nd.x, nd.z)).toFixed(2) + " " + (nd.mesh.userData.greybox ? "GREYBOX" : "model"); }
   info += " | models=" + Object.keys(MODELS).length;
-  tag.textContent = info; tag.style.opacity = "0.85";
+  if (_introErrMsg) { info = "⚠ INTRO " + _introErrMsg + "  ·  " + info; tag.style.color = "#ff6b5a"; }
+  tag.textContent = info; tag.style.opacity = "0.9";
 }
 function frame(now) {
   requestAnimationFrame(frame);
@@ -4101,7 +4102,7 @@ function frame(now) {
     if (S.phase === "playing") simulate(STEP);
     acc -= STEP; steps++;
   }
-  if (S.phase === "intro") { try { updateIntro(Math.min(0.05, dtMs / 1000)); } catch (e) { console.error("intro", e); try { skipIntro(); } catch (_) { S.phase = "playing"; if (playerMesh) playerMesh.visible = true; $("intro").classList.add("hidden"); $("hud").style.display = ""; } } }   // never strand the player on an intro error
+  if (S.phase === "intro") { try { updateIntro(Math.min(0.05, dtMs / 1000)); } catch (e) { console.error("intro", e); _introErrMsg = "updateIntro: " + String((e && e.message) || e).slice(0, 90); try { skipIntro(); } catch (_) { S.phase = "playing"; if (playerMesh) playerMesh.visible = true; $("intro").classList.add("hidden"); $("hud").style.display = ""; } } }   // never strand the player on an intro error
   tickMs = performance.now() - t0;
   updateCamera();
   if (binoc) updateScan();   // live species labels track smoothly while glassing
