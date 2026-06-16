@@ -335,6 +335,13 @@
   .mission-card .mc-name{font-size:14px;font-weight:800;letter-spacing:.05em;color:#e7eee9;}
   .mission-card .mc-tag{font-size:9px;letter-spacing:.16em;color:#e0772f;margin:3px 0 6px;text-transform:uppercase;}
   .mission-card .mc-desc{font-size:11px;line-height:1.5;color:#9aa69d;}
+  .diff-select{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:760px;margin:0 auto 14px;}
+  .diff-card{flex:1 1 220px;max-width:240px;text-align:left;background:rgba(10,14,13,.55);border:1px solid var(--hud-line);
+    border-radius:7px;padding:12px 14px;cursor:pointer;transition:.14s;-webkit-tap-highlight-color:transparent;}
+  .diff-card:hover,.diff-card.sel{border-color:#e0772f;background:rgba(224,119,47,.12);}
+  .diff-card .dc-name{font-size:15px;font-weight:800;letter-spacing:.05em;color:#e7eee9;}
+  .diff-card .dc-tag{font-size:9px;letter-spacing:.14em;color:#e0772f;margin:3px 0 7px;text-transform:uppercase;}
+  .diff-card .dc-desc{font-size:11px;line-height:1.5;color:#9aa69d;}
   .char-select{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;max-width:740px;margin:0 auto 20px;}
   .char-card{width:106px;background:rgba(10,14,13,.55);border:1px solid var(--hud-line);border-radius:6px;
     overflow:hidden;cursor:pointer;transition:.15s;opacity:.62;}
@@ -418,6 +425,12 @@
   /* DNA / identification readout */
   #dnaHud{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:46;font:11px ui-monospace,monospace;
     letter-spacing:.12em;color:#9fe08a;background:rgba(10,14,13,.55);border:1px solid var(--hud-line);padding:4px 12px;border-radius:12px;pointer-events:none;}
+  #resupplyBtn{position:fixed;left:50%;bottom:124px;transform:translateX(-50%);z-index:47;display:none;touch-action:none;
+    font:700 12px ui-monospace,monospace;letter-spacing:.14em;color:#0c130c;background:#6fae6b;border:1px solid #9fe0a0;
+    padding:8px 16px;border-radius:13px;cursor:pointer;box-shadow:0 0 14px rgba(111,174,107,.5);-webkit-tap-highlight-color:transparent;
+    animation:rsPulse 1.4s ease-in-out infinite;}
+  #resupplyBtn.on{display:block;}
+  @keyframes rsPulse{0%,100%{box-shadow:0 0 10px rgba(111,174,107,.4);}50%{box-shadow:0 0 20px rgba(111,174,107,.85);}}
   /* binoculars overlay + species scan tags */
   #scan{position:fixed;inset:0;z-index:44;pointer-events:none;}
   .scan-tag{position:absolute;transform:translate(-50%,-100%);text-align:center;white-space:nowrap;pointer-events:none;
@@ -633,6 +646,7 @@
   <button class="tool" data-i="5"><b>6</b><span class="t-ic">⚗</span><span class="t-nm">SAMPLE</span><span class="t-ch"></span><i class="t-cd"></i></button>
 </div>
 <div id="dnaHud"></div>
+<button id="resupplyBtn">📦 CALL RESUPPLY</button>
 
 <!-- contextual interaction prompt (appears when the player can act) -->
 <div id="prompt"><span id="promptTxt"></span><div id="promptTrack"><i id="promptBar"></i></div></div>
@@ -750,6 +764,7 @@
   <div class="tabs" id="startTabs">
     <button class="tab sel" data-tab="mission">SELECT MISSION</button>
     <button class="tab" data-tab="role">SELECT SPECIALIST</button>
+    <button class="tab" data-tab="diff">DIFFICULTY</button>
     <button class="tab" data-tab="coop">NAME &amp; CO-OP</button>
   </div>
   <div class="tabwrap">
@@ -759,6 +774,9 @@
     </div>
     <div class="tabpanel" data-panel="role">
       <div class="char-select" id="charSelect"></div>
+    </div>
+    <div class="tabpanel" data-panel="diff">
+      <div class="diff-select" id="diffSelect"></div>
     </div>
     <div class="tabpanel" data-panel="coop">
       <div class="mp" id="mpPanel">

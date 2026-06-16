@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-p";
+const BUILD = "2026-06-16-q";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -127,7 +127,18 @@ function initCharSelect() {
     selectedRole = ROLES[+card.dataset.i];
     host.querySelectorAll(".char-card").forEach(c => c.classList.toggle("sel", c === card));
     if (MODELS[curPlayerModel()]) buildPlayer();   // live-preview the chosen avatar if loaded
-    tabsDone.role = true; showTab("coop");          // auto-advance to the name / co-op tab
+    tabsDone.role = true; showTab("diff");          // auto-advance to the difficulty tab
+  }));
+}
+// ---- difficulty selector (start-screen tab 3): predator-aggression tier ----
+function initDifficultySelect() {
+  const host = $("diffSelect"); if (!host) return;
+  const order = ["explorer", "survivor", "apex"];
+  host.innerHTML = order.map(k => { const d = DIFFICULTIES[k]; return `<div class="diff-card${DIFF.id === k ? " sel" : ""}" data-k="${k}"><div class="dc-name">${d.name}</div><div class="dc-tag">${d.tag}</div><div class="dc-desc">${d.blurb}</div></div>`; }).join("");
+  host.querySelectorAll(".diff-card").forEach(card => card.addEventListener("click", () => {
+    setDifficulty(card.dataset.k);
+    host.querySelectorAll(".diff-card").forEach(c => c.classList.toggle("sel", c === card));
+    tabsDone.diff = true; showTab("coop");          // auto-advance to the name / co-op tab
   }));
 }
 
@@ -170,7 +181,7 @@ function initMissionSelect() {
     tabsDone.mission = true; showTab("role");   // auto-advance to the specialist tab
   }));
 }
-let tabsDone = { mission: false, role: false, coop: false };
+let tabsDone = { mission: false, role: false, diff: true, coop: false };   // diff has a default (survivor) → not a gate, just selectable
 function showTab(k) {   // switch tab; visiting the co-op tab counts it complete (solo needs no input)
   const tabs = $("startTabs"); if (!tabs) return;
   tabs.querySelectorAll(".tab").forEach(x => x.classList.toggle("sel", x.dataset.tab === k));
@@ -182,7 +193,7 @@ function refreshStart() {   // BEGIN EXTRACTION RUN is locked until mission + sp
   const btn = $("startBtn"); if (!btn) return;
   const ready = tabsDone.mission && tabsDone.role && tabsDone.coop;
   btn.disabled = !ready; btn.classList.toggle("locked", !ready);
-  btn.textContent = ready ? STR.start : "▸ COMPLETE ALL 3 TABS";
+  btn.textContent = ready ? STR.start : "▸ SELECT MISSION & SPECIALIST";
   const tabs = $("startTabs"); if (tabs) tabs.querySelectorAll(".tab").forEach(x => x.classList.toggle("done", !!tabsDone[x.dataset.tab]));
 }
 function initTabs() {   // homepage: Select Mission | Select Specialist | Name & Co-op (Field Guide + START always visible)
@@ -424,7 +435,28 @@ function updateMission(dt) {
     else { applyPhaseMarker(); const np = m.phases[MC.idx]; toast("OBJECTIVE · " + (typeof np.l === "function" ? np.l() : np.l)); }
   }
 }
-const GRACE_S = 7;   // predators ignore the player for the first seconds of a run (anti-spawn-camp)
+const GRACE_S = 7;   // (legacy default) predators ignore the player for the first seconds of a run (anti-spawn-camp)
+/* ====================================================== difficulty ======= *
+ * Three selectable tiers (start-screen tab 3). Every value is a MULTIPLIER applied on top of the
+ * data-driven species stats — additive, so balance tuning lives in one place and the AI/spawn code
+ * just reads the active tier. The axis the player feels is PREDATOR AGGRESSION: how readily a carnivore
+ * commits to the hunt (aggro), how far it senses you (sense), how hard/often it bites (dmg/atkCd), how
+ * fast it runs you down (predSpeed), how many are loose at once (spawnMul) and the spawn-camp grace.
+ * EXPLORER exists so the game is actually playable (the prior single tier = "arrive and die in a minute"). */
+const DIFFICULTIES = {
+  explorer: { id: "explorer", name: "EXPLORER", tag: "Relaxed — learn the island",
+    blurb: "Predators are wary and slow to commit. Fewer hunting at once, weaker bites, a long head-start. Best for exploring, swimming, and learning the tools without being swarmed.",
+    aggro: 0.40, sense: 0.62, dmg: 0.45, atkCd: 1.7, predSpeed: 0.82, spawnMul: 0.5, grace: 20, regen: 1.6 },
+  survivor: { id: "survivor", name: "SURVIVOR", tag: "Balanced — the intended hunt",
+    blurb: "A fair fight. Predators hunt with purpose but you have room to plan, use cover, and reach the beacon. The recommended way to play.",
+    aggro: 0.72, sense: 0.85, dmg: 0.72, atkCd: 1.25, predSpeed: 0.93, spawnMul: 0.78, grace: 12, regen: 1.2 },
+  apex: { id: "apex", name: "APEX", tag: "Brutal — the island wins",
+    blurb: "Relentless. Predators detect you from range, commit instantly, hit hard and travel in numbers. Almost no grace. Only attempt once you know the map.",
+    aggro: 1.0, sense: 1.0, dmg: 1.0, atkCd: 1.0, predSpeed: 1.0, spawnMul: 1.0, grace: 6, regen: 1.0 },
+};
+let DIFF = DIFFICULTIES.survivor;   // default to the playable, balanced tier
+function setDifficulty(id) { if (DIFFICULTIES[id]) { DIFF = DIFFICULTIES[id]; try { localStorage.setItem("ja_diff", id); } catch (_) {} } }
+try { const _sd = localStorage.getItem("ja_diff"); if (_sd && DIFFICULTIES[_sd]) DIFF = DIFFICULTIES[_sd]; } catch (_) {}
 const _gltfLoader = new GLTFLoader();
 function loadModel(path) {
   return new Promise(res => _gltfLoader.load(path,
@@ -514,6 +546,7 @@ async function boot() {
   initMissionSelect();
   initTabs();
   initCharSelect();
+  initDifficultySelect();
   initLobby();
   initOptions();
   loadProgress();
@@ -1394,6 +1427,7 @@ function initInput() {
   const bo = $("bnOut"); if (bo) bo.addEventListener("pointerdown", e => { e.preventDefault(); binocZoom(-1); });
   addEventListener("wheel", e => { if (binoc) { binocZoom(e.deltaY < 0 ? 1 : -1); e.preventDefault(); } }, { passive: false });
   const bm = $("btnMap"); if (bm) bm.addEventListener("pointerdown", e => { e.preventDefault(); toggleMap(); });
+  const rb = $("resupplyBtn"); if (rb) rb.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); requestAirdrop(); });
   const mc = $("mapClose"); if (mc) mc.addEventListener("click", e => { e.preventDefault(); if (mapOpen) toggleMap(); });
   const ml = $("mapLayers"); if (ml) ml.addEventListener("click", e => {   // toggle threat/territory/ghost overlays
     const b = e.target.closest("button"); if (!b) return; e.preventDefault();
@@ -1598,7 +1632,7 @@ function updatePlayer(dt) {
 
   // health slow regen when calm & unhurt (medic perk boosts it)
   hitCooldownVisual = Math.max(0, hitCooldownVisual - dt);
-  if (P.fear < 0.3 && hitCooldownVisual <= 0 && P.hp > 0) P.hp = Math.min(100, P.hp + cfg.healthRegenPerS * (rmod.heal || 1) * dt);
+  if (P.fear < 0.3 && hitCooldownVisual <= 0 && P.hp > 0) P.hp = Math.min(100, P.hp + cfg.healthRegenPerS * (rmod.heal || 1) * DIFF.regen * dt);
 
   // FREE-LOOK movement: the move direction is LATCHED to the camera yaw at the moment you start moving
   // (or meaningfully change stick direction). After that you can swing the camera/look all the way around
@@ -1627,6 +1661,8 @@ function updatePlayer(dt) {
   // pushes you downstream so a crossing is a real "do I risk it?" decision, not free movement.
   const depth = WATER_Y - groundH(P.x, P.z);
   P.swim = inWater;
+  if (P.swim && !P._wasSwim) toast("🌊 SWIMMING · hold " + (isTouch ? "CROUCH" : "CTRL") + " to DIVE · mind your oxygen & the current");   // first frame in deep water → teach the dive control
+  P._wasSwim = P.swim;
   const vaulting = P.air > 0.02 || P.vy > 0;   // F-15: mid jump/vault over the water's edge — let the arc finish before swim cancels it
   if (P.swim && !vaulting) {
     P.air = 0; P.vy = 0; P.onProp = null;
@@ -1675,7 +1711,8 @@ function updatePlayer(dt) {
   P.eyeY = standY;                                                                 // camera follows jumps/climbs/swim
   playerMesh.position.set(P.x, standY + 0.9 - crouchDrop + idleBob + runBounce, P.z);
   playerMesh.rotation.y = P.yaw;
-  playerMesh.rotation.x = (P.gait === "run" ? 0.16 : 0) + (P.gait === "crouch" ? 0.22 : 0) + (P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.012 : 0);
+  if (P.swim) playerMesh.rotation.x = (P.dive ? 1.15 : 0.7) + Math.sin(S.t * 3) * 0.05;   // pitch the body horizontal — reads as a swim stroke / dive
+  else playerMesh.rotation.x = (P.gait === "run" ? 0.16 : 0) + (P.gait === "crouch" ? 0.22 : 0) + (P.gait === "idle" ? Math.sin(S.t * 1.8) * 0.012 : 0);
 
   // anti-stuck safeguard: if you're trying to move but wedged between colliders, nudge free toward open ground
   if (moving && !P.onTower && !P.zip) {
@@ -1884,15 +1921,15 @@ function perceive(a, P) {
   const dx = P.x - a.x, dz = P.z - a.z, d = Math.hypot(dx, dz) || 1;
   const s = a.sp.senses;
   // sight: range scaled by crouch (stealth) + fov check
-  const effRange = s.sightRangeM * (S.player.gait === "crouch" ? 0.45 : 1) * (P.role && P.role.mod.seen ? P.role.mod.seen : 1);
+  const effRange = s.sightRangeM * DIFF.sense * (S.player.gait === "crouch" ? 0.45 : 1) * (P.role && P.role.mod.seen ? P.role.mod.seen : 1);
   let seen = false;
   if (d < effRange) {
     const fwdx = Math.sin(a.yaw), fwdz = Math.cos(a.yaw);
     const dot = (dx / d) * fwdx + (dz / d) * fwdz;
     if (dot > Math.cos(s.sightFovDeg * 0.5 * DEG) && losClear(a.x, a.z, P.x, P.z)) seen = true;   // solid cover breaks the sightline
   }
-  // hearing: radius scales with player noise
-  const heard = d < s.hearingRangeM * (0.35 + P.noise * 0.9);
+  // hearing: radius scales with player noise (and the difficulty sense multiplier)
+  const heard = d < s.hearingRangeM * DIFF.sense * (0.35 + P.noise * 0.9);
   if (seen || heard) { a.bb.lastSeenX = P.x; a.bb.lastSeenZ = P.z; a.bb.hasTarget = true; }
   return { seen, heard, d };
 }
@@ -1913,6 +1950,79 @@ function updateFx(dt) {
   }
 }
 function clearFx() { for (const f of fxList) scene.remove(f.obj); fxList.length = 0; if (decoyMesh) decoyMesh.visible = false; }
+
+/* ==================================================== airdrop resupply === *
+ * When the player burns through their consumables (flares / tranqs / traps / decoys), a RESUPPLY
+ * button appears. Calling it spawns a cargo plane pass + a parachuted crate that lands within 100 m,
+ * registered as a NEW tracked objective on the map and in the world. Walk to the crate to refill. */
+const airdrop = { state: "idle", x: 0, z: 0, t: 0, mesh: null, plane: null };   // state: idle | inbound | landed
+const AIRDROP_DROP_R = 100, AIRDROP_PICKUP_R = 3.4;
+function airdropAvailable() {   // a consumable is empty and no drop is already pending
+  if (S.phase !== "playing" || !S.player.alive || airdrop.state !== "idle") return false;
+  return TOOLS.some(t => t.max !== Infinity && t.charges <= 0);
+}
+function requestAirdrop() {
+  if (!airdropAvailable()) return;
+  const P = S.player, half = BIOME.map.size / 2 - 12;
+  // landing spot: 45–95 m from the player (inside the 100 m spec), clamped in-bounds
+  let lx = P.x, lz = P.z, tries = 0;
+  do { const ang = rand(0, 6.28), d = rand(45, 95); lx = clamp(P.x + Math.sin(ang) * d, -half, half); lz = clamp(P.z + Math.cos(ang) * d, -half, half); tries++; }
+  while (dist2(lx, lz, P.x, P.z) > AIRDROP_DROP_R * AIRDROP_DROP_R && tries < 16);
+  airdrop.x = lx; airdrop.z = lz; airdrop.state = "inbound"; airdrop.t = 0;
+  spawnAirdropPlane(lx, lz);
+  Audio.beacon(true);
+  toast("📦 RESUPPLY INBOUND · cargo drop marked on your map");
+}
+function spawnAirdropPlane(x, z) {
+  if (airdrop.plane) { scene.remove(airdrop.plane); airdrop.plane = null; }
+  const g = new THREE.Group();
+  const fus = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 8, 10), new THREE.MeshStandardMaterial({ color: 0x394036, roughness: 0.7, metalness: 0.3 })); fus.rotation.z = Math.PI / 2; g.add(fus);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.3, 12), new THREE.MeshStandardMaterial({ color: 0x2c322b })); g.add(wing);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.4, 0.3), new THREE.MeshStandardMaterial({ color: 0x2c322b })); tail.position.set(-3.8, 1.0, 0); g.add(tail);
+  g.position.set(x - 230, groundH(x, z) + 78, z);
+  airdrop.plane = g; scene.add(g);
+}
+function spawnAirdropCrate(x, z) {
+  const g = new THREE.Group(), gy = groundH(x, z);
+  g.position.set(x, gy + 64, z);   // starts high; descends under the parachute
+  const crate = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.2, 1.4), new THREE.MeshStandardMaterial({ color: 0x6a5a32, roughness: 0.85 })); crate.position.y = 0.6; g.add(crate);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.46, 0.2, 0.34), new THREE.MeshStandardMaterial({ color: 0xe0772f, emissive: 0xe0772f, emissiveIntensity: 0.6 })); stripe.position.y = 0.9; g.add(stripe);
+  const chute = new THREE.Mesh(new THREE.SphereGeometry(2.1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xd8d2c2, side: THREE.DoubleSide, roughness: 1 })); chute.position.y = 3.6; g.add(chute); g.userData.chute = chute;
+  // findability: a green signal beam + light + slow-rotating marker ring (matches the map objective colour)
+  const beam = new THREE.Group(); const col = 0x6fae6b;
+  const ray = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 26, 8), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.22, depthWrite: false })); ray.position.y = 13; beam.add(ray);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(2.0, 2.5, 36), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12; beam.add(ring);
+  beam.add(mk3(new THREE.PointLight(col, 1.6, 42), { position: new THREE.Vector3(0, 5, 0) }));
+  g.add(beam); g.userData.beam = beam;
+  airdrop.mesh = g; scene.add(g);
+}
+function updateAirdrop(dt) {
+  if (airdrop.state === "idle") return;
+  airdrop.t += dt;
+  if (airdrop.plane) { const g = airdrop.plane; g.position.x += 64 * dt; if (g.position.x > airdrop.x + 260) { scene.remove(g); airdrop.plane = null; } }
+  if (airdrop.state === "inbound") {
+    if (airdrop.t > 1.8 && !airdrop.mesh) spawnAirdropCrate(airdrop.x, airdrop.z);
+    if (airdrop.mesh) {
+      const g = airdrop.mesh, gy = groundH(airdrop.x, airdrop.z);
+      if (g.position.y > gy + 0.4) g.position.y = Math.max(gy + 0.4, g.position.y - 10 * dt);   // parachute descent
+      else { g.position.y = gy + 0.4; if (g.userData.chute) g.userData.chute.visible = false; airdrop.state = "landed"; toast("📦 SUPPLY CRATE DOWN · reach the marker to resupply"); }
+    }
+  }
+  if (airdrop.state === "landed") {
+    if (airdrop.mesh && airdrop.mesh.userData.beam) airdrop.mesh.userData.beam.rotation.y += dt * 1.2;
+    if (dist2(S.player.x, S.player.z, airdrop.x, airdrop.z) < AIRDROP_PICKUP_R * AIRDROP_PICKUP_R) collectAirdrop();
+  }
+}
+function collectAirdrop() {
+  TOOLS.forEach(t => { if (t.max !== Infinity) { t.charges = t.max; t.cd = 0; } });   // refill the whole kit
+  clearAirdrop(); flash(); Audio.beacon(false);
+  toast("✓ RESUPPLIED · flares, tranqs, traps & decoys refilled");
+}
+function clearAirdrop() {
+  if (airdrop.mesh) { scene.remove(airdrop.mesh); airdrop.mesh = null; }
+  if (airdrop.plane) { scene.remove(airdrop.plane); airdrop.plane = null; }
+  airdrop.state = "idle"; airdrop.t = 0;
+}
 function fxRing(x, z, color, maxR, life) {            // expanding ground shockwave
   const m = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.7, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
   m.rotation.x = -Math.PI / 2; m.position.set(x, groundH(x, z) + 0.1, z);
@@ -2120,7 +2230,7 @@ function decide(a, P) {
   if (a.restT > 0 && dist2(P.x, P.z, a.x, a.z) > 30 * 30) { a.state = "Rest"; return; }
   if (a.feedT > 0 || a.restT > 0) { a.feedT = 0; a.restT = 0; }
   const per = (a.lod === "full") ? perceive(a, P) : { seen: false, heard: false, d: 999 };
-  const aggr = sp.behavior.aggression + (S.extraction.called ? (BIOME.spawnDirector.escalation.trexAggroBonus * (isApex(sp) ? 1 : 0.4)) : 0);
+  const aggr = sp.behavior.aggression * DIFF.aggro + (S.extraction.called ? (BIOME.spawnDirector.escalation.trexAggroBonus * (isApex(sp) ? 1 : 0.4)) : 0);
 
   if (isPrey(sp)) {
     // herd prey: flee from nearest predator (and propagate = stampede)
@@ -2135,7 +2245,7 @@ function decide(a, P) {
   if (decoy.t > 0 && dist2(a.x, a.z, decoy.x, decoy.z) < (sp.senses.sightRangeM * 1.3) ** 2) {                  // a thrown decoy pulls them off you
     a.state = "Investigate"; bb.lastSeenX = decoy.x; bb.lastSeenZ = decoy.z; bb.hasTarget = true; bb.preyHunt = null; return;
   }
-  if (!playerSafe() && S.t >= GRACE_S) {   // beacon = SAFE ZONE: predators won't engage the player inside it
+  if (!playerSafe() && S.t >= DIFF.grace) {   // beacon = SAFE ZONE: predators won't engage the player inside it (grace scales with difficulty)
     if (per.seen && per.d < sp.combat.attackRangeM + 0.5) { a.state = "Attack"; return; }
     if ((per.seen || (bb.hasTarget && rng() < aggr)) && per.d < sp.senses.sightRangeM * 1.4) { a.state = (usesPackTactics(sp) ? "Chase" : (per.seen ? "Chase" : "Stalk")); return; }
     if (bb.hasTarget && (per.heard || rng() < aggr * 0.6)) { a.state = "Investigate"; return; }
@@ -2249,7 +2359,7 @@ function steer(a, dt, P) {
       run = true; tx = bb.hasTarget ? bb.lastSeenX : P.x; tz = bb.hasTarget ? bb.lastSeenZ : P.z;
       a.cd -= dt;
       const d = Math.hypot(P.x - a.x, P.z - a.z);
-      if (d < sp.combat.attackRangeM && a.cd <= 0 && S.player.alive) { a.cd = sp.combat.attackCooldownS; a.anim = 0.4; damagePlayer(sp.combat.damage, sp.displayName, a.x, a.z); }
+      if (d < sp.combat.attackRangeM && a.cd <= 0 && S.player.alive) { a.cd = sp.combat.attackCooldownS * DIFF.atkCd; a.anim = 0.4; damagePlayer(sp.combat.damage * DIFF.dmg, sp.displayName, a.x, a.z); }
       // also can kill prey
       if (bb.preyHunt && Math.hypot(bb.preyHunt.x - a.x, bb.preyHunt.z - a.z) < sp.combat.attackRangeM + 1 && a.cd <= 0) { a.cd = 1; bb.preyHunt.hp -= 30; if (bb.preyHunt.hp <= 0) { a.feedT = rand(4, 7); a.state = "Feed"; bb.preyHunt = null; } }   // kill → feed at the carcass
       break;
@@ -2263,7 +2373,7 @@ function steer(a, dt, P) {
   for (const o of dinos) { if (o === a || !o.alive) continue; const od = dist2(a.x, a.z, o.x, o.z); if (od < 9) { const ox = a.x - o.x, oz = a.z - o.z, l = Math.sqrt(od) || 1; sx += ox / l; sz += oz / l; } }
   dx += sx * 0.5; dz += sz * 0.5;
   const nl = Math.hypot(dx, dz) || 1; dx /= nl; dz /= nl;
-  const spd = (run ? sp.move.run : sp.move.walk) * (a.lod === "full" ? 1 : 0.4);
+  const spd = (run ? sp.move.run : sp.move.walk) * (a.lod === "full" ? 1 : 0.4) * (sp.diet === "carnivore" ? DIFF.predSpeed : 1);   // predators run-down speed scales with difficulty
   a.vx = lerp(a.vx, dx * spd, 0.12); a.vz = lerp(a.vz, dz * spd, 0.12);
   a.x += a.vx * dt; a.z += a.vz * dt;
   const lim = BIOME.map.size / 2 - 3; a.x = clamp(a.x, -lim, lim); a.z = clamp(a.z, -lim, lim);
@@ -2403,6 +2513,7 @@ function updateSpawnDirector(dt, P) {
     : sd.roster;
   for (const r of roster) {
     let target = r.target;
+    if (SPECIES[r.species] && SPECIES[r.species].diet === "carnivore") target = Math.max(1, Math.round(target * DIFF.spawnMul));   // fewer predators loose at once on lower difficulty
     if (r.species === "deinonychus" && S.extraction.called) {
       const prog = clamp(S.extraction.hold / S.extraction.holdMax, 0, 1);
       target += Math.round(sd.escalation.deinonychusBonusAtMax * prog);
@@ -3671,7 +3782,7 @@ function startRun() {
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = []; dinosByNetId.clear(); _netDinoId = 0;   // P-09: recycle net-ids each run so they don't grow unbounded across replays
   if (worldJeep) { scene.remove(worldJeep); worldJeep = null; }   // clear last run's drivable jeep
-  clearRemotes(); clearEvac(); clearFx(); clearWreck(); clearField(); clearIntroProp(); clearMissionSites(); clearBoss(); preloadRadio();
+  clearRemotes(); clearEvac(); clearFx(); clearAirdrop(); clearWreck(); clearField(); clearIntroProp(); clearMissionSites(); clearBoss(); preloadRadio();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   applyUnlocks();                                                                     // persistent progression: veteran loadout bonuses
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
@@ -3690,7 +3801,7 @@ function startRun() {
   // 30-species roster yields a varied (but capped) starting population instead of dumping all 48.
   const sd = BIOME.spawnDirector;
   const pool = [];
-  for (const r of sd.roster) for (let i = 0; i < r.target; i++) pool.push(r.species);
+  for (const r of sd.roster) { const carn = SPECIES[r.species] && SPECIES[r.species].diet === "carnivore"; const n = carn ? Math.max(1, Math.round(r.target * DIFF.spawnMul)) : r.target; for (let i = 0; i < n; i++) pool.push(r.species); }   // predator population scales with difficulty
   for (let i = pool.length - 1; i > 0; i--) { const k = (rand(0, 1) * (i + 1)) | 0; const t = pool[i]; pool[i] = pool[k]; pool[k] = t; }
   const initialN = Math.min(pool.length, sd.maxActiveAI);
   for (let n = 0; n < initialN; n++) {
@@ -3979,6 +4090,8 @@ function updateToolHUD() {
     const cd = el.querySelector(".t-cd"); if (cd) cd.style.height = (t.cd > 0 ? (t.cd / t.cdMax * 100) : 0).toFixed(0) + "%";
   });
   const dh = $("dnaHud"); if (dh) dh.textContent = `⚗ DNA ${dnaSamples}  ·  ID ${identified.size}/${Object.keys(SPECIES).length}`;
+  const rb = $("resupplyBtn");   // RESUPPLY appears only when a consumable is empty & no drop is pending; once called it tracks on the map
+  if (rb) { rb.classList.toggle("on", airdropAvailable()); if (airdrop.state !== "idle") rb.classList.remove("on"); }
 }
 let binocFov = BINOC_FOV;
 function binocZoom(dir) {   // +1 zoom in, -1 zoom out (scroll / +- keys / on-screen buttons / pinch)
@@ -4063,6 +4176,14 @@ function mapSVG(big) {
   // ring at the beacon + the map legend; previously listed in the key but never drawn here).
   const safeR = ((SAFE_R / half) * 46).toFixed(1);
   s += `<circle cx="${bx.toFixed(1)}" cy="${bz.toFixed(1)}" r="${safeR}" fill="rgba(111,174,107,0.06)" stroke="#6fae6b" stroke-width="0.5" stroke-dasharray="1.4 1.2" opacity="0.75"/>`;
+  // airdrop resupply — a NEW objective when called: inbound/landed crate, pulsing green, with a track from the player
+  if (airdrop.state !== "idle") {
+    const [ax, az] = toMM(airdrop.x, airdrop.z), [pmx, pmz] = toMM(P.x, P.z), apu = (2.2 + Math.sin(S.t * 4) * 0.8).toFixed(1);
+    s += `<line x1="${pmx.toFixed(1)}" y1="${pmz.toFixed(1)}" x2="${ax.toFixed(1)}" y2="${az.toFixed(1)}" stroke="#6fae6b" stroke-width="0.4" stroke-dasharray="1.5 1.5" opacity="0.6"/>`;
+    s += `<circle cx="${ax.toFixed(1)}" cy="${az.toFixed(1)}" r="${apu}" fill="none" stroke="#6fae6b" stroke-width="0.7" opacity="0.9"/>`;
+    s += `<rect x="${(ax - 1.5).toFixed(1)}" y="${(az - 1.5).toFixed(1)}" width="3" height="3" fill="rgba(111,174,107,0.35)" stroke="#6fae6b" stroke-width="0.7" transform="rotate(45 ${ax.toFixed(1)} ${az.toFixed(1)})"${big ? `><title>RESUPPLY · ${airdrop.state === "landed" ? "CRATE DOWN" : "INBOUND"}</title></rect` : "/"}>`;
+    if (big) s += `<text x="${ax.toFixed(1)}" y="${(az - 3).toFixed(1)}" fill="#9fe0a0" font-size="2.8" text-anchor="middle">RESUPPLY</text>`;
+  }
   // ranger watchtowers — safe vantage points
   for (const t of TOWERS) { const [tx, tz] = toMM(t.x, t.z); s += `<polygon points="${tx.toFixed(1)},${(tz - 2).toFixed(1)} ${(tx - 1.7).toFixed(1)},${(tz + 1.4).toFixed(1)} ${(tx + 1.7).toFixed(1)},${(tz + 1.4).toFixed(1)}" fill="none" stroke="#8fb8c4" stroke-width="0.6"/>`; }
   // ENLARGED map only: surface the WHOLE objective chain + range rings for complete awareness
@@ -4260,6 +4381,7 @@ function simulate(dt) {
   updateMission(dt);
   updateAction(dt);
   updateFx(dt);
+  updateAirdrop(dt);
   if (wreckMesh) updateWreck(dt);
   Audio.tickHeartbeat(dt, S.player.fear);
   if (Net.on) netTick(dt);
