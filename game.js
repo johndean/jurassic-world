@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-16-s";
+const BUILD = "2026-06-16-t";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -3888,7 +3888,7 @@ function startRun() {
     do { x = rand(-half, half); z = rand(-half, half); tries++; } while (dist2(x, z, 0, 0) < minR * minR && tries < 24);
     dinos.push(spawnDino(species, clamp(x, -half, half), clamp(z, -half, half)));
   }
-  $("startScreen").classList.add("hidden"); $("endScreen").classList.add("hidden");
+  $("startScreen").classList.add("hidden"); $("endScreen").classList.add("hidden"); $("endScreen").classList.remove("win"); clearConfetti();
   cam.yaw = 0; cam.pitch = -0.18;
   try { startMission(); } catch (e) { console.error("startMission", e); }   // set up the mission phase chain + objective marker
   try { buildMissionSites(); } catch (e) { console.error("missionSites", e); }   // build the real structures (outpost, generators, Maya…) at objective sites
@@ -3945,7 +3945,42 @@ function endRun(won, ending) {
   const t = $("endTitle"), b = $("endBody");
   if (ending && ENDINGS[ending]) { const e = ENDINGS[ending]; t.textContent = e.title; t.className = e.cls; b.textContent = e.body; }
   else { t.textContent = won ? STR.winTitle : STR.loseTitle; t.className = won ? "win" : "lose"; b.textContent = won ? STR.winBody : (STR.loseBody + (S.killedBy ? `  (${STR.caught} ${S.killedBy})` : "")); }
-  $("endScreen").classList.remove("hidden");
+  // win → celebration + NEXT MISSION option; loss → RUN AGAIN only
+  const scr = $("endScreen"); scr.classList.toggle("win", !!won);
+  if (won) {
+    const nx = nextMission(); const nb = $("nextBtn");
+    if (nb && nx) nb.textContent = "NEXT: " + nx.name + " ▶";
+    celebrate();
+  } else { clearConfetti(); }
+  scr.classList.remove("hidden");
+}
+
+// the mission after the selected one, in menu order (wraps to the first)
+function nextMission() {
+  const keys = Object.keys(MISSIONS);
+  const i = keys.indexOf(selectedMission && selectedMission.id);
+  return MISSIONS[keys[(i + 1) % keys.length]];
+}
+
+// victory confetti burst — pure DOM, auto-cleans; no effect on gameplay
+function clearConfetti() { const c = $("confetti"); if (c) { c.classList.remove("on"); c.innerHTML = ""; } }
+function celebrate() {
+  const c = $("confetti"); if (!c) return;
+  c.innerHTML = ""; c.classList.add("on");
+  const cols = ["#f4d35e", "#8fd07a", "#e0772f", "#5fb0d6", "#ffffff", "#d65fc4"];
+  const N = 110;
+  for (let i = 0; i < N; i++) {
+    const b = document.createElement("div"); b.className = "confetti-bit";
+    b.style.left = (Math.random() * 100) + "vw";
+    b.style.background = cols[(Math.random() * cols.length) | 0];
+    b.style.animationDuration = (1.8 + Math.random() * 2.2) + "s";
+    b.style.animationDelay = (Math.random() * 0.6) + "s";
+    if (Math.random() < 0.5) b.style.borderRadius = "50%";
+    b.style.transform = "scale(" + (0.7 + Math.random() * 0.9) + ")";
+    c.appendChild(b);
+  }
+  Audio.fanfare();
+  setTimeout(() => { if (S.phase === "won") clearConfetti(); }, 5200);   // tidy up if still on the end screen
 }
 
 /* ================================================== procedural audio ===== */
@@ -4011,6 +4046,13 @@ const Audio = (() => {
     hit() { noise(0.18, 0.3, 2200); blip(90, 0.18, "square", 0.12, 50); },
     beacon(call) { blip(call ? 880 : 1320, call ? 0.4 : 0.12, "square", 0.12, call ? 660 : null); },
     win() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => blip(f, 0.4, "triangle", 0.18), i * 130)); },
+    // bigger victory flourish for the mission-complete celebration: rising arpeggio + held chord
+    fanfare() {
+      ensure(); if (!ctx) return;
+      const arp = [523, 659, 784, 1046, 1318, 1568];
+      arp.forEach((f, i) => setTimeout(() => blip(f, 0.32, "triangle", 0.2), i * 95));
+      setTimeout(() => [784, 1046, 1318].forEach(f => blip(f, 1.1, "triangle", 0.13)), arp.length * 95);
+    },
     lose() { [196, 165, 131, 98].forEach((f, i) => setTimeout(() => blip(f, 0.5, "sawtooth", 0.16), i * 160)); },
     // ---- opening crash-intro cues ----
     rotor(on) {   // layered helicopter: engine hum + rhythmic blade-slap "whump" + rotor-wash air
@@ -4801,7 +4843,12 @@ $("guideBtn").addEventListener("click", () => { $("codex").classList.add("on"); 
 $("dexClose").addEventListener("click", () => $("codex").classList.remove("on"));
 
 $("startBtn").addEventListener("click", () => { Audio.init(); startRun(); });   // pointer lock acquired at the intro handoff
-$("againBtn").addEventListener("click", () => { Audio.init(); startRun(); });
+$("againBtn").addEventListener("click", () => { Audio.init(); clearConfetti(); startRun(); });
+const nextBtn = $("nextBtn"); if (nextBtn) nextBtn.addEventListener("click", () => {
+  Audio.init(); clearConfetti();
+  selectedMission = nextMission();   // advance to the next mission, then launch it
+  startRun();
+});
 const introSkipBtn = $("introSkip"); if (introSkipBtn) introSkipBtn.addEventListener("click", skipIntro);
 $("againBtn").textContent = STR.again;
 
