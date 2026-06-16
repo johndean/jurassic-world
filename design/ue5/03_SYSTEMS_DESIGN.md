@@ -112,6 +112,50 @@ Control Rig per archetype (alpha+). Quadrupeds especially must never use a human
 
 **Slice stance:** build everything single-player but keep systems in **subsystems + replicatable actors** (no logic baked into HUD/Blueprint tick) so turning on replication later is wiring, not a rewrite.
 
+**Co-op robustness note (browser lesson):** the live browser co-op is host-authoritative (host spawns/sims dinos; clients puppet via `dinosByNetId` snapshots; join-in-progress bootstraps from the last world tick) but has **no remote-player interpolation and no packet ACK** — so >100 ms latency jitters avatars and dropped dino snapshots can ghost. UE5 replication (interpolation, reliable RPCs, replication graph) is the correct fix and is the *genuine* new workstream — don't port the browser's fire-and-forget sync.
+
+---
+
+## 7. Traversal — `UJSITraversalComponent` on the player
+
+Ports the browser traversal stack (jump / auto-vault / mantle / tower-climb / zipline), all height-aware.
+- **Jump / gravity:** UE `CharacterMovementComponent` already gives this (`JumpZVelocity`, gravity scale). Browser `GRAV=22, JUMP_V=7.4` → tune to feel.
+- **Auto-vault & mantle:** UE 5.x **Motion Warping** + a forward trace for low obstacles (≤1.3 m → vault) and mid obstacles (1.6–4.2 m, the browser `climb` flag → mantle). Mirrors `lowObstacleAhead()` / `climbableAhead()`. The browser marks colliders `climb` at author time; in UE tag climbable geometry with a `GameplayTag` or place ClimbableVolumes.
+- **Tower climb / zipline:** ladder volumes + a spline-ride (`USplineComponent`) for the zip; both are scripted traversal actors, mirroring `climbTower()` / `startZip()`.
+- **Height-aware collision:** the browser uses feetY-vs-`collider.top` so a cleared obstacle stops blocking. UE gets this for free from capsule-vs-world; keep the "cleared = passable" intent for low set-dressing.
+
+## 8. Water — swim / dive / oxygen / current (`APhysicsVolume` + swim movement mode)
+
+Ports browser swim/dive (`P.swim`, `P.dive`, `WATER_Y`, oxygen drain, downstream current).
+- Author the river/lagoon with the **UE Water plugin**; mark deep regions as swimmable water volumes.
+- Swim movement mode (CMC supports `MOVE_Swimming`); **dive** = submerge input draining an `Oxygen` attribute (browser −14/s diving, regen on surface); 0 oxygen → HP bleed.
+- **Current:** a directional force in the river volume (browser `riverSlope`-aligned 1.5 m/s downstream) so a crossing is a real risk decision.
+- AI: per-archetype — aquatic species swim (Spino/Bary/Sucho/Mosa), fliers ignore, land species **wade and steer to higher ground** unless hunting/fleeing (browser uphill-gradient avoidance). Mirror in EQS (prefer non-water nav).
+
+## 9. Survival layer — `UJSISurvivalComponent` (GAS AttributeSet)
+
+Ports hunger / thirst / temperature / injury-bleed.
+- Attributes: `Hunger, Thirst, Temperature, bInjured` with the browser drain rates (thirst 100/420 s, hunger 100/780 s; wet → cold, fire/safe-zone → warm; HP≤28 → injured/bleed, never lethal alone).
+- Effects feed a UMG status strip (the browser HUD chips: INJURED / THIRSTY / HUNGRY / COLD) and a `SurvivalSpeedMul` GameplayEffect on movement.
+- Refills: GAS effects from supply/campsite/safehouse overlap + water volumes (thirst).
+
+## 10. Difficulty — `UDifficultyProfile` Data Asset (Explorer / Survivor / Apex)
+
+Ports the browser `DIFFICULTIES` table (8 multipliers): `Aggro, SenseMul, DamageMul, AttackCdMul, PredSpeedMul, SpawnMul, GraceSeconds, RegenMul`.
+- One Data Asset per tier (schema in `02_DATA_ASSET_SCHEMA.md`); selected on the front-end (3rd tab in browser), stored in the save game, read by `ST_Creature` (aggression/sense/speed), the combat hit (damage/cooldown), `USpawnDirectorSubsystem` (count), and the player regen.
+- **Default = Survivor** (the browser default that made the game survivable). Apex = the original un-multiplied tuning.
+
+## 11. Vehicles — Chaos Vehicles (drivable jeep)
+
+Ports the browser drivable jeep (arcade accel/brake/drag, reverse-aware steering, safe-zone-on-board).
+- UE **Chaos Vehicle** pawn; enter/exit at a proximity prompt (browser `enterR=6.5`); chase camera; while occupied the player is a **mobile safe zone** (predators disengage, no damage — a `bInVehicle` flag the threat/AI read, mirroring `playerSafe()`).
+- Slice ships one jeep; alpha adds the boat (river) and the cinematic-intro vehicles as drivables if scoped.
+
+## 12. Airdrop resupply — `AAirdropManager` + objective entry
+
+Ports the browser airdrop (call when a consumable is empty → inbound plane → parachute crate lands ≤100 m → becomes a tracked objective + minimap marker → walk-in refill).
+- A `RESUPPLY` UMG button appears when any consumable is depleted (`airdropAvailable()`); pressing it spawns the cargo flyover + a parachuted `BP_SupplyCrate` within 100 m, registers a **dynamic objective** + minimap marker, and on overlap refills the kit. Map the browser states (idle → inbound → landed) to the actor's state.
+
 ---
 
 ## Traceability: browser → UE5
@@ -126,4 +170,11 @@ Control Rig per archetype (alpha+). Quadrupeds especially must never use a human
 | `S.threat` | `UThreatSubsystem` |
 | `player.noise` + draw | `UNoiseComponent` + AISense_Hearing |
 | spawn director (`spawnDirector` roster) | `USpawnDirectorSubsystem` reading the same roster data |
+| traversal (`tryJump`/`lowObstacleAhead`/`climbableAhead`/`climbTower`/`startZip`) | `UJSITraversalComponent` + Motion Warping + spline ride |
+| swim/dive (`P.swim`/`P.dive`/`WATER_Y`/`riverSlope` current) | Water plugin volumes + `MOVE_Swimming` + Oxygen attribute |
+| survival (`updateSurvival` hunger/thirst/temp/injury) | `UJSISurvivalComponent` (GAS AttributeSet) + status UMG |
+| difficulty (`DIFFICULTIES`/`DIFF`) | `UDifficultyProfile` Data Asset read by AI/combat/spawn/regen |
+| drivable jeep (`VEH`/`updateDriving`/`playerSafe` in-vehicle) | Chaos Vehicle pawn + `bInVehicle` safe-zone flag |
+| airdrop (`requestAirdrop`/`spawnAirdropCrate`/`collectAirdrop`) | `AAirdropManager` + `BP_SupplyCrate` + dynamic objective |
+| co-op snapshots (`dinosByNetId`/`netApplyDinos`, no interp/ACK) | UE replication graph + interpolation + reliable RPCs |
 | `logic.js` colyseus stubs | dedicated-server authority + replication |

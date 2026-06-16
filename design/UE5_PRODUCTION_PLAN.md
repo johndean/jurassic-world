@@ -18,6 +18,29 @@ Trade-off: UE5 ships as a **multi-GB download for gaming PC/console**, not an in
 - **The browser game becomes the playable prototype / vertical-slice reference** that proves the loop is fun.
 - **HUD/UX** design (real labels, palette) ports to UMG.
 
+## Prototype maturity — what is now PROVEN, not just designed (as of browser build `2026-06-16-s`)
+The browser prototype has graduated from "proves the loop" to **"proves the systems."** The following are
+implemented, live, and validated in `AAA_ZERO_GAP_AUDIT.md` — they are reference *behaviour to match*,
+not open design questions, when authored in UE5:
+- **Traversal & solid world:** jump / auto-vault / mantle / tower-climb / zipline over a queryable collider
+  world (player + AI both collide). → UE5: CharacterMovementComponent + nav-mesh + climbable volumes.
+- **Water:** swim / dive / oxygen / current; AI wade-and-avoid or swim by archetype. → UE5: PhysicsVolumes
+  + buoyancy + a swim movement mode; Water plugin for the lagoon/river.
+- **Survival layer:** hunger / thirst / temperature / injury-bleed with speed penalties + HUD chips.
+  → UE5: an AttributeSet (GAS) driving a status-effect UMG strip.
+- **Living ecosystem AI:** 11-state utility AI, predator-vs-prey hunt→feed, predator hierarchy, herd
+  cohesion + stampede, pack lead/flank/harry, agility-scaled turning, arrival/anti-jitter steering.
+  → UE5: StateTree/Behaviour Tree + EQS, one controller per archetype.
+- **Drivable vehicles** (jeep) with a safe-zone-on-board rule. → UE5: Chaos Vehicles.
+- **Difficulty tiers** (Explorer / Survivor / Apex) as 8 AI/combat multipliers, selectable + persisted.
+  → UE5: a `DifficultyProfile` Data Asset read by the AI/spawn systems (schema in `ue5/02_DATA_ASSET_SCHEMA.md`).
+- **Airdrop resupply** as a dynamic objective (call → inbound → land ≤100 m → map marker → refill).
+  → UE5: a spawned actor + objective entry + minimap marker.
+- **Accessibility & platform:** colourblind palettes, HUD scale, subtitles, high-contrast, and a hardened
+  touch layer (iPad zoom prevention + RESET VIEW recovery). → UE5: EnhancedInput + UMG + platform settings.
+These close most "is it fun / does it work" risk **before** any UE5 spend; the remaining open risk is
+art/animation fidelity and (for co-op) network robustness — see Milestones.
+
 ## Tech stack
 - **Engine:** UE 5.4+ (Nanite, Lumen, VSM, World Partition for the island).
 - **Characters:** **MetaHuman** (cadets, rangers) — photoreal, auto-rigged, LOD'd. Solves the hand/rig
@@ -40,9 +63,18 @@ Higgsfield concept art → ref board → model (or Megascans/marketplace) → re
 rig (Control Rig / MetaHuman) → import to UE5 → Nanite/Lumen setup → in-engine polish.
 
 ## Milestones
-1. **Vertical Slice (1 zone, 1 playable loop, 2–3 creatures, photoreal):** proves the look + feel. ~2–4 months.
-2. **Alpha (full island via World Partition, 10–15 species, core systems):** ~6–10 months.
-3. **Beta (all 30 species, ecosystem AI, multiplayer if in scope, optimization, content-complete):** ~4–8 months.
+Because the prototype already proves the systems (see "Prototype maturity"), the slice can focus risk on
+**look + animation fidelity** rather than re-deriving gameplay; port the proven rules 1:1.
+1. **Vertical Slice (1 zone, 1 playable loop, 2–3 creatures, photoreal):** proves the look + feel by
+   re-skinning the *already-proven* loop in UE5. Port from the browser reference: free-look traversal +
+   one drivable vehicle + the survival HUD strip + 1 difficulty profile + 1 predator archetype with the
+   utility AI. ~2–4 months.
+2. **Alpha (full island via World Partition, 10–15 species, core systems):** swim/dive PhysicsVolumes,
+   the full survival AttributeSet, all three difficulty profiles, airdrop objective. ~6–10 months.
+3. **Beta (all 30 species, ecosystem AI, multiplayer if in scope, optimization, content-complete):**
+   port the predator-vs-prey / hierarchy / pack / herd behaviours to StateTree+EQS; **net robustness is
+   the genuine new workstream** (the browser co-op is host-authoritative but lacks interpolation/ACK —
+   UE5 replication solves this properly). ~4–8 months.
 4. **Ship (polish, certification if console, marketing):** ~2–4 months.
 Rough total: **~14–26 months** depending on team size, multiplayer, and console.
 

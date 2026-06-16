@@ -1,435 +1,184 @@
-# AAA ZERO-GAP AUDIT — Jurassic World Survival (Island Alpha)
+# AAA ZERO-GAP AUDIT — Jurassic Survival: Island Alpha
 
-> Supreme Design Authority review against two mandates: (1) zero-gap audit of **every** system, and
-> (2) terrain/traversal/water physical-authenticity. Every "Current State" claim below is tied to a
-> real `game.js` / `index.html` / `strings.js` / `species.json` line, not aspiration. This is a
-> **document-only** pass — no code/data/assets changed. All recommendations are **conservative &
-> additive** (per owner): they layer on top of existing systems and must never regress free-walk.
+> **Current-state audit as of build `2026-06-16-s`** (live on Railway).
+> Method: five parallel read-only code audits (missions, toolset/combat, dino AI/ecosystem,
+> player/traversal/survival/vehicle, world/HUD/map/platform/co-op) against `game.js`,
+> `index.html`, `net.js`, `data/species.json` — every "state" claim is tied to a real file:line.
+> Disputed "critical" findings were re-verified against the source before inclusion (see §3).
+>
+> This **supersedes** the prior version of this doc, which graded the game before this session's work.
+> Most of the formerly 🔴/🟡 items (world collision, traversal, swim/dive, survival, map overlays,
+> drivable vehicles, living ecosystem) are now **shipped**. See §1 for the delta.
 
-**Core survival test applied throughout:** *would this information / mechanic / system improve a real
-field operative's ability to survive and complete the mission?* If yes → improve. If no → cut/redesign.
+**Core survival test applied throughout:** *would this mechanic/information improve a real field
+operative's ability to survive and complete the mission?* If yes → keep/improve. If no → cut.
 
 ---
 
 ## §0 — Executive Summary & Verdict Table
 
-The game is structurally strong: data-driven missions, a genuinely reactive (if player-centric)
-predator/prey AI, an in-universe tactical HUD + map, full input parity (KB/mouse, gamepad, touch),
-and detailed scripted vehicle intros. The dominant gap class is **physical-world authenticity** — the
-island looks solid but mostly isn't — and a smaller class of **information completeness** gaps.
+The game is now a **content-complete, systemically deep extraction survival prototype**. The dominant
+gap class has shifted from "physical-world authenticity" (largely closed this session) to **online
+robustness** (co-op net sync) and **content depth** (ecosystem behaviors not yet modeled). It is fully
+playable solo on desktop, gamepad, and iPad, across three difficulty tiers.
 
-| # | System | Grade | Single biggest gap |
-|---|--------|-------|--------------------|
-| 1 | World solidity (collision) | 🔴 Missing | Player ghosts through rocks, ruins, buildings, mission props, vehicles, fences |
-| 2 | Traversal (jump/vault/mantle/climb) | 🔴 Missing | No jump or vault; only scripted tower-climb + intro zip/canopy |
-| 3 | Water / swimming / diving | 🔴 Missing | Water is cosmetic; player walks the riverbed, never swims |
-| 4 | Terrain / elevation gameplay | 🟡 Partial | Heightmap exists & is followed, but elevation affects nothing (no stamina/vision/speed) |
-| 5 | Dino terrain interaction | 🔴 Missing | Dinos clip terrain & all move identically; no aquatic/flying/large-body locomotion |
-| 6 | Information / HUD | 🟢 Strong | No persistent beacon-distance or mission-% on HUD |
-| 7 | Map & overlays | 🟡 Partial | Dino dots only — no threat radius, territory, state, or last-seen |
-| 8 | Map legend (zero-gap) | 🔴 Defect | Map legend lists **SAFE ZONE** but `mapSVG` never draws it (it exists only as a 3D ground ring) |
-| 9 | Mission design & flow | 🟡 Partial | Item-objects, building collision, co-op progress sync still abstracted |
-| 10 | Dinosaur AI & ecosystem | 🟡 Partial | Alive but **player-centric**: no predator-v-predator, territory, nesting, feed/rest, migration |
-| 11 | Vehicles | 🟡 Partial | Detailed exteriors, but no instrumentation/gauges; cinematic-only (not drivable) |
-| 12 | Navigation | 🟢 Strong | Compass + GPS + map solid; no waypoint/route planning |
-| 13 | Environmental storytelling | 🟡 Partial | Set-pieces exist but rarely "tell a story without exposition" |
-| 14 | Combat | 🟡 Partial | Tranq/trap/sample kit is good; no lethal defense / melee feedback depth |
-| 15 | Stealth | 🟡 Partial | Noise + crouch + FOV cones exist; no cover/lean/distraction systems |
-| 16 | Survival systems | 🟡 Partial | Health/stamina/noise solid; no hunger/thirst/temperature/injury states |
-| 17 | Progression | 🟡 Partial | Role perks exist; no persistent unlocks/loadout meta |
-| 18 | Multiplayer / co-op | 🟡 Partial | Host-authoritative mission/seed works; dino & mission-progress sync is per-client |
-| 19 | Accessibility | 🟡 Partial | Colorblind/scalable-text/subtitle options not surfaced |
-| 20 | Audio | 🟢 Strong | Real human VO + radio + synthetic fallback; positional dino audio thin |
-| 21 | Animation | 🟢 Strong | Procedural gait/attack/slump; no terrain-adaptive foot/IK |
-| 22 | Controls | 🟢 Strong | KB/mouse + gamepad + touch all wired |
-| 23 | Platform parity | 🟡 Partial | Compass/contact/threat hidden on small screens; minimap legend hidden on mobile |
+| # | System | Grade | Single biggest remaining gap |
+|---|--------|-------|------------------------------|
+| 1 | World solidity (collision) | 🟢 Strong | Small rocks (s≤1.35) & survivor NPC are walk-through by design |
+| 2 | Traversal (jump/vault/mantle/climb/zip) | 🟢 Strong | Vault height cap is a hard 1.3 m with no feedback |
+| 3 | Water / swimming / diving | 🟢 Strong | Drowning lacks a distinct audio cue; no underwater geometry |
+| 4 | Terrain / elevation gameplay | 🟢 Strong | Uphill stamina + slope tilt done; no vision/altitude advantage rules |
+| 5 | Dino terrain interaction | 🟢 Strong | Fliers/aquatic/wading + structure-slide done; no true pathfinding |
+| 6 | Information / HUD | 🟢 Strong | Threat meter is integer-quantised; contact bearing is 8-point |
+| 7 | Map & overlays | 🟢 Strong | Pinch-zoom strokes thicken; ghost TTL fixed at 28 s |
+| 8 | Map legend / safe-zone (former defect) | 🟢 Fixed | Safe-zone ring now drawn (game.js:4254) + airdrop marker |
+| 9 | Mission design & flow | 🟢 Strong | `collect` phase handler is dead code; no item-pickup phase type |
+| 10 | Dinosaur AI & ecosystem | 🟢 Strong | No nesting/migration/drinking; `fightsWhenCornered`/`stalkPreferred` unwired |
+| 11 | Vehicles | 🟢 Strong | Jeep body is a static 2.2 m circle; no respawn if destroyed |
+| 12 | Navigation | 🟢 Strong | No multi-waypoint route planning |
+| 13 | Environmental storytelling | 🟡 Partial | Set-pieces exist; few "tell a story without exposition" beats |
+| 14 | Combat / defense kit | 🟢 Strong | No lethal-vs-deterrent escalation tree beyond melee |
+| 15 | Stealth | 🟢 Strong | Noise+crouch+FOV+LOS done; no lean/cover-snap/peek |
+| 16 | Survival systems | 🟢 Strong | Hunger/thirst/temp/injury done; no rest/sleep or rations inventory |
+| 17 | Progression | 🟡 Partial | Win-gated unlocks + career line; thin meta (2 unlock tiers) |
+| 18 | Multiplayer / co-op | 🟡 Partial | Host-authoritative works; **no remote interpolation / packet ACK** |
+| 19 | Difficulty (NEW) | 🟢 Strong | Static per-run; no adaptive/dynamic scaling |
+| 20 | Airdrop resupply (NEW) | 🟢 Strong | Landing spot not terrain-filtered (could land in water/rock) |
+| 21 | iPad/Safari hardening (NEW) | 🟢 Strong | Double-tap guard could false-positive; Android pinch relies on touch-action |
+| 22 | Rendering / performance | 🟢 Strong | No texture LOD, no frame cap (mobile thermals), no shadows |
+| 23 | Accessibility | 🟢 Strong | Colourblind/HUD-scale/subtitles/high-contrast; no audio slider/reduce-motion |
 
-Legend: 🟢 Strong (faithful) · 🟡 Partial · 🔴 Missing/Defect.
-
----
-
-## §1 — Per-System Audit
-
-Each entry: **Current State · AAA Benchmark · Gap · Risk · Root Cause · Impact · Recommendation
-(conservative/additive) · Implementation Approach · Priority · Expected Improvement.**
-
-### 1. World Solidity (Collision) — 🔴 Missing
-
-- **Current State.** Only two collider types exist. Trees: ~30 solid trunks, circle push-out at
-  `dist < (t.r + 0.5)` (`game.js:1375-1382`, array seeded in `buildFoliage` `game.js:826-832`).
-  Watchtowers: perimeter push-out + ladder auto-climb (`game.js:1390-1395`). A perimeter clamp keeps
-  the player in-bounds (`game.js:1384`). Code explicitly notes "no per-frame raycast; cost-bounded"
-  (`game.js:1538`). **Everything else is walk-through**: 130 instanced rocks (`game.js:562-575`), all
-  ruins (`buildRuins` `game.js:591-730`), all mission props — generator/cave/command/safehouse/supply
-  (`buildSiteProp` `game.js:986-992`), the facility/bunker/comms tower (`buildFacility` `game.js:1167-1188`),
-  fences, and intro vehicles. None are stored in a queryable collider list.
-- **AAA Benchmark.** "If an object appears solid, it must behave as solid" — zero ghosting through any
-  rock, wall, building, vehicle, or debris.
-- **Gap.** ~99% of visually-solid geometry is non-solid.
-- **Risk.** Immersion-breaking; trivializes threat (run *through* a building to escape a raptor);
-  invalidates cover-based stealth and any "barricade" fantasy.
-- **Root Cause.** A deliberate early perf decision (avoid per-frame raycasts), never revisited as the
-  world filled with props. No central registry of placed solids to test against.
-- **Impact.** Highest single immersion gap; undermines stealth, navigation, and threat tension at once.
-- **Recommendation (conservative/additive).** Build a **queryable collider registry** populated at
-  build-time (rocks, ruins, buildings, mission props, vehicles, fences) with cheap proxy shapes
-  (circle for round props, AABB/oriented-box for walls). Extend the existing push-out loop — **same
-  technique already used for trees** — so there is no new physics engine and no per-frame raycast.
-  Tune push-out radii **inward** of the visual mesh so the player is never wedged or trapped (the
-  owner's conservative bar). Spatial-hash the registry by grid cell so only nearby colliders are
-  tested each frame.
-- **Implementation Approach.** Add `colliders = []` with `{kind:'circle'|'box', x, z, r | hw,hl, yaw}`;
-  push from each `build*` site. In `updatePlayer` after movement, query the cell hash and resolve the
-  nearest few via the existing circle push + a box push helper. Reuse for `updateDinos` (`game.js:1924`).
-- **Priority.** HIGH (roadmap pass 2).
-- **Expected Improvement.** The island stops feeling like a stage flat; buildings/rocks become real
-  cover and real obstacles; chases gain geography.
-
-### 2. Traversal — Jump / Vault / Mantle / Climb — 🔴 Missing
-
-- **Current State.** Locomotion is walk/run/crouch only (`updatePlayer` `game.js:1328-1413`,
-  states set `game.js:1345-1349`). Player Y is *always* pinned to `playerFloorY` (`game.js:1127-1131`)
-  → `groundH` (`game.js:1310-1318`); there is **no vertical velocity, no gravity, no jump**. The only
-  vertical traversal is the scripted watchtower auto-climb (`climbTower` `game.js:1136-1140`) and the
-  one-off zipline (`startZip`/`updateZip` `game.js:1141-1155`); intro HALO/canopy is also scripted.
-- **AAA Benchmark.** Walk, sprint, crouch, jump, vault, mantle, climb, shimmy, drop, rappel — terrain
-  as strategy, alternate vertical routes.
-- **Gap.** No general jump/vault/mantle/climb; no ledge detection.
-- **Risk.** Small obstacles hard-stop the player (once collision lands, a knee-high log would be an
-  impassable wall) — *worsens* once world solidity ships, so this should follow closely.
-- **Root Cause.** Movement model is purely horizontal-on-heightmap by design.
-- **Impact.** Removes a whole axis of survival decision-making ("climb the cliff to escape the Rex").
-- **Recommendation (conservative/additive).** Add an **opt-in** vertical layer that does not touch
-  default walking: a `P.vy` vertical-velocity channel only engaged when jumping/falling/climbing;
-  free-walk path unchanged when grounded and not jumping. Jump = small arc with gravity back to
-  `groundH`. Vault/mantle = when blocked by a low collider with clear top, animate up-and-over.
-  Climb = generalize `climbTower` to tagged climbable colliders (rock faces, ledges) with a hold input.
-- **Implementation Approach.** Gate everything behind `if (P.vy || P.climbing)`; otherwise the
-  existing grounded branch runs verbatim. Detect vault/mantle off the new collider registry (obstacle
-  height < threshold + clear space beyond). Reuse zip's lerp pattern for climb interpolation.
-- **Priority.** HIGH (roadmap pass 3, right after solidity).
-- **Expected Improvement.** Terrain becomes a toolkit; players remember the cliff they climbed.
-
-### 3. Water / Swimming / Diving — 🔴 Missing
-
-- **Current State.** River is a carved terrain channel (`RIVER_HALF=17`, `WATER_Y=-0.55`, carve in
-  `groundH` `game.js:1304-1318`) with a translucent water plane (`game.js:548-551`). During gameplay
-  the player simply walks the **carved riverbed** — there is no depth check, no swim state, no
-  buoyancy, no current, no drowning. Swimming exists nowhere; the boat is intro-only (`game.js:2605-2757`).
-- **AAA Benchmark.** Classified water bodies; auto swim-state past walkable depth; diving, currents,
-  oxygen, equipment drag, aquatic threats; "do I cross here?" as a real decision.
-- **Gap.** Water is 100% cosmetic in gameplay.
-- **Risk.** A signature Jurassic survival beat (river crossings, flooded facilities, Spino ambush) is
-  absent; water reads as fake the moment a player steps in.
-- **Root Cause.** Water plane is decorative; player Y is terrain-locked with no water-depth branch.
-- **Impact.** Loses a major terrain-decision and tension system.
-- **Recommendation (conservative/additive).** Add a **swim state** triggered when `WATER_Y − groundH`
-  exceeds a wade threshold: float at surface, directional swim, stamina drain + current push, optional
-  dive with an oxygen meter. Layer it as a new movement state alongside walk/run/crouch (same pattern
-  as `game.js:1345-1349`); land movement untouched. Add at least one **lagoon** body so water matters
-  outside the river.
-- **Implementation Approach.** Compute depth from existing `groundH` vs `WATER_Y`; set
-  `P.swim`/`P.dive`; replace floor-pin with surface-pin while swimming; add current vector from
-  `riverCenter` slope; oxygen ticks during dive. Aquatic dinos (below) share the depth test.
-- **Priority.** MED-HIGH (roadmap pass 4).
-- **Expected Improvement.** Rivers become gates and escape routes; introduces aquatic dread.
-
-### 4. Terrain / Elevation Gameplay — 🟡 Partial
-
-- **Current State.** Real procedural heightmap (`groundH` `game.js:1310-1318`): rolling hills, a
-  perimeter mountain ring rising 30 m+, and the carved river. Player, dinos, foliage, props all sample
-  it. But elevation affects **nothing** mechanically — no slope stamina cost, no high-ground vision
-  bonus, no speed change.
-- **AAA Benchmark.** Height matters: visibility, recon, sniper/observation positions, escape routes,
-  comms range, weather exposure — players actively seek high ground.
-- **Gap.** Elevation is visual/positional only.
-- **Risk.** Low (not broken, just under-exploited).
-- **Root Cause.** Movement speed is flat; perception range isn't elevation-aware.
-- **Impact.** Misses easy emergent-strategy wins already latent in the heightmap.
-- **Recommendation (conservative/additive).** Add slope-aware stamina drain (uphill costs more) and an
-  elevation term in player sight/spot range (and dino detection of the player). Purely additive to
-  existing stamina (`game.js` vitals) and perception (`perceive` `game.js:1539`).
-- **Implementation Approach.** Sample `groundH` gradient under the player; scale stamina cost + view
-  distance. No new geometry.
-- **Priority.** LOW-MED (fold into pass 3/4).
-- **Expected Improvement.** Watchtowers/ridges become tactically meaningful, not just scenery.
-
-### 5. Dino Terrain Interaction — 🔴 Missing
-
-- **Current State.** Dinos are clamped to map bounds (`game.js:1874`) and placed at `groundH`
-  (`game.js:1877`) but **ignore all obstacles** and use one shared `steer` (`game.js:1811`): movement
-  differs only by `move.walk/run` scalars. Aquatic species (Spino/Baryonyx/Suchomimus/Mosasaurus)
-  have no water behavior; Pteranodon has glide/flap/dive anims but no altitude — it patrols on the
-  ground; Mosasaurus' `swim` anim never triggers.
-- **AAA Benchmark.** Dinos obey the same world rules: raptors climb, big bodies struggle in tight
-  spaces, predators use terrain for ambush, aquatic species swim, fliers fly.
-- **Gap.** No terrain/obstacle respect; no per-archetype locomotion.
-- **Risk.** Dinos clip through the very props the player will soon collide with — visible inconsistency.
-- **Root Cause.** Single locomotion path; collision registry doesn't exist yet (see #1).
-- **Impact.** Undercuts ecosystem believability and ambush design.
-- **Recommendation (conservative/additive).** Once the collider registry exists, run dino movement
-  through the same push-out (large bodies use bigger radii → naturally avoid tight gaps). Add
-  archetype locomotion variants: aquatic dinos enter swim when depth>threshold; fliers track an
-  altitude channel; small/agile species ignore low colliders (vault). All additive to `steer`.
-- **Implementation Approach.** Branch `steer` by `archOf(sp)` for locomotion; reuse player swim/depth
-  + collision helpers.
-- **Priority.** MED (pairs with passes 2 & 4).
-- **Expected Improvement.** A coherent world where threats move believably through it.
-
-### 6. Information / HUD — 🟢 Strong (small gaps)
-
-- **Current State.** `updateHUD` (`game.js:3161`, ~12 Hz) renders: mission title + dynamic objective
-  subtitle with distance + hold timer (`game.js:3169-3170`), an objective checklist with
-  ◆/▸/◇ states (`game.js:3172`), a 120° compass with heading° (`game.js:3180`, ticks `game.js:3144`),
-  SQUAD STATUS + role tag + squad health + a 10-cell THREAT meter (`game.js:3192-3200`), a contact
-  alert with species + cardinal bearing within ~70 m (`game.js:3204`), HEALTH/STAMINA/NOISE vitals
-  with color thresholds (`game.js:3208-3210`), and the EXTRACTION WINDOW/INBOUND timer + call button
-  (`game.js:3214-3228`). Labels come from `strings.js` (`STR.squadStatus`, `STR.vHealth`, `STR.gps`, …).
-- **AAA Benchmark.** At every second: where am I, where to go, what's hunting me, phase, objectives
-  remaining, distance to objective AND extraction, threat, resources, squad.
-- **Gap.** Beacon **distance** and **mission progress %** only appear on the fullscreen map title
-  (`game.js:3234`), not on the persistent HUD; no resource/tool-cooldown clarity surfaced.
-- **Risk.** Low — the HUD is already one of the strongest systems.
-- **Root Cause.** Distance/% were scoped to the map view.
-- **Impact.** Minor awareness friction (player must open the map to gauge extraction range).
-- **Recommendation (conservative/additive).** Add a persistent beacon-distance readout near the
-  extraction widget and a mission-progress % from completed/total phases. Pure HUD additions.
-- **Implementation Approach.** Reuse the beacon-distance math already in `mapSVG` (`game.js:3234`) and
-  phase counts from the mission runtime; render two more HUD spans.
-- **Priority.** HIGH (roadmap pass 1 — cheap, high-clarity).
-- **Expected Improvement.** Constant extraction awareness without opening the map.
-
-### 7. Map & Overlays — 🟡 Partial
-
-- **Current State.** Corner minimap + togglable fullscreen tactical map share `mapSVG`
-  (`game.js:3231-3348`). Layers drawn: valley boundary + mountain ring, river, extraction facility
-  (pulsing), watchtowers, current objective (line + diamond), inbound evac heli (spinning rotor),
-  **all live dinos** (carnivores as heading triangles, apex outlined; herbivores as cyan circles,
-  with fullscreen tooltips), player view-cone + heading, and a North marker (`game.js:3305-3347`).
-- **AAA Benchmark.** Map as survival tool with toggleable overlays: threat, territory, last-seen,
-  nests/packs/alphas, migration routes, weather/flood/fire/blocked routes, recommended routes,
-  facility/interior views.
-- **Gap.** Dinos render as **live exact positions** with no threat radius, no territory/home range, no
-  behavioral state (Hunting/Resting/Fleeing), no "last seen" memory, no pack/alpha/nest markers; no
-  overlay toggles; no weather/hazard/route layers; no interior view.
-- **Risk.** Med — perfect omniscient dino positions are both unrealistic *and* less tense than a
-  "last-known + threat-radius" fog-of-war would be.
-- **Root Cause.** Map draws straight from the live dino array each refresh; no perception-memory layer.
-- **Impact.** The map is informative but neither tactical nor in-fiction (you shouldn't see every dino
-  perfectly through the jungle).
-- **Recommendation (conservative/additive).** Add a **dino intelligence layer**: show last-seen ghosts
-  (decaying) for unsighted dinos, threat-radius rings sized by `combat`/`aggression`, a state label,
-  and territory circles from `behavior.territoryRadiusM` (already in data). Make overlays toggleable
-  (threat/territory/squad/route) and **complete the legend for each**. Keep current live view as the
-  "sighted" tier so nothing regresses.
-- **Implementation Approach.** Track per-dino `lastSeen{x,z,t}` updated when within player perception
-  (`perceive` `game.js:1539`); draw rings/labels in `mapSVG`; add a layer-toggle row.
-- **Priority.** HIGH (roadmap pass 1).
-- **Expected Improvement.** The map becomes genuine threat intelligence, and fog-of-war adds tension.
-
-### 8. Map Legend (Zero-Gap Defect) — 🔴 Defect
-
-- **Current State.** The fullscreen **map** legend lists **11 entries** including **"SAFE ZONE · green
-  circle"** (`index.html:509`), but `mapSVG` **never draws a safe-zone circle on the map**. The safe
-  zone is a real mechanic — `SAFE_R = 18` m around the beacon where predators disengage and the player
-  takes no damage (`game.js:1560-1561`, `playerSafe()`) — and it *is* rendered as a 3D ground ring in
-  the world (`game.js:850-853`), but it is **absent from the tactical map** the legend belongs to.
-  (Note: the `6.5` at `game.js:1410` is the unrelated extraction-*call* in-range distance, not the
-  safe zone.) The corner minimap legend shows only 4 entries (`index.html:484-489`) and omits
-  watchtowers, river, objective, evac, and apex distinction that the minimap *does* render.
-- **AAA Benchmark.** Legend must match what's drawn, on every platform — zero gap.
-- **Gap.** (a) Map legend promises a SAFE ZONE marker the map doesn't render; (b) minimap legend
-  under-describes the minimap.
-- **Risk.** Direct trust break — the player reads the key, looks on the map for the safety boundary,
-  finds none. The owner has previously called out "proper KEY LEGEND zero-gap."
-- **Root Cause.** Legend authored against the world ring, but the map renderer (`mapSVG`) was never
-  given a matching circle.
-- **Impact.** Small surface, outsized credibility cost — this is a *bug*, not a feature gap.
-- **Recommendation.** **Draw the 18 m safe-zone ring** around the beacon in `mapSVG` (radius from
-  `SAFE_R`, `game.js:1560`) so the map matches both the world ring and the legend; reconcile the
-  minimap legend to the minimap's actual markers.
-- **Implementation Approach.** One circle primitive in `mapSVG` at the beacon with radius scaled to
-  map units; audit both legends against the draw list.
-- **Priority.** HIGH — ship-now (roadmap pass 1, §3 defect).
-- **Expected Improvement.** Legend tells the truth; players can see where safety begins.
-
-### 9. Mission Design & Flow — 🟡 Partial
-
-- **Current State.** Data-driven `MISSIONS` engine with `reach`/`interact`/`collect`/`extract` plus
-  added `defend` and `boss` phases; `currentObjective()` (`game.js:287-299`) drives HUD + map. Per the
-  existing `FAITHFULNESS_AUDIT.md`, the major bespoke beats are now real: BLACKOUT generator-draws-
-  predators (#1), GHOSTS surveyor find/escort (#2), `defend` waves (#3), sequenced `extract` waves (#4),
-  and the EXTINCTION Indominus boss + Mosasaurus + three endings (#5).
-- **AAA Benchmark.** Every promised mechanic bespoke, not a relabeled hold-E.
-- **Gap.** Remaining LOW/MED items from that audit: item-objects (access card / DNA container / radio
-  log are abstract holds, not objects), building collision (see #1), and co-op sync of mission progress
-  + dinos + survivors (see #18).
-- **Risk.** Low-Med — core loops are faithful; residue is polish.
-- **Root Cause.** Generic marker engine standing in for the last few bespoke interactions.
-- **Impact.** Occasional "this is a generic hold" feel on a few steps.
-- **Recommendation (conservative/additive).** Introduce a lightweight **item-object** phase type
-  (pick-up/insert against a real placed prop) reusing `buildSiteProp`; resolve building collision via
-  #1; resolve co-op via #18.
-- **Implementation Approach.** New phase verb that references a prop id + carry flag; no rewrite of
-  existing verbs.
-- **Priority.** MED.
-- **Expected Improvement.** The last few generic beats become tactile.
-
-### 10. Dinosaur AI & Ecosystem — 🟡 Partial
-
-- **Current State.** Real state machine: `decide` (`game.js:1749`) → `steer` (`game.js:1811`) →
-  `updateDinos` (`game.js:1924`), **dispatched by archetype** (`archOf` `game.js:45`, `ROLE_ARCH`
-  `game.js:46`, `archetypes.json`). States: Graze, Flee (with stampede propagation `game.js:1834`),
-  Patrol, Investigate, Stalk, Chase (with pack flanking via `updatePackRoles` `game.js:1797`), Attack,
-  Retreat, Down. Prey flee predators (`nearestPredatorTo` `game.js:1780`); predators hunt prey
-  (`nearestPreyTo` `game.js:1785`, can kill, `game.js:1859`); herds cohere (`herdCenter` `game.js:1790`).
-  LOD throttles distant AI. **43 species** in `species.json`.
-- **AAA Benchmark.** Living ecosystem independent of the player: territory, migration, nesting,
-  feeding, resting, fear hierarchy, predator-v-predator, environmental response, facility interaction.
-- **Gap.** Ecosystem is **player-centric**: predators never fight each other; no territory enforcement,
-  nesting/breeding, feeding/resting cycles, or migration (dinos just spawn/despawn at edges). Three
-  declared fields are **unread**: `behavior.social`, `behavior.packRoles`, `behavior.noiseDrawWeight`.
-- **Risk.** Med — the island feels reactive but not autonomous; goes quiet when the player isn't near.
-- **Root Cause.** AI was built around the player as the primary stimulus; emergent inter-species rules
-  were never added; pack roles are computed positionally rather than from species data.
-- **Impact.** Limits the "living world" fantasy and replayability.
-- **Recommendation (conservative/additive).** Add emergent layers **on top** of the working machine:
-  predator-v-predator dominance (apex displaces lesser at kills), territory enforcement from
-  `territoryRadiusM`, simple nest anchors + feeding/resting timers, and edge-to-edge migration paths.
-  Wire the three unread fields (`social`→herd/pack/flock cohesion, `packRoles`→seed role assignment,
-  `noiseDrawWeight`→spawn-director escalation). All additive states; existing transitions preserved.
-- **Implementation Approach.** New `decide` branches + a lightweight world-tick for off-screen herds;
-  reuse `nearestPreyTo`/`nearestPredatorTo` for inter-predator targeting.
-- **Priority.** MED-HIGH (roadmap pass 5).
-- **Expected Improvement.** The island lives whether or not the player is watching.
-
-### 11. Vehicles — 🟡 Partial
-
-- **Current State.** Five vehicles with detailed exteriors and partial interiors: helicopter
-  (`buildHeli` `game.js:2036`), Land Rover jeep (`buildJeep` `game.js:2471`), patrol boat
-  (`buildBoat` `game.js:2605`, armored hull + pilot house + .50-cal + searchlight), monorail
-  (`buildMonorail` `game.js:2724`, lit interior + glass), airship flight deck (`buildAirshipDeck`
-  `game.js:2808`). Players are correctly placed **inside** during intros (`INTRO_KIND` `game.js:2133`).
-  All are **scripted cinematics** — no instrumentation/gauges, no drivable controls.
-- **AAA Benchmark.** Every switch/button/display believable; cockpit, instrumentation, operational
-  procedures; vehicles feel like genuine operational assets.
-- **Gap.** No cockpit gauges/instrument readouts; not drivable.
-- **Risk.** Low — intros already read well; this is a polish/depth ceiling, not a defect.
-- **Root Cause.** Vehicles authored as cinematic set-pieces, not simulated systems.
-- **Impact.** Vehicles impress on first view but don't reward inspection.
-- **Recommendation (conservative/additive).** Add cockpit **instrumentation detail** (lit gauges,
-  switches, displays) to the interiors players already see; defer drivability as a much larger,
-  separate effort (not in this roadmap).
-- **Implementation Approach.** Procedural instrument panels in the existing `build*` functions; emissive
-  dials. No control/physics work.
-- **Priority.** LOW-MED (roadmap pass 6).
-- **Expected Improvement.** Vehicles reward the eye and reinforce the operational fiction.
-
-### 12–23. Remaining Systems (complete-the-audit pass)
-
-Shorter entries so the audit omits nothing the mandate names. Format compressed to
-**State → Gap → Recommendation (additive) → Priority.**
-
-- **12. Navigation — 🟢.** State: compass + GPS minimap + tactical map + objective line. Gap: no
-  multi-waypoint or recommended/blocked-route layer. Rec: add route overlay alongside #7's toggles.
-  Priority LOW-MED.
-- **13. Environmental storytelling — 🟡.** State: real set-pieces (collapsed tower, ruined outpost,
-  campsite, cave; survivors). Gap: scenes rarely *narrate* without text. Rec: add readable
-  arrangement (claw marks, dropped gear, blood trails, last-stand tableaus) at existing sites via
-  `buildSiteProp`. Priority MED (pairs with pass 6).
-- **14. Combat — 🟡.** State: tranq/trap/sample field kit + threat/contact. Gap: thin lethal-defense
-  + melee feedback; no weapon for adult-ranger fiction. Rec: additive defensive options + hit feedback;
-  keep non-lethal core. Priority MED.
-- **15. Stealth — 🟡.** State: NOISE vital, crouch, FOV cones (`perceive` `game.js:1539`). Gap: no
-  cover/lean/peek or distraction throwables. Rec: cover snapping off the #1 collider registry +
-  noise-decoy item. Priority MED (depends on #1).
-- **16. Survival systems — 🟡.** State: health/stamina/noise. Gap: no hunger/thirst/temperature/injury
-  or resource gathering. Rec: optional needs layer (toggle per mission) — additive vitals. Priority
-  LOW-MED.
-- **17. Progression — 🟡.** State: 6 role perks. Gap: no persistent unlocks/loadout meta across runs.
-  Rec: lightweight unlock track keyed to mission completion. Priority LOW.
-- **18. Multiplayer / co-op — 🟡.** State: host-authoritative mission + seed via `net.js`/`server.js`;
-  `coopSpread` at hand-off. Gap: dino positions, mission-phase progress, and survivors are per-client.
-  Rec: host-authoritative broadcast of dino + phase state on the existing snapshot path. Priority
-  MED-HIGH (prerequisite for true co-op faithfulness).
-- **19. Accessibility — 🟡.** State: scalable touch UI, monospace high-contrast HUD. Gap: no surfaced
-  colorblind palette, text-scale, or subtitle toggles. Rec: options panel exposing palette/scale/
-  subtitle flags. Priority MED (cheap, broad benefit).
-- **20. Audio — 🟢.** State: real human VO (Inworld TTS m4a) + radio + synthetic fallback. Gap: thin
-  positional dino audio. Rec: distance/bearing-attenuated roars/footfalls. Priority MED.
-- **21. Animation — 🟢.** State: procedural gait/attack/slump, rotor alignment fixed. Gap: no
-  terrain-adaptive foot placement/IK. Rec: defer (high cost, low survival value). Priority LOW.
-- **22. Controls — 🟢.** State: KB/mouse + gamepad + touch all wired (`game.js:1233-1301`). Gap: gamepad
-  lacks a dedicated map button. Rec: bind map to a gamepad button. Priority LOW.
-- **23. Platform parity — 🟡.** State: full touch control suite. Gap: compass/contact/threat hidden on
-  small screens (`game.js:398`); minimap legend hidden on mobile (`game.js:401`) — violates the
-  "equal awareness on every platform" mandate. Rec: reflow (collapsible/condensed) instead of hiding
-  critical awareness elements on mobile. Priority MED-HIGH (explicit mandate breach).
+Legend: 🟢 Strong/shipped · 🟡 Partial · 🔴 Missing. **Zero systems are 🔴 as of this build.**
 
 ---
 
-## IMPLEMENTATION STATUS — all six roadmap passes shipped ✅
+## §1 — What shipped since the previous audit (the delta)
 
-The roadmap below has now been **fully implemented and deployed** (commits `4b983ef`→`c833be0`):
+These were 🔴 Missing or 🟡 Partial in the prior audit and are now implemented & live:
 
-1. ✅ **Tactical Awareness** — SAFE ZONE ring drawn on the map (legend defect fixed); dino-intel
-   layer (last-seen ghosts, threat-radius + territory rings, state labels, toggleable layers, complete
-   legends); persistent HUD beacon distance + mission %; mobile parity (compass/threat/contact/legend
-   no longer hidden).
-2. ✅ **Solid World** — queryable collider registry; player + dinos pushed out of rocks, ruins, and
-   mission buildings (zero-ghosting), conservative radii, height-aware.
-3. ✅ **Traversal** — jump (gravity arc), auto-vault over low obstacles, mantle-climb onto ledges,
-   slope stamina; Space / gamepad-Y / touch JUMP; free-walk untouched.
-4. ✅ **Water** — swim + dive (oxygen, current, drowning) in the deep channel; aquatic species float
-   & swim, fliers cruise and dive to strike.
-5. ✅ **Living Ecosystem** — predator-vs-predator hierarchy, feed-at-kill, rest, home territories, herd
-   migration; wired the three unused fields (`social`, `packRoles`, `noiseDrawWeight`).
-6. ✅ **Vehicle instrumentation + environmental storytelling** — cockpit instrument clusters (boat /
-   monorail / jeep); readable site evidence (blood, dropped gear, spent brass, claw-gashes).
-
-> Note: these are mechanically complete and syntax-verified live, but were authored without an
-> in-engine visual pass. Conservative tuning values (collider radii, jump/climb feel, swim speed,
-> instrument-panel placement/orientation) may want a play-test polish pass.
-
-## §2 — Prioritized Implementation Roadmap *(now complete — see status above)*
-
-Ordered by impact-to-effort. Each pass is independently shippable, conservative/additive, and
-preserves free-walk. Owner picks the order; this is the recommended sequence.
-
-1. **Tactical Awareness** *(small, high-clarity — recommended first)*
-   - Fix the **SAFE ZONE legend defect** — draw the 18 m ring (radius from `SAFE_R`, `game.js:1560`) in `mapSVG`.
-   - Persistent HUD **beacon distance** + **mission progress %** (reuse `game.js:3234` math).
-   - Map **dino-intelligence overlay**: last-seen ghosts, threat-radius rings, state labels, territory
-     circles (`territoryRadiusM`), toggleable layers, **complete legend** on both map + minimap.
-   - Fix **platform parity** (#23): stop hiding compass/contact/threat + minimap legend on mobile.
-2. **Solid World** — collider registry (rocks/ruins/buildings/props/vehicles/fences) → push-out in
-   `updatePlayer` + `updateDinos`, spatial-hashed, tuned to never trap.
-3. **Traversal** — opt-in jump + vault/mantle + generalized climb (extends `climbTower`); free-walk
-   path untouched. Add slope-stamina + high-ground vision (#4).
-4. **Water** — swim/dive state on depth threshold (river + a new lagoon), stamina/oxygen/current;
-   aquatic + flying dino locomotion (#5).
-5. **Living Ecosystem** — predator-v-predator, territory, nest/feed/rest, migration; wire `social`,
-   `packRoles`, `noiseDrawWeight`.
-6. **Vehicle Instrumentation + Environmental Storytelling** — cockpit gauges/switches; readable
-   site-story set-dressing.
+| Area | What landed | Evidence |
+|------|-------------|----------|
+| World collision | Queryable collider grid + push-out for player **and dinos** | game.js:928–985, dino call 2407 |
+| Traversal | Jump, auto-vault, mantle-onto-props, tower climb, zipline; height-aware | game.js:1550–1594, 1309–1332 |
+| Water | Swim + dive + oxygen + current drift + entry toast + swim body pitch | game.js:1625–1677, 1712–1716 |
+| Survival | Hunger, thirst, temperature, injury/bleeding, speed penalties + HUD chips | game.js:1762–1777, 4114–4122 |
+| Map | Threat radius, territory, last-seen ghosts, safe-zone ring, layer toggles | game.js:4254–4326 |
+| Ecosystem | Predator-vs-prey hunt→feed, predator hierarchy, herd cohesion, stampede, pack roles | game.js:2280–2304, 2363–2377 |
+| Vehicles | **Drivable** jeep in every mission, safe-zone-on-board, chase-cam | game.js:3299–3363 |
+| **Difficulty tiers (new)** | Explorer/Survivor/Apex; 8 multipliers; 3rd start-tab; persisted | game.js:446–459, initDifficultySelect |
+| **Airdrop resupply (new)** | RESUPPLY when a consumable is empty → plane → parachute crate ≤100 m → map objective → refill | game.js:1960–2027, map 4256 |
+| **iPad/Safari hardening (new)** | gesturestart + 2-finger + double-tap guards, in-map pan/zoom, RESET VIEW recovery | game.js:2873–2909, 4349+ |
+| **Dino movement overhaul (new)** | Arrival slowdown, jitter dead-zone, stable wander, agility-scaled turning, water/structure behavior | game.js:2382–2418, 2308–2317 |
 
 ---
 
-## §3 — Zero-Gap Defects (ship-now bugs, not features)
+## §2 — Per-system current state (verified)
 
-These are outright correctness gaps, separate from feature work:
+### Missions & campaign — 🟢 Strong
+- 7 missions: `evac`, `dna` (simple, step-based) + 5 campaigns with declarative phase chains
+  (`last_sample`, `blackout`, `ghosts`, `fallen_outpost`, `extinction`). game.js:150–275.
+- Phase engine handles `reach / interact / defend / boss / extract` with linear advance + objective
+  toasts + 3D markers. game.js:393–437, 281–306.
+- Survivor/escort generalised (Maya, Surveyor) with follow logic. game.js:1064–1190.
+- Indominus boss: arrival→hunt→outcome with three branching endings (contain/lagoon/run). game.js:1255–1303.
+- Evac: 6-phase helicopter state machine (incoming→…→liftoff). game.js:2697–2738.
+- 7 distinct intro cinematics + voiced radio (crash/research/jeep/boat/monorail/halo/airship). game.js:2742–3854.
+- **Gaps:** `collect` phase type handled (game.js:402) but used by no mission (dead code); no item-pickup
+  phase type; extract waves have no hard cap (game.js:426–428); boss location hard-coded (game.js:1257).
 
-1. **SAFE ZONE legend mismatch** *(headline)* — the map legend lists it (`index.html:509`), but
-   `mapSVG` never draws it on the map; the safe zone is real (`SAFE_R = 18` m, `game.js:1560-1561`) and
-   rendered as a 3D ground ring (`game.js:850-853`), just missing from the map. Recommendation: **draw
-   the 18 m ring on the map** so it matches the world and the legend.
-2. **Minimap legend under-describes the minimap** — 4 entries (`index.html:484-489`) for a minimap that
-   also renders watchtowers, river, objective, evac, and apex distinction.
-3. **Mobile awareness omissions** — compass/contact/threat (`game.js:398`) and minimap legend
-   (`game.js:401`) hidden on small screens, breaching the platform-parity mandate.
-4. **Pteranodon never flies / Mosasaurus never swims** — anims exist (`glide/flap/dive`, `swim`) but
-   are never triggered; both move as ground walkers. Visible inconsistency.
+### Toolset / combat / stealth — 🟢 Strong
+- 6 tools (flare, decoy, melee, tranq, trap, sample) with charges/cooldowns and function-labeled FIRE
+  button. game.js:2069–2076, 385.
+- First-person tranq/sample SCOPE with look-to-aim reticle + re-tap-to-lower. game.js:2085–2107, 1421.
+- Sedation model (`sedThreshold`, dart accumulation, `downT`, partial-dose decay). game.js:2093–2155.
+- Binoculars (zoomable, species ID, scan→map sync). game.js:4173–4209.
+- Deterrent effects: flare scare radius, decoy lure, melee damage+knockback+fear. game.js:2108–2141.
+- **Gaps:** re-tap-lower hard-codes melee index 2 (game.js:1421); sampled dinos have no visual mark;
+  reticle goes green on live dinos even for sample (which needs sedated/trapped).
+
+### Dino AI & ecosystem — 🟢 Strong
+- 11-state decision system at ~4 Hz; perception with sight range/FOV/LOS + noise-scaled hearing +
+  crouch stealth + role `seen` mod. game.js:2227–2273, 1922–1937.
+- Emergent ecosystem: prey hunting + kill→feed, predator hierarchy (`domScore`), herd cohesion,
+  stampede contagion, pack lead/flank/harry. game.js:2280–2304.
+- Movement overhaul (this session): arrival easing, jitter dead-zone, agility-scaled turn rate, stable
+  wander, water uphill-avoidance, structure push-out, wade/float vertical. game.js:2382–2418, 2525–2535.
+- **Gaps:** `Stalk` state effectively unreachable (Investigate preempts); `fightsWhenCornered` &
+  `stalkPreferred` declared in data but unwired; no nesting/migration/drinking/calf-protection; pack
+  roles re-shuffle every 0.4 s (no persistent bonds); naive seek (no pathfinding around concave geometry).
+
+### Player / traversal / survival / vehicle — 🟢 Strong
+- Free-look latched movement, 4 gaits, stamina/noise/fear, slope drain. game.js:1598–1733.
+- Full traversal stack + height-aware collision (see §1). game.js:1550–1594.
+- Swim/dive/oxygen/current; survival hunger/thirst/temp/injury with HUD chips; all state reset each
+  run. game.js:1625–1677, 1762–1777, 3866.
+- Drivable jeep with arcade physics, safe-zone-on-board, chase-cam. game.js:3299–3363.
+- Roles/specialists: all 6 perks **verified applied** — speed (1624), seen (1926), heal (1637),
+  hold (3873), drain (1632), noise (1628).
+- **Gaps:** vault hard-cap 1.3 m without feedback; jeep has no respawn if removed; exit-vehicle/zipline
+  landing not validated against geometry.
+
+### World / HUD / map / platform — 🟢 Strong
+- Collider grid + height field terrain (rolling hills, mountain ring, carved river). game.js:928–985, 1529–1537.
+- Full tactical HUD (vitals, threat, contact bearing, compass, objective, survival chips, squad, DNA,
+  RESUPPLY, RESET VIEW). game.js:4054–4172.
+- Minimap + fullscreen tactical map with intel overlays, fog-of-war, **in-map pinch/drag pan-zoom**,
+  airdrop & objective markers, safe-zone ring. game.js:4237–4400.
+- iPad/Safari: layered zoom prevention + RESET VIEW recovery + viewport-meta reset. game.js:2873–2909.
+- Options: colourblind / HUD-scale / subtitles / high-contrast, persisted. game.js:2853–2921.
+- Rendering: DPR-cap 1.5, ACES tone-map, bloom+vignette, instanced rocks/foliage, tiered model
+  streaming with grey-box fallback, dino LOD at `activeRadiusM`. game.js:566–597, 485–497, 2495–2511.
+- **Gaps:** co-op has no remote interpolation or packet ACK (jitter/ghosts on loss); no frame cap
+  (mobile thermals); no texture LOD/shadows; threat meter integer-quantised.
 
 ---
 
-*End of audit. Document-only pass — no code, data, or assets modified.*
+## §3 — Verified FALSE POSITIVES (do not re-flag)
+
+An automated audit pass flagged these as "critical." Each was re-checked against source and is **correctly
+implemented**. Recorded here so future audits don't waste effort re-investigating:
+
+| Claimed gap | Reality | Evidence |
+|-------------|---------|----------|
+| COMMS `mod.hold` never applied | Applied to extraction holdMax each run | game.js:3873–3874 |
+| TRACKER `mod.seen` never applied | Multiplied into predator sight range in `perceive` | game.js:1926 |
+| Oxygen not initialised (could insta-kill) | Reset to 100 in startRun player Object.assign | game.js:3866 |
+| Survival (hunger/thirst/temp/injured) not initialised | All reset in the same startRun assign | game.js:3866 |
+| `missionSites` never populated | Built per-mission and pushed in the site builders | buildMissionSites + missionSites.push |
+
+**Lesson reinforced:** verify before editing/reporting. (Consistent with prior FULL_REGRESSION_AUDIT findings.)
+
+---
+
+## §4 — Genuine remaining gaps, ranked
+
+**P0 — online robustness (only true reliability gap):**
+1. Co-op remote-player **interpolation** + dino-snapshot **sequence/ACK** — fixes jitter and ghost dinos
+   on >100 ms latency / packet loss. (net.js + game.js:4534–4591.)
+
+**P1 — content depth (gameplay richness, not bugs):**
+2. Living-ecosystem behaviors: wire `fightsWhenCornered` (desperate herbivore defense) & a real `Stalk`
+   ambush path; add drinking/nesting/migration; persistent pack bonds.
+3. Mission variety: implement an item-pickup phase type; remove/justify the dead `collect` handler;
+   cap extract-wave spawns; data-drive the boss location.
+4. Progression meta: more unlock tiers + a loadout screen (only 2 win-gated unlocks today).
+
+**P2 — polish & mobile:**
+5. Frame cap + texture LOD for sustained mobile FPS/thermals.
+6. Airdrop landing-spot terrain filter (avoid water/mountain/structure).
+7. Jeep dynamic collider (box, not static circle) + respawn safeguard.
+8. Vault-too-high feedback; sampled-dino visual mark; drowning audio cue.
+9. Map pinch-zoom stroke compensation; finer compass bearing.
+
+None of P1/P2 block play; they raise ceiling/finish. Only P0 affects reliability (co-op only).
+
+---
+
+## §5 — Relationship to the UE5 build
+
+Every system above is **engine-agnostic game design** that now exists as a *proven, playable* reference —
+not a spec. The browser prototype has de-risked the full loop (traversal, water, survival, ecosystem,
+vehicles, difficulty, resupply, accessibility). See `UE5_PRODUCTION_PLAN.md` and `ue5/` for how these port
+to Nanite/Lumen/MetaHuman, and `ue5/02_DATA_ASSET_SCHEMA.md` for the Data-Asset schema (now extended with
+difficulty tiers, survival, and resupply). The prototype's role is unchanged: **vertical-slice reference +
+public-facing playable** while the UE5 slice is built.

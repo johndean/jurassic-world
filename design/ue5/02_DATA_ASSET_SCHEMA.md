@@ -113,6 +113,49 @@ A small editor utility (`UCreatureImportFactory` or a Python `unreal` script) re
 2. Parse `species.json` → for each row, create/update `UCreatureDataAsset`, resolve `archetype` string → the matching `DA_Archetype_*`, copy nested objects field-for-field, leave `Mesh`/`AnimClass` for the artist to assign.
 3. Re-runnable: keying on `Id` makes it idempotent, so the browser game stays the **single source of truth for tuning** — re-import after balancing in the browser build.
 
+## Difficulty Profile Data Asset (`DA_Difficulty_*`) — mirrors the browser `DIFFICULTIES` table
+
+Added after the browser shipped 3 selectable tiers (Explorer / Survivor / Apex). One asset per tier;
+the active one is chosen on the front-end and stored in the save game, then read by the AI, combat,
+spawn director, and player-regen systems (see `03_SYSTEMS_DESIGN.md` §10).
+
+```cpp
+UCLASS(BlueprintType) class UDifficultyProfile : public UPrimaryDataAsset {
+    UPROPERTY(EditAnywhere) FText Name;            // "EXPLORER" / "SURVIVOR" / "APEX"
+    UPROPERTY(EditAnywhere) float Aggro = 1.f;     // predator commit probability ×
+    UPROPERTY(EditAnywhere) float SenseMul = 1.f;  // sight + hearing range ×
+    UPROPERTY(EditAnywhere) float DamageMul = 1.f; // damage to player ×
+    UPROPERTY(EditAnywhere) float AttackCdMul = 1.f; // attack cooldown × (higher = slower = easier)
+    UPROPERTY(EditAnywhere) float PredSpeedMul = 1.f; // carnivore move speed ×
+    UPROPERTY(EditAnywhere) float SpawnMul = 1.f;  // predator population ×
+    UPROPERTY(EditAnywhere) float GraceSeconds = 6.f; // spawn-camp grace before predators engage
+    UPROPERTY(EditAnywhere) float RegenMul = 1.f;  // player health-regen ×
+};
+```
+Verbatim values (browser `game.js` `DIFFICULTIES`): **Explorer** {0.40, 0.62, 0.45, 1.70, 0.82, 0.50, 20, 1.60}
+· **Survivor** (default) {0.72, 0.85, 0.72, 1.25, 0.93, 0.78, 12, 1.20} · **Apex** {1,1,1,1,1,1,6,1}.
+
+## Survival & Resupply config (mirror the browser survival + airdrop tuning)
+
+```cpp
+USTRUCT(BlueprintType) struct FSurvivalTuning {
+    UPROPERTY(EditAnywhere) float ThirstDrainPerS = 100.f/420.f;
+    UPROPERTY(EditAnywhere) float HungerDrainPerS = 100.f/780.f;
+    UPROPERTY(EditAnywhere) float ColdPerSwimS = 18.f;   // wet → cold
+    UPROPERTY(EditAnywhere) float WarmPerSafeS = 16.f;   // fire / safe zone → warm
+    UPROPERTY(EditAnywhere) float InjuredAtHP = 28.f;    // below → injured/bleeding
+    UPROPERTY(EditAnywhere) float BleedPerS = 0.9f;      // never lethal alone
+    UPROPERTY(EditAnywhere) float InjuredSpeedMul = 0.78f;
+    UPROPERTY(EditAnywhere) float DiveOxygenPerS = 14.f;
+    UPROPERTY(EditAnywhere) float CurrentMS = 1.5f;      // downstream river drift
+};
+USTRUCT(BlueprintType) struct FResupplyTuning {
+    UPROPERTY(EditAnywhere) float DropRadiusM = 100.f;   // crate lands within this of the player
+    UPROPERTY(EditAnywhere) float PickupRadiusM = 3.4f;
+    UPROPERTY(EditAnywhere) float DescentMS = 10.f;      // parachute speed
+};
+```
+
 ## Why this matters
 
 The browser AI never branches on species — it dispatches on archetype helpers. UE5 does the same: `ACreatureBase` reads `DataAsset->Archetype->BehaviorClass/bPackTactics/bApexThreat` to pick StateTree behavior (next doc). So the **30-species roster + future hybrids drop in as Data Assets**, exactly as designed for the browser game. The two declared-but-unused browser fields (`noiseDrawWeight`, `packRoles`) are wired here as first-class properties.

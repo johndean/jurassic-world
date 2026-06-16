@@ -21,6 +21,13 @@ The slice is a **success** when all of these are true:
 
 **Explicitly OUT of the slice** (deferred to Alpha/Beta — see parent plan): full island/World Partition, all 30 species, multiplayer, hybrids, weather system, audio polish, console. The slice is single-player, one zone, fixed weather (overcast fog).
 
+> **Newly proven in the browser build (`2026-06-16-s`) — optional low-cost slice adds.** These systems
+> are now implemented & validated in the prototype (`../AAA_ZERO_GAP_AUDIT.md`), so porting them into the
+> slice is *re-skin, not design*, and each strengthens the go/no-go screenshot/feel: one **difficulty
+> profile** (Survivor), the **survival HUD strip** (hunger/thirst/temp/injury), **swim/dive** in the river,
+> one **drivable jeep**, and the **traversal** verbs (jump/vault/mantle). Add any that are cheap with the
+> chosen assets; none are required for the slice's core success criteria below.
+
 ---
 
 ## 2. The zone
