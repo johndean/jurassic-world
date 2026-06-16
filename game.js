@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-m";
+const BUILD = "2026-06-15-n";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -369,6 +369,9 @@ function updateAction(dt) {
   // light up the on-screen ACTION button whenever something can be activated (the "power button" cue)
   const ba = $("btnCall"); if (ba) ba.classList.toggle("act-ready", !!label);
   // aiming reticle: a center crosshair while the tranq/sample is selected, green when a valid target is locked
+  // the FIRE/USE button reads the selected tool's actual function (TRANQ→FIRE, SAMPLE→COLLECT, …)
+  const bu = $("btnUse");
+  if (bu) { const t = TOOLS[selTool]; const lbl = t ? ({ tranq: "FIRE", sample: "COLLECT", trap: "SET TRAP", flare: "FLARE", decoy: "DECOY", melee: "STRIKE" }[t.id] || "USE") : "USE"; if (bu.textContent !== lbl) bu.textContent = lbl; }
   const ret = $("reticle");
   if (ret) {
     const aiming = aimMode();
@@ -1380,7 +1383,11 @@ function initInput() {
   $("touch").style.display = isTouch ? "block" : "none";
 
   // defense tool bar: tap a tool to select it; tap the selected one (or the USE button) to activate
-  document.querySelectorAll("#tools .tool").forEach(el => el.addEventListener("click", () => { const i = +el.dataset.i; if (i === selTool) useTool(); else selectTool(i); }));
+  document.querySelectorAll("#tools .tool").forEach(el => el.addEventListener("click", () => {
+    const i = +el.dataset.i;
+    if (i === selTool) { const t = TOOLS[i]; if (t && (t.id === "tranq" || t.id === "sample")) selectTool(2); else useTool(); }   // re-tap an aim tool → lower the scope (firing is on the FIRE button); other tools fire on re-tap
+    else selectTool(i);
+  }));
   const bu = $("btnUse"); if (bu) bu.addEventListener("pointerdown", e => { e.preventDefault(); useTool(); });
   const bn = $("btnBinoc"); if (bn) bn.addEventListener("pointerdown", e => { e.preventDefault(); toggleBinoc(); });
   const bi = $("bnIn"); if (bi) bi.addEventListener("pointerdown", e => { e.preventDefault(); binocZoom(1); });
