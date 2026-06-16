@@ -1,8 +1,22 @@
 # UE5 Vertical-Slice Shopping List
 
-Concrete assets/tools to build the slice in `00_VERTICAL_SLICE_GDD.md`. Goal: photoreal one-zone extraction loop using **mostly free** assets, so the only real cost is time + an optional dinosaur pack.
+Concrete assets/tools to build the slice in `00_VERTICAL_SLICE_GDD.md`. Goal: a cinematic one-zone extraction loop on the **native iPad target** (iOS/Metal, floor A12Z/A13) using **mostly free** assets, so the only real cost is time + an optional dinosaur pack + the Apple toolchain.
 
 > Prices are ballpark as of writing and move around — verify on Fab at purchase. "Free" = no license cost (Epic-owned or free-tier).
+
+## iOS / iPad packaging (REQUIRED for the native target)
+
+| Item | Cost | Note |
+|---|---|---|
+| **Mac** (Apple Silicon recommended) | (hardware) | **Mandatory** — iOS packaging/signing only works from macOS + Xcode |
+| **Xcode** (current, for iPadOS 18.5/26 SDK) | Free | Build/deploy to device + TestFlight |
+| **Apple Developer Program** | **$99/yr** | TestFlight + App Store distribution; on-device testing |
+| Physical **iPad 9th gen + iPad Pro 4th gen** to profile | (hardware) | Profile on the **floor devices early** — they are the design constraint, not an M-series |
+
+> **Rendering note:** target = **UE5 Mobile (Metal) renderer + baked lighting**. **Nanite and Lumen are OFF**
+> at the A12Z/A13 floor (M-series Enhanced tier may opt into a Nanite trial). The "Free (engine)" Lumen/
+> Nanite lines below are **desktop-only** — substitute **baked GI (GPU Lightmass)** + mobile fog for the
+> iPad build.
 
 ## Tools / engine (all free)
 

@@ -5,6 +5,13 @@ The live browser/iPad game (everything else in this repo) is a **protected, READ
 and must keep shipping unchanged. Nothing in this folder is loaded by, linked to, or depended on by the
 running game — it is inert relative to production.
 
+**Target platform (owner decision):** **native iPad app** — iOS/iPadOS (Metal), **iPadOS 18.5+**, floor
+**iPad 9th gen (A13) / iPad Pro 4th gen (A12Z)** → M4. Renderer = **UE5 Mobile (Metal) + baked lighting**;
+**Nanite & Lumen are OFF at this floor** (M-series-only opt-in). **Two auto-detected quality tiers**
+(Baseline A12Z/A13–A15 · Enhanced M1+). Input is **touch-first** (port the browser touch UX as reference).
+Packaging needs a **Mac + Xcode** + **Apple Developer Program**. The browser PWA is **not** retired — it
+stays as the instant-URL / oldest-device client.
+
 > Governing plan: **`../design/UE5_PRODUCTION_PLAN.md`** · Current browser state: **`../design/AAA_ZERO_GAP_AUDIT.md`**
 > · Detailed slice spec (GDD, project structure, data schema, systems design, shopping list): **`../design/ue5/`**
 
@@ -42,13 +49,16 @@ ue5-cinematic-slice/
 │   ├── README.md              ← why a mirror, not a refactor of game.js
 │   └── golden/                ← test vectors captured FROM the browser game (read-only capture)
 ├── UnrealProject/             ← the standalone UE5 project (no production coupling)
-│   ├── Config/                ← DefaultEngine/Game/Input (Nanite/Lumen/World Partition on)
+│   ├── Config/                ← DefaultEngine/Game/Input + DefaultDeviceProfiles (iOS Metal,
+│   │                            Mobile renderer, baked lighting; Baseline/Enhanced tier scalability)
+│   ├── Platforms/IOS/         ← iOS packaging settings (bundle id, iPadOS 18.5+ min, Metal)
 │   ├── Content/
 │   │   ├── Creatures/         ← rigged dino assets (Fab pack / Control Rig) + Data Assets
 │   │   ├── Environment/       ← Megascans jungle, Landscape, water, foliage
 │   │   ├── Characters/        ← MetaHuman cadet + locomotion
 │   │   ├── Systems/           ← StateTree, subsystems (extraction/threat/noise/survival/difficulty)
-│   │   ├── UI/                ← UMG HUD mirroring strings.js labels + palette
+│   │   ├── UI/                ← UMG HUD (touch-first) mirroring strings.js labels + palette + the
+│   │   │                        proven browser touch controls (dual-stick, action buttons)
 │   │   └── Cinematics/        ← Sequencer fly-throughs for the go/no-go screenshot
 │   └── Source/                ← C++ (ACreatureBase, subsystems, Data Assets) if used
 └── docs/                      ← slice-specific working notes, perf captures, validation logs

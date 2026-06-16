@@ -47,12 +47,19 @@ proves the future potential while the browser/mobile version continues operating
 ---
 
 ## Why Unreal Engine 5 (and why a *parallel* client, not a rewrite)
-Photoreal realtime = **UE5**: **Nanite** (film-density geometry, no manual LODs), **Lumen** (realtime GI +
-reflections), **Virtual Shadow Maps**, **Niagara** (volumetric fog/weather/particles), **MetaHuman**
-(photoreal characters), **World Partition** (a 25 km²+ streaming island). Three.js/WebGL cannot reach this —
-it is an engine-class difference. The trade-off (multi-GB PC/console download vs. an instant browser URL) is
-*exactly why the browser client must survive*: it owns accessibility (iPad, casual, instant), UE5 owns
-fidelity (PC/Mac/console). This is how MMOs evolve — one world, multiple front-ends.
+**The UE5 client is a native iPad app** (iOS/iPadOS, Metal — App Store / TestFlight), **not** a desktop-only
+build. UE5 brings a true realtime renderer, Megascans environments, baked cinematic lighting, MetaHuman
+characters, and a much larger streaming world than WebGL can reach — an engine-class jump even within the
+**mobile** rendering path. The trade-off (a multi-hundred-MB native install + per-device performance tuning
+vs. an instant browser URL) is *exactly why the browser client must survive*: the **browser PWA keeps
+instant-URL access and the broadest/oldest device support**, while the **native iPad UE5 app owns fidelity**.
+This is how MMOs evolve — one world, multiple front-ends.
+
+> **Target platform (owner decision):** native iPad, **iPadOS 18.5+**, **floor = iPad 9th gen (A13) /
+> iPad Pro 4th gen (A12Z)**, up to M4. **Hard reality at this floor:** **Nanite and Lumen are OFF** — they
+> require M-series GPUs. The baseline build uses UE5's **Mobile (Metal) renderer with baked/hybrid lighting**;
+> the "cinematic" look comes from Megascans + baked GI + post-processing, scaling up on faster chips.
+> **Quality strategy = two auto-detected tiers** (see Phase 6).
 
 ---
 
@@ -79,10 +86,12 @@ to mark the gate; it is not part of the isolated `/ue5-cinematic-slice` work.)
 
 ### Phase 1 — UE5 Visual Prototype (standalone, no gameplay)
 A `/ue5-cinematic-slice` environment that demonstrates **look only**: dinosaurs, terrain, vegetation,
-weather, day/night, water, cinematic camera — using **Nanite + Lumen + World Partition + UE5 Landscape +
-a MetaHuman-compatible pipeline.** Goal: determine the achievable visual ceiling and **measure performance
-on PC, Steam Deck, and iPad (via remote-streaming tests — NOT native iPad UE5).** This is the vertical-slice
-look target; gameplay comes in Phase 2. *(Detailed spec: `ue5/00_VERTICAL_SLICE_GDD.md`.)*
+weather, day/night, water, cinematic camera — built on the **UE5 Mobile (Metal) renderer + baked/hybrid
+lighting + UE5 Landscape + a MetaHuman-compatible pipeline** (Nanite/Lumen OFF at the A12Z/A13 floor; an
+optional Nanite trial only on M-series in the Enhanced tier). Goal: determine the achievable visual ceiling
+**and measure performance natively on the actual target iPads — profile on the A12Z/A13 floor first, then
+M-series** (Xcode Instruments / UE Insights, GPU + thermal + memory). This is the vertical-slice look target;
+gameplay comes in Phase 2. *(Detailed spec: `ue5/00_VERTICAL_SLICE_GDD.md`.)*
 
 ### Phase 2 — Separate game logic from rendering *(the most important architectural step)*
 The browser game co-locates logic + UI + rendering + net + persistence. The target is a **headless rules
@@ -132,12 +141,26 @@ A realistic dinosaur world is enormous. **World Partition + Data Layers + HLOD +
 target **25 km²+**, only nearby content loads. Essential for large ecosystems. (Slice uses one ~250 m zone;
 streaming is an Alpha+ concern.)
 
-### Phase 6 — Preserve iPad support *(where indie projects fail)*
-**Do NOT run full UE5 graphics on iPad.**
-- **Option A (recommended):** the browser/iPad client stays WebGL/Three.js; **UE5 = premium client.** Same
-  world (Phase 2 core). This is the default and it directly satisfies Rules 3 & 4.
-- **Option B (not recommended for the slice):** native iPad UE5 build — expect reduced foliage/shadows/view
-  distance, no Nanite, simplified Lumen; a separate optimization effort. Defer indefinitely.
+### Phase 6 — Native iPad UE5 build *(the chosen target — where indie projects must be disciplined)*
+**The UE5 client ships natively on iPad** (iOS/Metal, App Store/TestFlight). The browser PWA is **not**
+retired — it remains for instant-URL access and the broadest/oldest devices (Rules 3 & 4 hold). Because the
+floor is **A12Z / A13**, run the **Mobile (Metal) renderer with baked lighting**; **Nanite and Lumen are
+disabled** (M-series-only, and even there treated as an opt-in trial).
+
+**Quality strategy — two auto-detected tiers** (engine `DeviceProfiles` keyed on chip/RAM):
+
+| Tier | Devices | Renderer & lighting | Nanite/Lumen | Shadows | Foliage / draw dist | Textures | Target fps |
+|------|---------|---------------------|--------------|---------|---------------------|----------|-----------|
+| **Baseline** | A12Z, A13–A15 (iPad 9th/10th, Pro 4th gen, mini 6, Air 4) | Mobile forward, **fully baked** GI + lightmaps | OFF | baked + few dynamic | medium / short | 1K–2K | 30 locked on A13; **~60 on A12Z/A15** |
+| **Enhanced** | M1–M4 (iPad Pro/Air M-series) | Mobile + dynamic sun/shadows, baked GI | optional Nanite trial only | dynamic | dense / long | 2K–4K, more post-FX | 60 |
+
+One content set; scalability buckets switch automatically by device. Author lighting **baked-first** so the
+A12Z/A13 floor is the design constraint, and let the Enhanced tier add dynamic shadows + density on top.
+
+**Distribution & build reality:** native iOS packaging **requires a Mac + Xcode** (current version for the
+iPadOS 18.5/26 SDK) and an **Apple Developer Program** membership ($99/yr) for TestFlight/App Store. The
+app is a multi-hundred-MB install, not a URL — which is precisely why the browser PWA stays as the instant/
+universal entry point.
 
 ### Phase 7 — Cinematic features *(once the foundation is stable)*
 - **Environment:** dynamic storms, fog systems, volumetric clouds, river simulation, footprints,
@@ -174,9 +197,14 @@ hardened touch. UE5 mappings in `ue5/03_SYSTEMS_DESIGN.md`; difficulty/survival/
 robustness** — everything else is de-risked.
 
 ## Tech stack
-- **Engine:** UE 5.4+ (Nanite, Lumen, VSM, World Partition).
-- **Characters:** MetaHuman (cadets/rangers) — solves the hand/rig problems hit with AI image→3D.
-- **Environment:** Quixel Megascans (UE-native, free) + UE5 foliage/Landscape.
+- **Engine / target:** UE 5.4+ packaged for **iOS/iPadOS (Metal), Mobile rendering path**, iPadOS 18.5+,
+  floor A12Z/A13. **Nanite/Lumen OFF at the floor** (Enhanced-tier Nanite trial on M-series only); **baked
+  lighting + distance-field/CSM shadows**. World Partition still structures the world but streams within a
+  mobile memory budget (≤ the 6 GB on the A12Z). Build on a Mac + Xcode (iPadOS 18.5/26 SDK).
+- **Input:** **touch-first** — port the proven browser touch UX as the design reference (dual-stick + look,
+  labelled action buttons, the iPad zoom/gesture hardening lessons) via EnhancedInput; controller optional.
+- **Characters:** MetaHuman (cadets/rangers) at **mobile LODs** — solves the hand/rig problems hit with AI image→3D.
+- **Environment:** Quixel Megascans (UE-native, free) **at mobile texture/poly budgets** + UE5 foliage/Landscape.
 - **Creatures:** cheapest→best — (a) Fab/Marketplace rigged+animated dino packs (fastest), (b) commissioned,
   (c) in-house. **Never** AI auto-rig for creatures.
 - **Animation:** Control Rig + IK Retargeter, **one shared rig per body archetype** (biped theropod,
@@ -222,6 +250,8 @@ artist/engineer work. **Will never:** modify the live browser game as part of th
 1. Close the Phase-0 FPS gate on the browser game (separate production-maintenance task, own review).
 2. Implement the RESET VIEW + viewport recovery — **done** (build `2026-06-16-s`).
 3. Stand up `/ue5-cinematic-slice` with the boundary README + Phase-1 parity matrix — **done** (this pass).
-4. Build the UE5 dinosaur **environment** prototype (Phase 1, look only).
-5. Keep the browser/iPad client alive permanently (Rules 3 & 4).
-6. Ship a UE5 "Enhanced Edition" for desktop on the shared core (Phases 2–3).
+4. Build the UE5 dinosaur **environment** prototype (Phase 1, look only) and **profile it natively on the
+   A12Z/A13 floor first** — baked lighting, mobile renderer, no Nanite/Lumen.
+5. Keep the browser PWA alive permanently as the instant/universal client (Rules 3 & 4).
+6. Ship the **native iPad UE5 app** (TestFlight → App Store) on the shared core — *alongside*, never
+   replacing, the browser PWA (Phases 3 & 6).

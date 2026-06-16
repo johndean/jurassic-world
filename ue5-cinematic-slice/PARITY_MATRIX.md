@@ -68,7 +68,7 @@ presentation (the whole point) · **New** = genuine new engineering not present/
 
 | Collider grid + push-out (game.js:928–985) | UE capsule/world collision + nav-mesh | Port (free) | keep "cleared obstacle = passable" intent |
 | Height-field terrain: hills/mountain ring/river (groundH, game.js:1529) | UE5 Landscape (sculpt to same silhouette) | Fidelity | 240 m valley silhouette preserved for layout parity |
-| Trees/rocks/foliage (instanced, game.js:868) | UE5 foliage + Nanite + Megascans | **Fidelity (big)** | same density/placement intent |
+| Trees/rocks/foliage (instanced, game.js:868) | UE5 foliage + Megascans at **mobile LODs** (Nanite only on M-series Enhanced) | **Fidelity (big)** | same density/placement intent; foliage/draw-distance budgeted per tier |
 
 ## H. HUD, map & UI
 
@@ -76,11 +76,12 @@ presentation (the whole point) · **New** = genuine new engineering not present/
 | Minimap + tactical map + overlays + pan-zoom (mapSVG, game.js:4237) | UMG map widget / render-target | Port | threat/territory/ghost/safe-zone layers; fog-of-war |
 | Options: colourblind/scale/subtitles/contrast (game.js:2853) | UE accessibility settings | Port | preserve all four |
 
-## I. Platform, input & rendering
+## I. Platform, input & rendering  *(UE5 client = native iPad app, iOS/Metal, iPadOS 18.5+, floor A12Z/A13)*
 
-| Touch dual-stick + iPad hardening (game.js:2873) | **N/A on UE5 desktop**; browser keeps it | n/a | UE5 = PC/Mac/controller; iPad stays on browser client (Phase 6 Option A) |
-| Three.js renderer, DPR cap, bloom (game.js:566) | Nanite + Lumen + VSM + Niagara | **Fidelity (whole point)** | the visual leap; no gameplay change |
-| Model streaming tiers (game.js:485) | World Partition + HLOD + Significance | Port + Fidelity | LOD by distance, larger world |
+| Touch dual-stick + action buttons + iPad hardening (game.js:2873) | EnhancedInput **touch HUD** (port browser UX 1:1) | Port | iPad-native → touch IS the primary input; mirror dual-stick + look + labelled buttons; no page-zoom issue in a native app |
+| Three.js renderer, DPR cap, bloom (game.js:566) | **UE5 Mobile (Metal) renderer + baked lighting** (Nanite/Lumen OFF at floor; Nanite trial M-series only) | **Fidelity (within mobile path)** | visual leap from Megascans + baked GI + post-FX, not Nanite/Lumen; no gameplay change |
+| Model streaming tiers (game.js:485) | World Partition + HLOD + Significance **within a mobile memory budget (≤6 GB on A12Z)** | Port + Fidelity | LOD by distance; world sized to the floor device |
+| (none) | **Two device-profile tiers**: Baseline (A12Z/A13–A15) / Enhanced (M1+) | **New** | one content set; scalability auto-switches by chip; author baked-first to the floor |
 
 ## J. Networking & persistence
 
@@ -94,7 +95,8 @@ presentation (the whole point) · **New** = genuine new engineering not present/
 
 | Divergence | Rationale |
 |---|---|
-| iPad touch controls are **not** built in UE5 | Phase 6 Option A: iPad stays on the browser client; UE5 targets PC/Mac/console + controller. Keeps Rules 3 & 4. |
+| UE5 client is a **native iPad app** (not desktop) | Owner decision. Floor A12Z/A13 on iPadOS 18.5+ → Mobile (Metal) renderer, baked lighting, **no Nanite/Lumen**; two tiers (Baseline/Enhanced). The browser PWA is **not** retired — it stays as the instant-URL / oldest-device client. Keeps Rules 3 & 4. |
+| Touch input IS built in UE5 (vs. earlier desktop assumption) | Because the target is iPad, the proven browser touch UX is ported as the reference, not dropped. |
 | Creature animation becomes real skeletal clips | The browser's procedural gait/roar/attack are stylized stand-ins; UE5 uses Control Rig/marketplace clips wired to the *same* AI states. Behaviour parity holds; fidelity rises. |
 | Co-op gains interpolation + ACK | Browser co-op is host-authoritative without interpolation; this is an upgrade, not a behaviour change to solo play. |
 

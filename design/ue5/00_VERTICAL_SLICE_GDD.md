@@ -10,7 +10,11 @@
 
 ## 1. Purpose & success criteria
 
-**Goal:** one zone, one full extraction loop, photoreal (Nanite + Lumen), running at 60 fps on a mid-range gaming PC.
+**Goal:** one zone, one full extraction loop, cinematic on the **native iPad target** — UE5 **Mobile (Metal)
+renderer + baked lighting** (Nanite/Lumen OFF at the floor), running at the tier targets: **~60 fps on iPad
+Pro 4th gen (A12Z) / ~30–60 fps on iPad 9th gen (A13)** at Baseline settings, Enhanced (M-series) at 60.
+The "photoreal" feel comes from Megascans + baked GI + post-processing, not Nanite/Lumen. (See
+`../UE5_PRODUCTION_PLAN.md` Phase 6 for the two-tier device strategy.)
 
 The slice is a **success** when all of these are true:
 1. A player walks/sprints/crouches a MetaHuman cadet through a foggy jungle valley that reads as the start-screen key art (`background.webp`), not grey-box.
@@ -35,7 +39,7 @@ The slice is a **success** when all of these are true:
 One hand-built **~250 m × 250 m valley** mirroring `biome.alpha.json` `map.size: 240`:
 - Foggy jungle valley floor, mountain ring on the perimeter, a **winding river**, dirt clearings, scattered boulders — same silhouette as the browser game's terrain so the layout is already validated.
 - **Extraction facility** in the mid-distance (helipad + bunker + comms tower + floodlights), matching `buildFacility()` in the browser build.
-- Heavy **Lumen** GI + volumetric fog + god-rays = the painted "feel" the browser version can only approximate.
+- **Baked GI (Lightmass/GPU Lightmass)** + screen-space/mobile fog + post-processing = the painted "feel" the browser version can only approximate. (Lumen is OFF at the A12Z/A13 floor; bake instead. Enhanced/M-series may add dynamic sun + denser effects.)
 - Lighting preset: **overcast, low sun, blue-grey haze** (palette below). No day/night in the slice.
 
 ## 3. The loop (mirrors the shipping loop exactly)
@@ -74,7 +78,7 @@ One **MetaHuman** adult cadet, weapon-free survival outfit (matches the browser 
 
 ## 7. Timeline & cost (slice only)
 
-~**2–4 months** part-time (per parent plan milestone 1). Cash: **engine + Megascans + MetaHuman are free**; the only spend is an optional dinosaur marketplace pack (tens–low-hundreds USD) — see `04_SHOPPING_LIST.md`. The expensive resource is *artist/engineer time*, not licenses.
+~**2–4 months** part-time (per parent plan milestone 1). Cash: **engine + Megascans + MetaHuman are free**; spend is an optional dinosaur marketplace pack (tens–low-hundreds USD) + **a Mac for iOS packaging and an Apple Developer Program membership ($99/yr) for TestFlight/App Store** — see `04_SHOPPING_LIST.md`. The expensive resource is *artist/engineer time*, not licenses. **Profile on a physical iPad 9th gen / Pro 4th gen early** — the floor device is the design constraint.
 
 ## 8. Go / no-go after the slice
 
