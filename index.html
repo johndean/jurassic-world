@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" id="viewportMeta" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Jurassic Survival: Island Alpha</title>
 <link rel="icon" type="image/jpeg" href="./favicon.jpg">
 <link rel="apple-touch-icon" href="./favicon.jpg">
@@ -180,7 +182,11 @@
   .mm-grid{position:absolute;inset:0;
     background-image:linear-gradient(var(--hud-line) 1px,transparent 1px),linear-gradient(90deg,var(--hud-line) 1px,transparent 1px);
     background-size:26px 26px;opacity:.25;}
-  .mm-svg{position:absolute;inset:0;width:100%;height:100%;}
+  /* iOS Safari does NOT honor touch-action on SVG geometry (<circle>/<polygon>/<text>), so a double-tap
+     landing on a map shape zooms the PAGE even though the container is touch-action:none. Make the SVG
+     non-interactive so taps fall through to the frame (a div, where touch-action:none IS honored). The
+     map needs no per-shape interaction on touch — pan/zoom is handled on the frame. */
+  .mm-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;touch-action:none;transform-origin:center center;}
   .mm-exfil{fill:var(--hud-accent);}
   .mm-self{fill:var(--hud-good);}
   .mm-threat{fill:var(--hud-alert);}
@@ -217,7 +223,15 @@
   #mapOverlay.open{display:flex;}
   .map-frame{position:relative;width:min(76vmin,720px);height:min(76vmin,720px);
     border:1px solid var(--hud-line);background:rgba(10,14,13,.85);border-radius:4px;overflow:hidden;
-    box-shadow:0 0 60px rgba(0,0,0,.6);}
+    box-shadow:0 0 60px rgba(0,0,0,.6);touch-action:none;}
+  .minimap{touch-action:none;}
+  /* pan/zoom wrapper inside the big map: pinch/drag transforms THIS (not the page). Reset on map open. */
+  #mapViewport{position:absolute;inset:0;transform-origin:center center;will-change:transform;touch-action:none;}
+  #resetViewBtn{position:fixed;right:14px;top:14px;z-index:62;touch-action:none;-webkit-tap-highlight-color:transparent;
+    font:700 10px ui-monospace,monospace;letter-spacing:.12em;color:#d7e0da;background:rgba(8,11,10,.7);
+    border:1px solid var(--hud-line);border-radius:6px;padding:6px 10px;cursor:pointer;display:none;}
+  #resetViewBtn:hover,#resetViewBtn:active{border-color:#e0772f;color:#fff;}
+  #resetViewBtn.show{display:block;}
   .map-title{position:absolute;top:0;left:0;right:0;padding:8px 12px;font-size:12px;letter-spacing:.18em;
     color:var(--hud-text);border-bottom:1px solid var(--hud-line);background:rgba(10,14,13,.6);z-index:2;}
   .map-title span{color:var(--hud-accent);}
@@ -612,8 +626,10 @@
       <button data-layer="territory">TERRITORY</button>
       <button data-layer="ghosts" class="on">LAST-SEEN</button>
     </div>
-    <div class="mm-grid"></div>
-    <svg viewBox="0 0 100 100" class="mm-svg" id="mapBigSvg"></svg>
+    <div id="mapViewport">
+      <div class="mm-grid"></div>
+      <svg viewBox="0 0 100 100" class="mm-svg" id="mapBigSvg"></svg>
+    </div>
     <div class="map-legend">
       <span><svg viewBox="0 0 10 10"><polygon points="5,1 9,5 5,9 1,5" fill="var(--hud-stam)"/></svg>OBJECTIVE</span>
       <span><svg viewBox="0 0 10 10"><polygon points="5,1 9,9 1,9" fill="var(--hud-good)"/></svg>YOU</span>
@@ -630,7 +646,7 @@
       <span><svg viewBox="0 0 10 10"><line x1="1" y1="3" x2="9" y2="7" stroke="var(--hud-water)" stroke-width="1.3"/></svg>RIVER</span>
       <span><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.8" fill="none" stroke="#7d8a72" stroke-width="0.9" stroke-dasharray="1.6 1.6"/></svg>VALLEY EDGE</span>
     </div>
-    <div class="map-hint">TAP OUTSIDE / ✕ / M / ESC TO CLOSE</div>
+    <div class="map-hint">PINCH / SCROLL ZOOM · DRAG TO PAN · ✕ / M / ESC CLOSE</div>
   </div>
 </div>
 
@@ -829,6 +845,7 @@
   <div style="position:absolute;left:50%;top:50%;width:18px;height:2px;background:currentColor;transform:translate(100%,-50%);"></div>
   <div style="position:absolute;left:50%;top:50%;width:4px;height:4px;border-radius:50%;background:currentColor;transform:translate(-50%,-50%);"></div>
 </div>
+<button id="resetViewBtn" title="Recover from browser zoom — reset view, camera & canvas">⤢ RESET VIEW</button>
 <div id="buildTag" style="position:fixed;left:6px;bottom:4px;z-index:9999;font:10px ui-monospace,monospace;color:#5a7a5a;opacity:.7;pointer-events:none;letter-spacing:.05em;">BUILD …</div>
 <script type="module" src="./game.js"></script>
 </body>

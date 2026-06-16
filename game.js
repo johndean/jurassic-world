@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-16-q";
+const BUILD = "2026-06-16-r";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -1428,6 +1428,8 @@ function initInput() {
   addEventListener("wheel", e => { if (binoc) { binocZoom(e.deltaY < 0 ? 1 : -1); e.preventDefault(); } }, { passive: false });
   const bm = $("btnMap"); if (bm) bm.addEventListener("pointerdown", e => { e.preventDefault(); toggleMap(); });
   const rb = $("resupplyBtn"); if (rb) rb.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); requestAirdrop(); });
+  const rv = $("resetViewBtn"); if (rv) rv.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); resetView(); });
+  initMapPanZoom();
   const mc = $("mapClose"); if (mc) mc.addEventListener("click", e => { e.preventDefault(); if (mapOpen) toggleMap(); });
   const ml = $("mapLayers"); if (ml) ml.addEventListener("click", e => {   // toggle threat/territory/ghost overlays
     const b = e.target.closest("button"); if (!b) return; e.preventDefault();
@@ -2823,13 +2825,52 @@ function applyOpts() {
 // iOS Safari ignores user-scalable=no, so block the pinch/double-tap gestures that otherwise zoom the
 // page and leave the player stuck zoomed-in. touch-action:manipulation (CSS) kills the double-tap zoom;
 // these kill pinch-zoom + any residual double-tap without breaking single taps on buttons.
+// iOS Safari ignores `maximum-scale`/`user-scalable=no` in the viewport meta (accessibility override),
+// so the page CAN still be pinched/double-tapped into a zoom — and because the meta then claims the page
+// is non-zoomable, the user often can't pinch back OUT → trapped. We defend in layers:
+//   1. gesturestart/change/end → preventDefault: the canonical WebKit pinch signal, killed before it scales.
+//   2. 2-finger touchstart → preventDefault: backstop for pinch (pointer-based joystick/look are unaffected —
+//      preventing touchstart default does not cancel Pointer Events, only native scroll/zoom + mouse emulation).
+//   3. document double-tap → preventDefault: iOS double-tap-to-zoom is NOT covered by touch-action on SVG
+//      geometry; catch a 2nd tap <300 ms from the 1st (the game never uses double-tap, so this is safe).
+// Recovery (when a zoom slips through anyway) is resetViewportZoom() / resetView(), bound to RESET VIEW.
+let _lastTapT = 0, _lastTapX = 0, _lastTapY = 0;
 function blockPageZoom() {
-  // Stop pinch zoom at its START only (gesturestart + a 2-finger touchstart) so the page can never get
-  // zoomed in the first place. Crucially we do NOT touch touchend / single-finger touchmove — doing so
-  // ate button taps (ENLARGE) and trapped the user when already zoomed. touch-action:manipulation (CSS)
-  // handles double-tap zoom. If a stale zoom persists, a reload resets to scale 1.
-  ["gesturestart", "gesturechange", "gestureend"].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
-  document.addEventListener("touchstart", e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+  ["gesturestart", "gesturechange", "gestureend"].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); }, { passive: false }));
+  document.addEventListener("touchstart", e => {
+    if (e.touches && e.touches.length > 1) { e.preventDefault(); return; }   // pinch backstop
+    const t = e.touches && e.touches[0]; if (!t) return;
+    const now = (typeof performance !== "undefined" ? performance.now() : 0), dt = now - _lastTapT;
+    const near = Math.abs(t.clientX - _lastTapX) < 40 && Math.abs(t.clientY - _lastTapY) < 40;
+    if (dt > 0 && dt < 320 && near) { e.preventDefault(); _lastTapT = 0; }   // double-tap zoom → swallow the 2nd tap
+    else { _lastTapT = now; _lastTapX = t.clientX; _lastTapY = t.clientY; }
+  }, { passive: false });
+  // safety nets: an orientation change or returning to the tab can leave Safari at a stale scale — snap back.
+  addEventListener("orientationchange", () => setTimeout(resetViewportZoom, 250));
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) resetViewportZoom(); });
+}
+// programmatic un-zoom: toggling the viewport meta forces WebKit to re-evaluate and snap back to scale 1.
+function resetViewportZoom() {
+  const vp = document.getElementById("viewportMeta") || document.querySelector("meta[name=viewport]");
+  if (!vp) return;
+  const base = "width=device-width, initial-scale=1, viewport-fit=cover";
+  vp.setAttribute("content", base + ", maximum-scale=1, user-scalable=yes");          // briefly allow scaling…
+  requestAnimationFrame(() => { vp.setAttribute("content", base + ", maximum-scale=1, user-scalable=no"); });   // …then re-lock at 1 → resets zoom
+  try { window.scrollTo(0, 0); } catch (_) {}
+  if (document.documentElement.style.zoom) document.documentElement.style.zoom = "";   // clear any stray CSS zoom
+}
+// full recovery: clear overlays/optics, restore the camera + canvas, and un-zoom Safari. Bound to RESET VIEW
+// and safe to call anytime (no-op fields are guarded).
+function resetView() {
+  if (binoc) toggleBinoc();                                  // lower binoculars
+  const t = TOOLS[selTool]; if (t && (t.id === "tranq" || t.id === "sample")) selectTool(2);   // lower aim scope → 3rd person
+  if (mapOpen) toggleMap();                                  // close the tactical map
+  if (camera) { camera.fov = DEFAULT_FOV; binocFov = BINOC_FOV; camera.updateProjectionMatrix(); }   // default field of view
+  camShake = 0;
+  resetMapTransform();                                       // reset in-map pan/zoom
+  if (typeof onResize === "function") onResize();            // recompute renderer size / pixel ratio / aspect
+  resetViewportZoom();                                       // un-zoom Safari + scroll to origin
+  toast("VIEW RESET");
 }
 function initOptions() {
   blockPageZoom();
@@ -4092,6 +4133,7 @@ function updateToolHUD() {
   const dh = $("dnaHud"); if (dh) dh.textContent = `⚗ DNA ${dnaSamples}  ·  ID ${identified.size}/${Object.keys(SPECIES).length}`;
   const rb = $("resupplyBtn");   // RESUPPLY appears only when a consumable is empty & no drop is pending; once called it tracks on the map
   if (rb) { rb.classList.toggle("on", airdropAvailable()); if (airdrop.state !== "idle") rb.classList.remove("on"); }
+  const rv = $("resetViewBtn"); if (rv) rv.classList.toggle("show", S.phase === "playing" || mapOpen);   // recovery handle available throughout play & on the map
 }
 let binocFov = BINOC_FOV;
 function binocZoom(dir) {   // +1 zoom in, -1 zoom out (scroll / +- keys / on-screen buttons / pinch)
@@ -4258,8 +4300,36 @@ function mapSVG(big) {
 function toggleMap() {
   if (S.phase !== "playing" && !mapOpen) return;
   mapOpen = !mapOpen;
-  if (mapOpen) { const ml = $("mapLayers"); if (ml) ml.querySelectorAll("button[data-layer]").forEach(b => { const k = b.dataset.layer; if (k in mapLayers) b.classList.toggle("on", !!mapLayers[k]); }); }   // reflect the persisted overlay choice on the toggle buttons
+  if (mapOpen) { const ml = $("mapLayers"); if (ml) ml.querySelectorAll("button[data-layer]").forEach(b => { const k = b.dataset.layer; if (k in mapLayers) b.classList.toggle("on", !!mapLayers[k]); }); resetMapTransform(); }   // reflect overlay choices + start the map un-panned/un-zoomed
   $("mapOverlay").classList.toggle("open", mapOpen);
+}
+
+/* ---- in-map pan & zoom: a real navigation gesture so pinching the MAP zooms the map, not Safari ---- *
+ * The pinch/drag is intercepted on the .map-frame and transforms #mapViewport (the grid + SVG) via CSS,
+ * with preventDefault so the page itself never scales. At scale 1 single taps pass through to the buttons. */
+const mapXform = { scale: 1, x: 0, y: 0 };
+function applyMapTransform() { const v = $("mapViewport"); if (v) v.style.transform = `translate(${mapXform.x}px,${mapXform.y}px) scale(${mapXform.scale})`; }
+function resetMapTransform() { mapXform.scale = 1; mapXform.x = 0; mapXform.y = 0; applyMapTransform(); }
+function clampMapPan(frame) { const r = frame.getBoundingClientRect(), mx = r.width * (mapXform.scale - 1) / 2, my = r.height * (mapXform.scale - 1) / 2; mapXform.x = clamp(mapXform.x, -mx, mx); mapXform.y = clamp(mapXform.y, -my, my); }
+function initMapPanZoom() {
+  const frame = document.querySelector(".map-frame"); if (!frame) return;
+  let pinchD = 0, scale0 = 1, panX = 0, panY = 0, panning = false;
+  frame.addEventListener("touchstart", e => {
+    if (e.touches.length === 2) { const a = e.touches[0], b = e.touches[1]; pinchD = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); scale0 = mapXform.scale; e.preventDefault(); }
+    else if (e.touches.length === 1 && mapXform.scale > 1.02) { panning = true; panX = e.touches[0].clientX; panY = e.touches[0].clientY; }   // drag-pan only when zoomed in (taps still reach buttons at 1×)
+  }, { passive: false });
+  frame.addEventListener("touchmove", e => {
+    if (e.touches.length === 2 && pinchD > 0) { const a = e.touches[0], b = e.touches[1], d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); mapXform.scale = clamp(scale0 * d / pinchD, 1, 5); clampMapPan(frame); applyMapTransform(); e.preventDefault(); }
+    else if (panning && e.touches.length === 1) { const t = e.touches[0]; mapXform.x += t.clientX - panX; mapXform.y += t.clientY - panY; panX = t.clientX; panY = t.clientY; clampMapPan(frame); applyMapTransform(); e.preventDefault(); }
+  }, { passive: false });
+  const endT = e => { if (!e.touches || e.touches.length === 0) { pinchD = 0; panning = false; } };
+  frame.addEventListener("touchend", endT); frame.addEventListener("touchcancel", endT);
+  // desktop: wheel zooms, mouse-drag pans
+  frame.addEventListener("wheel", e => { mapXform.scale = clamp(mapXform.scale - Math.sign(e.deltaY) * 0.25, 1, 5); clampMapPan(frame); applyMapTransform(); e.preventDefault(); }, { passive: false });
+  let mDown = false, mlx = 0, mly = 0;
+  frame.addEventListener("pointerdown", e => { if (e.pointerType === "mouse" && mapXform.scale > 1.02) { mDown = true; mlx = e.clientX; mly = e.clientY; } });
+  frame.addEventListener("pointermove", e => { if (mDown) { mapXform.x += e.clientX - mlx; mapXform.y += e.clientY - mly; mlx = e.clientX; mly = e.clientY; clampMapPan(frame); applyMapTransform(); } });
+  addEventListener("pointerup", () => { mDown = false; });
 }
 
 let toastTimer = 0;
