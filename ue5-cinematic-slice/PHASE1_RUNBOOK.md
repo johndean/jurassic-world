@@ -38,11 +38,19 @@ at the floor. Mobile (Metal) renderer + **baked lighting** — Nanite/Lumen OFF 
 ## 2. Enable plugins (verify)
 EnhancedInput, Water, PCG, Landmass, Niagara, GameplayCameras, Bridge. (Pre-listed in the `.uproject`.)
 
-## 3. Landscape — the 240 m valley
-- Create a **Landscape** sized to mirror `data/biome.alpha.json` `map.size: 240` (≈240×240 m playable, ring of
-  hills beyond). Use **Landmass**/sculpt to match the browser silhouette: rolling valley floor, perimeter
-  mountain ring (rises past r≈70 m), one **winding river channel** (centerline ≈ `48 + sin(x*0.02)*28`).
-- Paint Megascans ground layers (dirt / mud / rock / leaf litter).
+## 3. Landscape — the 240 m valley (automated)
+- **Run the importer** instead of sculpting by hand: in the editor, open **Window > Output Log**, switch the
+  command dropdown to **Python**, and run:
+  `py "Source/Heightmap/import_landscape.py"`  (use the full path to the file).
+  It decodes the committed `valley_heightmap_1009.png`, writes an importable `valley_heightmap_1009.r16`,
+  prints the **exact** transform + import settings, and — if the engine exposes the API — creates the
+  Landscape actor with the transform applied. The valley then matches the browser 1:1 (rolling floor,
+  perimeter mountain ring past r≈70 m, the winding river channel `48 + sin(x*0.02)*28`).
+- If scripted import isn't available on your build, the script spawns an empty Landscape at the right
+  transform and prints the **Import from File** fields — in **Landscape mode > Manage > Import from File**,
+  pick the generated `.r16` and enter: Resolution **1009×1009**, Section **63×63**, Sections/Comp **1×1**,
+  Components **16×16**; Location **Z = 5890.9 cm**; Scale **X=Y=23.8095, Z=25.2493**.
+- Paint Megascans ground layers (dirt / mud / rock / leaf litter) over it.
 
 ## 4. Water (river)
 - Use the **Water plugin** `Water Body River` along the channel; set depth so it reads as the swimmable

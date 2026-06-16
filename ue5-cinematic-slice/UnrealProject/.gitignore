@@ -27,5 +27,8 @@ Packaged/
 *.ipa
 *.app/
 
+# Generated heightmap (derived from the committed .png by import_landscape.py)
+Source/Heightmap/*.r16
+
 # OS cruft
 .DS_Store
