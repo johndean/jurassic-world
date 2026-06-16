@@ -11,6 +11,11 @@
     touch-action:manipulation;-webkit-text-size-adjust:100%;
     font-family:ui-monospace,"SFMono-Regular","Roboto Mono",Menlo,Consolas,monospace;}
   #c{display:block;position:fixed;inset:0;width:100%;height:100%;touch-action:none;}
+  /* iPad: touch-action isn't inherited, so HUD/minimap/ENLARGE/map default to auto and a double-tap or pinch
+     there zooms the page (and Safari ignores user-scalable=no). Lock every in-game surface to touch-action:none
+     so NO browser zoom is possible — JS touch handlers (joystick/look/buttons) still fire normally. Menus
+     (#startScreen, #opts) are intentionally excluded so they can still scroll. */
+  #c,#touch,#touch *,#hud,#hud *,#mapOverlay,#mapOverlay *,#prompt,#reticle,#buildTag{touch-action:none;}
   #dev{position:fixed;top:6px;left:50%;transform:translateX(-50%);z-index:50;color:#7CFC00;
     font:11px ui-monospace,monospace;display:none;background:rgba(0,0,0,.45);padding:3px 8px;white-space:pre;}
 

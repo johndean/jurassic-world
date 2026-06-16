@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-n";
+const BUILD = "2026-06-15-o";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -2716,7 +2716,7 @@ function blockPageZoom() {
   // zoomed in the first place. Crucially we do NOT touch touchend / single-finger touchmove — doing so
   // ate button taps (ENLARGE) and trapped the user when already zoomed. touch-action:manipulation (CSS)
   // handles double-tap zoom. If a stale zoom persists, a reload resets to scale 1.
-  ["gesturestart", "gesturechange"].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+  ["gesturestart", "gesturechange", "gestureend"].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
   document.addEventListener("touchstart", e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
 }
 function initOptions() {
