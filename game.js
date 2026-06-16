@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-16-r";
+const BUILD = "2026-06-16-s";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -2304,6 +2304,18 @@ function updatePackRoles() {
   });
 }
 
+// body radius for structure push-out — scaled to the animal's footprint, clamped so it never traps
+function dinoRadius(sp) { const L = (sp.size && sp.size.lengthM) || (sp.greybox && sp.greybox.standH) || 4; return clamp(L * 0.12, 0.5, 1.8); }
+// a stable wander destination: re-rolled only when reached, so ambling/patrol seeks a fixed point instead
+// of a per-frame-noisy target (the latter is what made idle dinos shimmer side-to-side).
+function wanderPoint(a, hx, hz, radius) {
+  const bb = a.bb;
+  if (bb.wx == null || dist2(a.x, a.z, bb.wx, bb.wz) < 9) {
+    const ang = rand(0, 6.28), r = rand(radius * 0.25, radius);
+    bb.wx = hx + Math.sin(ang) * r; bb.wz = hz + Math.cos(ang) * r;
+  }
+  return [bb.wx, bb.wz];
+}
 // execute the chosen state via steering → vx,vz
 function steer(a, dt, P) {
   const sp = a.sp, bb = a.bb;
@@ -2321,9 +2333,8 @@ function steer(a, dt, P) {
     case "Graze": {
       const social = sp.behavior.social, herds = social === "herd" || social === "flock";   // solitary species don't clump
       const hc = herds ? herdCenter() : null;
-      if (hc && Math.hypot(hc.x - a.x, hc.z - a.z) > 14) { tx = hc.x; tz = hc.z; }   // cohesion
-      else { const md = S.t * 0.02 + (hc ? 0 : a.x);   // slow herd migration drift across the valley + amble
-        tx = a.x + Math.sin(md) * 0.8 + Math.sin(a.yaw + Math.sin(S.t * 0.3 + a.x) * 0.6) * 0.4; tz = a.z + Math.cos(md) * 0.8 + Math.cos(a.yaw + 0.3) * 0.4; }
+      if (hc && Math.hypot(hc.x - a.x, hc.z - a.z) > 16) { tx = hc.x; tz = hc.z; }   // cohesion: rejoin a drifting herd
+      else { const [wx, wz] = wanderPoint(a, hc ? hc.x : (bb.homeX != null ? bb.homeX : a.x), hc ? hc.z : (bb.homeZ != null ? bb.homeZ : a.z), 12); tx = wx; tz = wz; }   // amble to a fixed graze spot, then pick another
       bb.scared = Math.max(0, bb.scared - dt);
       break;
     }
@@ -2338,8 +2349,8 @@ function steer(a, dt, P) {
     }
     case "Patrol": {   // hold a home territory: wander within it, but turn back if you've strayed too far
       const terr = sp.behavior.territoryRadiusM, hx = bb.homeX != null ? bb.homeX : a.x, hz = bb.homeZ != null ? bb.homeZ : a.z;
-      if (Math.hypot(a.x - hx, a.z - hz) > terr * 1.8) { tx = hx; tz = hz; }
-      else { tx = hx + Math.sin(S.t * 0.2 + hx) * terr * 0.5; tz = hz + Math.cos(S.t * 0.17 + hz) * terr * 0.5; }
+      if (Math.hypot(a.x - hx, a.z - hz) > terr * 1.8) { tx = hx; tz = hz; bb.wx = null; }   // strayed → head home (clear the wander point)
+      else { const [wx, wz] = wanderPoint(a, hx, hz, terr * 0.7); tx = wx; tz = wz; }   // patrol to a fixed point in-territory, then re-roll
       break;
     }
     case "Investigate": { tx = bb.lastSeenX; tz = bb.lastSeenZ; run = false; break; }
@@ -2368,20 +2379,43 @@ function steer(a, dt, P) {
     }
     case "Retreat": { run = true; tx = a.x + (a.x - (bb.lastSeenX)); tz = a.z + (a.z - (bb.lastSeenZ)); break; }
   }
-  // seek
-  let dx = tx - a.x, dz = tz - a.z; const dd = Math.hypot(dx, dz) || 1; dx /= dd; dz /= dd;
-  // separation from other dinos (cheap, bounded)
-  let sx = 0, sz = 0;
-  for (const o of dinos) { if (o === a || !o.alive) continue; const od = dist2(a.x, a.z, o.x, o.z); if (od < 9) { const ox = a.x - o.x, oz = a.z - o.z, l = Math.sqrt(od) || 1; sx += ox / l; sz += oz / l; } }
-  dx += sx * 0.5; dz += sz * 0.5;
-  const nl = Math.hypot(dx, dz) || 1; dx /= nl; dz /= nl;
-  const spd = (run ? sp.move.run : sp.move.walk) * (a.lod === "full" ? 1 : 0.4) * (sp.diet === "carnivore" ? DIFF.predSpeed : 1);   // predators run-down speed scales with difficulty
-  a.vx = lerp(a.vx, dx * spd, 0.12); a.vz = lerp(a.vz, dz * spd, 0.12);
+  // ---- seek with ARRIVAL: glide to a stop near the target instead of jittering on the spot ----
+  let dx = tx - a.x, dz = tz - a.z; const dd = Math.hypot(dx, dz);
+  const arriveR = run ? 0.8 : 2.0;                              // "close enough" radius (stops heading-noise chasing)
+  if (dd > 1e-3) { dx /= dd; dz /= dd; } else { dx = Math.sin(a.yaw); dz = Math.cos(a.yaw); }   // degenerate → keep facing
+  // water: land animals are not aquatic — steer back uphill out of the channel (don't wander in & flail),
+  // unless actively hunting/fleeing through it. Set a.inWater for the speed/vertical handling below.
+  a.inWater = !isAquatic(sp) && !isFlier(sp) && (WATER_Y - groundH(a.x, a.z)) > 1.0;
+  if (a.inWater && a.state !== "Chase" && a.state !== "Attack" && a.state !== "Flee") {
+    const gx = groundH(a.x + 2, a.z) - groundH(a.x - 2, a.z), gz = groundH(a.x, a.z + 2) - groundH(a.x, a.z - 2), gl = Math.hypot(gx, gz) || 1;
+    dx += (gx / gl) * 1.1; dz += (gz / gl) * 1.1; const ng = Math.hypot(dx, dz) || 1; dx /= ng; dz /= ng;   // bias toward higher (drier) ground
+  }
+  // separation from other dinos — gentle, and never while feeding/resting (no shoving at a carcass)
+  if (a.state !== "Feed" && a.state !== "Rest") {
+    let sx = 0, sz = 0, n = 0;
+    for (const o of dinos) { if (o === a || !o.alive) continue; const od = dist2(a.x, a.z, o.x, o.z); if (od < 9 && od > 1e-3) { const l = Math.sqrt(od); sx += (a.x - o.x) / l; sz += (a.z - o.z) / l; n++; } }
+    if (n) { dx += sx * 0.35; dz += sz * 0.35; const nl = Math.hypot(dx, dz) || 1; dx /= nl; dz /= nl; }
+  }
+  // target speed with arrival slowdown + water drag; predators scale with difficulty
+  let spd = (run ? sp.move.run : sp.move.walk) * (a.lod === "full" ? 1 : 0.4) * (sp.diet === "carnivore" ? DIFF.predSpeed : 1);
+  if (dd < arriveR) spd *= dd / arriveR;                        // ease to zero on approach
+  if (a.inWater) spd *= 0.6;
+  // frame-rate-independent acceleration (smooth ease in/out — no per-frame snap, no FPS dependence)
+  const ak = 1 - Math.exp(-dt * (run ? 6 : 3.5));
+  a.vx = lerp(a.vx, dx * spd, ak); a.vz = lerp(a.vz, dz * spd, ak);
   a.x += a.vx * dt; a.z += a.vz * dt;
+  // structure collision: slide around solid props/buildings/rocks rather than grinding into them & twitching
+  if (a.lod === "full" && !a.inWater) resolveColliders(a, dinoRadius(sp));
   const lim = BIOME.map.size / 2 - 3; a.x = clamp(a.x, -lim, lim); a.z = clamp(a.z, -lim, lim);
-  // P-06: turn speed scales with the species' declared agility (move.turnRate, deg/s; 180 = neutral),
-  // so a Velociraptor (340) pivots far quicker than a T-Rex (110). Clamped so it stays stable.
-  if (Math.hypot(a.vx, a.vz) > 0.2) a.yaw = lerp2angle(a.yaw, Math.atan2(a.vx, a.vz), 0.25 * Math.min(2.2, ((a.sp.move && a.sp.move.turnRate) || 180) / 180));
+  // ---- FACING: turn toward travel ONLY when genuinely moving, with a dead-zone so micro-motion never
+  // rotates the body (the root cause of the side-to-side shimmer). Turn rate scales with species agility
+  // (move.turnRate deg/s; 180 = neutral) and is dt-scaled so heavy animals swing slowly, agile ones snap. ----
+  const vmag = Math.hypot(a.vx, a.vz), moveThresh = (run ? sp.move.run : sp.move.walk) * 0.18;
+  if (vmag > moveThresh && dd > arriveR * 0.5) {
+    const want = Math.atan2(a.vx, a.vz);
+    const dyaw = ((want - a.yaw + Math.PI) % (Math.PI * 2)) - Math.PI;
+    if (Math.abs(dyaw) > 0.05) a.yaw = lerp2angle(a.yaw, want, Math.min(0.9, dt * 3.2 * Math.min(2.2, ((sp.move && sp.move.turnRate) || 180) / 180)));
+  }
   animateDino(a, dt);
 }
 // Drive a dino's mesh placement + procedural animation from its current x/z/yaw/vx/vz/state. Shared by
@@ -2496,6 +2530,7 @@ function dinoY(a) {
   const g = groundH(a.x, a.z);
   if (isFlier(a.sp)) { const tgt = (a.state === "Chase" || a.state === "Attack") ? 2.4 : 9; a.fly = lerp(a.fly == null ? 9 : a.fly, tgt, 0.04); return g + a.fly + Math.sin(S.t * 2 + a.x) * 0.25; }
   if (isAquatic(a.sp) && WATER_Y - g > 1.0) return WATER_Y - 0.4 + Math.sin(S.t * 1.6 + a.z) * 0.08;   // swimming at the surface
+  if (WATER_Y - g > 0.8 && !isFlier(a.sp)) { const sink = Math.min(0.7, (sp => (sp.greybox && sp.greybox.standH ? sp.greybox.standH : 2) * 0.35)(a.sp)); return Math.max(g, WATER_Y - sink) + Math.sin(S.t * 1.5 + a.x) * 0.05; }   // land animal wading/swimming — float at the surface, don't sink through the bed
   return g;
 }
 
