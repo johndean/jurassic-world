@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-16-u";
+const BUILD = "2026-06-16-v";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -525,36 +525,66 @@ let beaconMesh, beaconRing, beaconGlow, playerMesh;
 const cam = { yaw: 0, pitch: -0.18, dist: 7.2, height: 2.4 };
 
 /* ---------------------------------------------------------------- boot ---- */
+// visible boot-failure banner — so a load/graphics failure is never a silent blank menu
+function bootError(msg) {
+  let el = $("bootErr");
+  if (!el) {
+    el = document.createElement("div"); el.id = "bootErr";
+    el.style.cssText = "position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:9999;max-width:90vw;" +
+      "background:#3a1410;border:1px solid #d6562f;color:#ffd9cc;padding:10px 16px;border-radius:8px;" +
+      "font:13px/1.5 system-ui,sans-serif;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.5);";
+    document.body.appendChild(el);
+  }
+  el.textContent = "⚠ " + msg;
+}
 async function boot() {
-  const [sp, bi, ar, cx] = await Promise.all([
-    fetch("./data/species.json").then(r => r.json()),
-    fetch("./data/biome.alpha.json").then(r => r.json()),
-    fetch("./data/archetypes.json").then(r => r.json()).catch(() => ({ archetypes: {} })),
-    fetch("./data/codex.json").then(r => r.json()).catch(() => ({ codex: {} })),
-  ]);
-  ARCHETYPES = ar.archetypes || {};
-  CODEX = cx.codex || {};
-  sp.species.forEach(s => { s.arch = resolveArchetype(s); SPECIES[s.id] = s; });
-  BIOME = bi;
+  // ---- 1) data (required) — if this fails, the menu can't populate, so say so ----
+  let sp, bi, ar, cx;
+  try {
+    [sp, bi, ar, cx] = await Promise.all([
+      fetch("./data/species.json").then(r => r.json()),
+      fetch("./data/biome.alpha.json").then(r => r.json()),
+      fetch("./data/archetypes.json").then(r => r.json()).catch(() => ({ archetypes: {} })),
+      fetch("./data/codex.json").then(r => r.json()).catch(() => ({ codex: {} })),
+    ]);
+    ARCHETYPES = ar.archetypes || {};
+    CODEX = cx.codex || {};
+    sp.species.forEach(s => { s.arch = resolveArchetype(s); SPECIES[s.id] = s; });
+    BIOME = bi;
+  } catch (e) {
+    console.error("boot: data load failed", e);
+    bootError("Couldn't load game data — check your connection and refresh.");
+    return;
+  }
 
-  initRenderer();
-  buildWorld();
-  initInput();
-  initAudio();
-  buildStaticHUD();
-  showStart();
-  initMissionSelect();
-  initTabs();
-  initCharSelect();
-  initDifficultySelect();
-  initLobby();
-  initOptions();
-  loadProgress();
-  { const cl = $("careerLine"); if (cl) cl.textContent = careerLine(); }
-  requestAnimationFrame(frame);
-  // stream models in the background so the menu/start button appears instantly;
-  // creatures load first (re-skinning as they arrive), player + foliage build inside preloadModels
-  preloadModels();
+  // ---- 2) MENU FIRST: pure DOM, no WebGL — must always appear, even if graphics fail ----
+  // each guarded so one failing widget can't blank the rest of the homepage options.
+  const safe = (label, fn) => { try { fn(); } catch (e) { console.error("boot: " + label + " failed", e); } };
+  safe("staticHUD", buildStaticHUD);
+  safe("showStart", showStart);
+  safe("missionSelect", initMissionSelect);
+  safe("tabs", initTabs);
+  safe("charSelect", initCharSelect);
+  safe("difficultySelect", initDifficultySelect);
+  safe("lobby", initLobby);
+  safe("options", initOptions);
+  safe("progress", loadProgress);
+  safe("careerLine", () => { const cl = $("careerLine"); if (cl) cl.textContent = careerLine(); });
+
+  // ---- 3) 3D engine: may fail on a blocked/weak GPU. The menu already works; surface a clear notice. ----
+  try {
+    initRenderer();
+    buildWorld();
+    initInput();
+    initAudio();
+    requestAnimationFrame(frame);
+    // stream models in the background so the menu/start button appears instantly;
+    // creatures load first (re-skinning as they arrive), player + foliage build inside preloadModels
+    preloadModels();
+  } catch (e) {
+    console.error("boot: 3D init failed", e);
+    bootError("3D graphics couldn't start (WebGL). The menu works — for gameplay, enable hardware acceleration or try another browser.");
+  }
 }
 
 // subtle vignette (edge darkening) for cinematic framing
