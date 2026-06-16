@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-16-t";
+const BUILD = "2026-06-16-u";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -2150,7 +2150,7 @@ function useTool() {
     if (a.sedated) { toast(a.sp.displayName + " · already sedated"); return; }
     a.sedation = (a.sedation || 0) + 1;
     const need = sedThreshold(a.sp);
-    if (a.sedation >= need) { a.sedated = true; a.downT = 24; a.state = "Down"; a.bb.scared = 0; fxReact(a, "Zz", "#8fb8c4"); toast(a.sp.displayName + " SEDATED — draw a sample"); }
+    if (a.sedation >= need) { a.sedated = true; a.downT = 24; a.state = "Down"; a.bb.scared = 0; S.downs = (S.downs || 0) + 1; fxReact(a, "Zz", "#8fb8c4"); toast(a.sp.displayName + " SEDATED — draw a sample"); }
     else { fxReact(a, "✦", "#8fb8c4"); a.bb.scared = Math.max(a.bb.scared, 1.0); toast(`TRANQ · ${a.sp.displayName} ${Math.round(a.sedation / need * 100)}%`); }
   }
   else if (t.id === "trap") {                                   // drop a snare trap a few metres ahead
@@ -2206,7 +2206,7 @@ function updateField(dt) {   // tranq sedation + snare traps lifecycle (DNA coll
     if (!tr.armed) continue;
     for (const a of dinos) {
       if (!a.alive || a.trapped || a.sedated) continue;
-      if (dist2(a.x, a.z, tr.x, tr.z) < tr.r * tr.r) { a.trapped = true; a.trappedT = 18; a.state = "Down"; a.bb.scared = 0; tr.armed = false; Audio.hit(); fxReact(a, "✗", "#c9a23a"); break; }
+      if (dist2(a.x, a.z, tr.x, tr.z) < tr.r * tr.r) { a.trapped = true; a.trappedT = 18; a.state = "Down"; a.bb.scared = 0; tr.armed = false; S.downs = (S.downs || 0) + 1; Audio.hit(); fxReact(a, "✗", "#c9a23a"); break; }
     }
   }
   for (const a of dinos) {
@@ -3869,7 +3869,7 @@ function startRun() {
     S.player.x = Math.cos(a) * 3.0; S.player.z = Math.sin(a) * 3.0; S.player.yaw = 0;
   }
   buildPlayer();   // (re)build the chosen specialist as the player avatar
-  S.threat = 0; S.t = 0; S._everInRange = false; S._lastBeep = 0;
+  S.threat = 0; S.t = 0; S._everInRange = false; S._lastBeep = 0; S.downs = 0;
   const holdMod = (selectedRole && selectedRole.mod.hold) || 0;   // comms perk: shorter hold
   Object.assign(S.extraction, { called: false, hold: 0, holdMax: Math.max(45, BIOME.extraction.holdSeconds + holdMod), inRange: false, won: false });
   S.killedBy = "";
@@ -3888,7 +3888,7 @@ function startRun() {
     do { x = rand(-half, half); z = rand(-half, half); tries++; } while (dist2(x, z, 0, 0) < minR * minR && tries < 24);
     dinos.push(spawnDino(species, clamp(x, -half, half), clamp(z, -half, half)));
   }
-  $("startScreen").classList.add("hidden"); $("endScreen").classList.add("hidden"); $("endScreen").classList.remove("win"); clearConfetti();
+  $("startScreen").classList.add("hidden"); $("endScreen").classList.add("hidden"); $("endScreen").classList.remove("win", "lose"); clearConfetti();
   cam.yaw = 0; cam.pitch = -0.18;
   try { startMission(); } catch (e) { console.error("startMission", e); }   // set up the mission phase chain + objective marker
   try { buildMissionSites(); } catch (e) { console.error("missionSites", e); }   // build the real structures (outpost, generators, Maya…) at objective sites
@@ -3946,13 +3946,29 @@ function endRun(won, ending) {
   if (ending && ENDINGS[ending]) { const e = ENDINGS[ending]; t.textContent = e.title; t.className = e.cls; b.textContent = e.body; }
   else { t.textContent = won ? STR.winTitle : STR.loseTitle; t.className = won ? "win" : "lose"; b.textContent = won ? STR.winBody : (STR.loseBody + (S.killedBy ? `  (${STR.caught} ${S.killedBy})` : "")); }
   // win → celebration + NEXT MISSION option; loss → RUN AGAIN only
-  const scr = $("endScreen"); scr.classList.toggle("win", !!won);
+  const scr = $("endScreen"); scr.classList.toggle("win", !!won); scr.classList.toggle("lose", !won);
+  buildEndStats(won);
   if (won) {
     const nx = nextMission(); const nb = $("nextBtn");
     if (nb && nx) nb.textContent = "NEXT: " + nx.name + " ▶";
     celebrate();
   } else { clearConfetti(); }
   scr.classList.remove("hidden");
+}
+
+// run-summary stat tiles (time / takedowns / DNA / difficulty), plus best-time on a win
+function fmtTime(s) { s = Math.max(0, Math.round(s || 0)); const m = (s / 60) | 0; return m + ":" + String(s % 60).padStart(2, "0"); }
+function buildEndStats(won) {
+  const host = $("endStats"); if (!host) return;
+  const stat = (v, l, cls) => `<div class="stat${cls ? " " + cls : ""}"><div class="sv">${v}</div><div class="sl">${l}</div></div>`;
+  const tiles = [
+    stat(fmtTime(S.t), won ? "Time" : "Survived"),
+    stat(S.downs || 0, "Takedowns"),
+    stat(dnaSamples || 0, "DNA"),
+    stat((DIFF && DIFF.name) || "—", "Difficulty"),
+  ];
+  if (won && PROGRESS.bestS) tiles.push(stat(fmtTime(PROGRESS.bestS), "Best", "best"));
+  host.innerHTML = tiles.join("");
 }
 
 // the mission after the selected one, in menu order (wraps to the first)
@@ -3963,24 +3979,36 @@ function nextMission() {
 }
 
 // victory confetti burst — pure DOM, auto-cleans; no effect on gameplay
-function clearConfetti() { const c = $("confetti"); if (c) { c.classList.remove("on"); c.innerHTML = ""; } }
+const CONFETTI_COLS = ["#f4d35e", "#8fd07a", "#e0772f", "#5fb0d6", "#ffffff", "#d65fc4", "#6fe0c0"];
+let _confettiTimers = [];
+function clearConfetti() {
+  _confettiTimers.forEach(clearTimeout); _confettiTimers = [];
+  const c = $("confetti"); if (c) { c.classList.remove("on"); c.innerHTML = ""; }
+  const f = $("screenFlash"); if (f) f.classList.remove("fire");
+}
+function confettiWave(c, n, durBase) {
+  for (let i = 0; i < n; i++) {
+    const b = document.createElement("div"); b.className = "confetti-bit";
+    b.style.left = (Math.random() * 100) + "vw";
+    b.style.background = CONFETTI_COLS[(Math.random() * CONFETTI_COLS.length) | 0];
+    b.style.animationDuration = (durBase + Math.random() * 2.6) + "s";
+    b.style.animationDelay = (Math.random() * 0.8) + "s";
+    if (Math.random() < 0.5) b.style.borderRadius = "50%";
+    b.style.transform = "scale(" + (0.7 + Math.random() * 1.1) + ")";
+    c.appendChild(b);
+  }
+}
 function celebrate() {
   const c = $("confetti"); if (!c) return;
   c.innerHTML = ""; c.classList.add("on");
-  const cols = ["#f4d35e", "#8fd07a", "#e0772f", "#5fb0d6", "#ffffff", "#d65fc4"];
-  const N = 110;
-  for (let i = 0; i < N; i++) {
-    const b = document.createElement("div"); b.className = "confetti-bit";
-    b.style.left = (Math.random() * 100) + "vw";
-    b.style.background = cols[(Math.random() * cols.length) | 0];
-    b.style.animationDuration = (1.8 + Math.random() * 2.2) + "s";
-    b.style.animationDelay = (Math.random() * 0.6) + "s";
-    if (Math.random() < 0.5) b.style.borderRadius = "50%";
-    b.style.transform = "scale(" + (0.7 + Math.random() * 0.9) + ")";
-    c.appendChild(b);
-  }
+  // screen flash
+  const f = $("screenFlash"); if (f) { f.classList.remove("fire"); void f.offsetWidth; f.classList.add("fire"); }
+  // big opening burst, then two follow-up waves so it keeps falling for several seconds
+  confettiWave(c, 150, 2.4);
+  _confettiTimers.push(setTimeout(() => { if (S.phase === "won") confettiWave(c, 90, 2.6); }, 1100));
+  _confettiTimers.push(setTimeout(() => { if (S.phase === "won") confettiWave(c, 70, 2.8); }, 2400));
   Audio.fanfare();
-  setTimeout(() => { if (S.phase === "won") clearConfetti(); }, 5200);   // tidy up if still on the end screen
+  _confettiTimers.push(setTimeout(() => { if (S.phase === "won") clearConfetti(); }, 8500));   // tidy up if still on the end screen
 }
 
 /* ================================================== procedural audio ===== */

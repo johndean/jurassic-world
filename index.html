@@ -397,6 +397,19 @@
   /* confetti */
   #confetti{position:fixed;inset:0;z-index:59;pointer-events:none;overflow:hidden;display:none;}
   #confetti.on{display:block;}
+  /* stat summary */
+  #endStats{display:none;gap:10px 26px;flex-wrap:wrap;justify-content:center;max-width:560px;
+    margin:4px 0 20px;padding:16px 22px;border:1px solid var(--hud-line);border-radius:8px;
+    background:rgba(255,255,255,.03);animation:winPop .5s ease both .2s;}
+  #endScreen.win #endStats,#endScreen.lose #endStats{display:flex;}
+  .stat{display:flex;flex-direction:column;align-items:center;min-width:74px;}
+  .stat .sv{font-size:clamp(20px,4.4vw,30px);font-weight:800;color:#fff;line-height:1;}
+  .stat.best .sv{color:#f4d35e;}
+  .stat .sl{font-size:9.5px;letter-spacing:.18em;color:#8a978f;margin-top:6px;text-transform:uppercase;}
+  /* victory screen flash */
+  #screenFlash{position:fixed;inset:0;z-index:58;pointer-events:none;background:#fff;opacity:0;}
+  #screenFlash.fire{animation:screenFlash .7s ease-out forwards;}
+  @keyframes screenFlash{0%{opacity:.85;}100%{opacity:0;}}
   .confetti-bit{position:absolute;top:-20px;width:9px;height:14px;opacity:.95;
     animation:confettiFall linear forwards;will-change:transform,opacity;}
   @keyframes confettiFall{0%{transform:translateY(-20px) rotateZ(0);opacity:1;}
@@ -850,12 +863,14 @@
   <h1 id="endTitle"></h1>
   <div id="endBadge">★ Mission Complete ★</div>
   <p id="endBody"></p>
+  <div id="endStats"></div>
   <div id="endBtns">
     <button class="bigbtn" id="nextBtn">NEXT MISSION ▶</button>
     <button class="bigbtn" id="againBtn"></button>
   </div>
 </div>
 <div id="confetti"></div>
+<div id="screenFlash"></div>
 
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
