@@ -81,7 +81,7 @@ presentation (the whole point) · **New** = genuine new engineering not present/
 | Touch dual-stick + action buttons + iPad hardening (game.js:2873) | EnhancedInput **touch HUD** (port browser UX 1:1) | Port | iPad-native → touch IS the primary input; mirror dual-stick + look + labelled buttons; no page-zoom issue in a native app |
 | Three.js renderer, DPR cap, bloom (game.js:566) | **UE5 Mobile (Metal) renderer + baked lighting** (Nanite/Lumen OFF at floor; Nanite trial M-series only) | **Fidelity (within mobile path)** | visual leap from Megascans + baked GI + post-FX, not Nanite/Lumen; no gameplay change |
 | Model streaming tiers (game.js:485) | World Partition + HLOD + Significance **within a mobile memory budget (≤6 GB on A12Z)** | Port + Fidelity | LOD by distance; world sized to the floor device |
-| (none) | **Two device-profile tiers**: Baseline (A12Z/A13–A15) / Enhanced (M1+) | **New** | one content set; scalability auto-switches by chip; author baked-first to the floor |
+| (none) | **Device-profile tiers**: Baseline (A12Z/A13–A15) / Enhanced (M1–M3) / **Showcase (iPad Pro M4 11″/13″)** | **New** | one content set; scalability auto-switches by chip; author baked-first to the floor, showcase + Nanite/RT trial on M4 (hardware ray tracing) |
 
 ## J. Networking & persistence
 

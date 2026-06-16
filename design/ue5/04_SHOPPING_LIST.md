@@ -11,7 +11,8 @@ Concrete assets/tools to build the slice in `00_VERTICAL_SLICE_GDD.md`. Goal: a 
 | **Mac** (Apple Silicon recommended) | (hardware) | **Mandatory** — iOS packaging/signing only works from macOS + Xcode |
 | **Xcode** (current, for iPadOS 18.5/26 SDK) | Free | Build/deploy to device + TestFlight |
 | **Apple Developer Program** | **$99/yr** | TestFlight + App Store distribution; on-device testing |
-| Physical **iPad 9th gen + iPad Pro 4th gen** to profile | (hardware) | Profile on the **floor devices early** — they are the design constraint, not an M-series |
+| Physical **iPad 9th gen + iPad Pro 4th gen** to profile | (hardware) | Profile on the **floor devices early** — they are the design constraint |
+| **iPad Pro M4 (11″ or 13″)** — showcase device | (hardware) | Top of the range: Nanite/hardware-RT trial + Sequencer beauty-shot / marketing target (120 Hz) |
 
 > **Rendering note:** target = **UE5 Mobile (Metal) renderer + baked lighting**. **Nanite and Lumen are OFF**
 > at the A12Z/A13 floor (M-series Enhanced tier may opt into a Nanite trial). The "Free (engine)" Lumen/

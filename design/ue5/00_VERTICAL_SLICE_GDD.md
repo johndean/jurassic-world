@@ -12,7 +12,8 @@
 
 **Goal:** one zone, one full extraction loop, cinematic on the **native iPad target** — UE5 **Mobile (Metal)
 renderer + baked lighting** (Nanite/Lumen OFF at the floor), running at the tier targets: **~60 fps on iPad
-Pro 4th gen (A12Z) / ~30–60 fps on iPad 9th gen (A13)** at Baseline settings, Enhanced (M-series) at 60.
+Pro 4th gen (A12Z) / ~30–60 fps on iPad 9th gen (A13)** at Baseline settings, Enhanced (M1–M3) at 60, and
+the **iPad Pro M4 (11″/13″) as the Showcase device** (60 fps / 120 Hz ProMotion, Nanite + hardware-RT trial).
 The "photoreal" feel comes from Megascans + baked GI + post-processing, not Nanite/Lumen. (See
 `../UE5_PRODUCTION_PLAN.md` Phase 6 for the two-tier device strategy.)
 

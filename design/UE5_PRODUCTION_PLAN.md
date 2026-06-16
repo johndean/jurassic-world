@@ -55,11 +55,18 @@ vs. an instant browser URL) is *exactly why the browser client must survive*: th
 instant-URL access and the broadest/oldest device support**, while the **native iPad UE5 app owns fidelity**.
 This is how MMOs evolve — one world, multiple front-ends.
 
-> **Target platform (owner decision):** native iPad, **iPadOS 18.5+**, **floor = iPad 9th gen (A13) /
-> iPad Pro 4th gen (A12Z)**, up to M4. **Hard reality at this floor:** **Nanite and Lumen are OFF** — they
-> require M-series GPUs. The baseline build uses UE5's **Mobile (Metal) renderer with baked/hybrid lighting**;
-> the "cinematic" look comes from Megascans + baked GI + post-processing, scaling up on faster chips.
-> **Quality strategy = two auto-detected tiers** (see Phase 6).
+> **Target platform (owner decision):** native iPad, **iPadOS 18.5+**.
+> **Device range — floor → ceiling:**
+> - **Floor / design constraint:** iPad 9th gen (A13) · iPad Pro 4th gen (A12Z) — *baked-first, this is what
+>   every shot must run on.*
+> - **Ceiling / showcase device:** **iPad Pro M4 (11″ & 13″, 2024)** — 10-core GPU, **hardware ray tracing +
+>   mesh shaders**, 8–16 GB RAM, 120 Hz ProMotion. The Enhanced-tier reference target and the only device
+>   where Nanite / experimental RT reflections are worth prototyping.
+>
+> **Hard reality at the floor:** **Nanite and Lumen are OFF** (M-series GPUs only). The baseline build uses
+> UE5's **Mobile (Metal) renderer with baked/hybrid lighting**; the "cinematic" look comes from Megascans +
+> baked GI + post-processing, scaling up on faster chips. **Quality strategy = two auto-detected tiers**
+> (see Phase 6) — author to the floor, showcase on the M4.
 
 ---
 
@@ -152,10 +159,13 @@ disabled** (M-series-only, and even there treated as an opt-in trial).
 | Tier | Devices | Renderer & lighting | Nanite/Lumen | Shadows | Foliage / draw dist | Textures | Target fps |
 |------|---------|---------------------|--------------|---------|---------------------|----------|-----------|
 | **Baseline** | A12Z, A13–A15 (iPad 9th/10th, Pro 4th gen, mini 6, Air 4) | Mobile forward, **fully baked** GI + lightmaps | OFF | baked + few dynamic | medium / short | 1K–2K | 30 locked on A13; **~60 on A12Z/A15** |
-| **Enhanced** | M1–M4 (iPad Pro/Air M-series) | Mobile + dynamic sun/shadows, baked GI | optional Nanite trial only | dynamic | dense / long | 2K–4K, more post-FX | 60 |
+| **Enhanced** | M1–M3 (iPad Pro/Air M-series) | Mobile + dynamic sun/shadows, baked GI | optional Nanite trial | dynamic | dense / long | 2K–4K, more post-FX | 60 |
+| **Showcase (M4)** | **iPad Pro M4 11″/13″** | as Enhanced + experimental RT reflections/shadows (hardware RT) | Nanite trial + RT trial | dynamic + RT | densest / longest | 4K, full post-FX | 60 (120 Hz ProMotion option) |
 
 One content set; scalability buckets switch automatically by device. Author lighting **baked-first** so the
-A12Z/A13 floor is the design constraint, and let the Enhanced tier add dynamic shadows + density on top.
+A12Z/A13 floor is the design constraint; the Enhanced tier adds dynamic shadows + density, and the **M4 is
+the showcase device** (the marketing/Sequencer beauty-shot target, where Nanite + hardware ray tracing are
+worth a prototype — treat both as experimental in UE5's iOS path, not guaranteed).
 
 **Distribution & build reality:** native iOS packaging **requires a Mac + Xcode** (current version for the
 iPadOS 18.5/26 SDK) and an **Apple Developer Program** membership ($99/yr) for TestFlight/App Store. The
