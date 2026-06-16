@@ -1,15 +1,8 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "5.4",
+	"EngineAssociation": "5.7",
 	"Category": "",
-	"Description": "Jurassic Survival: Island Alpha — UE5 Cinematic Slice (native iPad, Metal mobile renderer, baked lighting). Parallel R&D; the browser game is protected, READ-ONLY production. Phase 1 = environment look only, profiled on the A12Z/A13 floor.",
-	"Modules": [
-		{
-			"Name": "JSISlice",
-			"Type": "Runtime",
-			"LoadingPhase": "Default"
-		}
-	],
+	"Description": "Jurassic Survival: Island Alpha — UE5 Cinematic Slice (native iPad, Metal mobile renderer, baked lighting). Parallel R&D; the browser game is protected, READ-ONLY production. Phase 1 = environment look only, profiled on the A12Z/A13 floor. Content/Blueprint-only for Phase 1 (opens with no compile); the JSISlice C++ module is added in Phase 2 when gameplay code lands.",
 	"Plugins": [
 		{ "Name": "EnhancedInput", "Enabled": true },
 		{ "Name": "Water", "Enabled": true },
@@ -18,6 +11,6 @@
 		{ "Name": "Niagara", "Enabled": true },
 		{ "Name": "GameplayCameras", "Enabled": true },
 		{ "Name": "ModelingToolsEditorMode", "Enabled": true },
-		{ "Name": "Bridge", "Enabled": true, "_comment": "Quixel/Fab Megascans + MetaHuman import" }
+		{ "Name": "Fab", "Enabled": true, "_comment": "Fab/Quixel Megascans + MetaHuman import (replaced the old 'Bridge' plugin in UE5.6+)" }
 	]
 }

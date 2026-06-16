@@ -16,14 +16,21 @@ at the floor. Mobile (Metal) renderer + **baked lighting** — Nanite/Lumen OFF 
 
 ## Prerequisites (one-time)
 - **Mac** (Apple Silicon recommended) + **Xcode** (current, for the iPadOS 18.5/26 SDK) + command-line tools.
-- **Unreal Engine 5.4+** (from the Epic Games Launcher).
+- **Unreal Engine 5.4+** (from the Epic Games Launcher). The project file targets **5.7**; any recent 5.x works
+  via *Switch Unreal Engine Version*.
 - **Apple Developer Program** ($99/yr); a signing team + a test device UDID registered.
 - Physical **iPad 9th gen (A13)** and **iPad Pro 4th gen (A12Z)** (the floor). M-series + **iPad Pro M4** for
   the Enhanced/Showcase comparison.
 - **Fab / Quixel Bridge** account (free) for Megascans + a rigged dino (optional in Phase 1 — environment first).
 
 ## 1. Open the project
-- Copy `UnrealProject/` to your working drive. Double-click `JSISlice.uproject` → "rebuild modules?" → Yes.
+- Copy `UnrealProject/` to your working drive. Double-click `JSISlice.uproject`.
+- **Engine version:** the project targets **UE 5.7** (`EngineAssociation: "5.7"`). If you have a different
+  5.x, right-click the `.uproject` → *Switch Unreal Engine Version* → pick your installed engine, or just let
+  the editor offer to open it with your version.
+- **No compile step:** Phase 1 is **content/Blueprint-only** (no C++ module declared), so it opens directly —
+  you will **not** see a "missing modules / rebuild?" prompt. (The `JSISlice` C++ module is added in Phase 2
+  when gameplay code lands; that step generates project files and compiles on this Mac.)
 - The `Config/*.ini` here pre-set the mobile/iOS/baked render mode. Confirm in **Project Settings**:
   - *Rendering*: Static Lighting **on**, Dynamic GI **None**, Nanite **off**, VSM **off**, Mobile HDR **on**, Forward shading on mobile.
   - *Platforms > iOS*: Metal on, MetalMRT off, iPad-only, landscape, min iOS set, **your signing team + bundle id** (don't commit these).
