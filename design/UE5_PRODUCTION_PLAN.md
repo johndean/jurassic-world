@@ -172,6 +172,13 @@ iPadOS 18.5/26 SDK) and an **Apple Developer Program** membership ($99/yr) for T
 app is a multi-hundred-MB install, not a URL — which is precisely why the browser PWA stays as the instant/
 universal entry point.
 
+**Monetization (owner decision): FREE app — no paid download, no in-app purchases, no ads, no subscriptions.**
+Implications: **no Apple commission** (the 15–30 % cut applies only to paid apps / IAP / subs — a free app
+with no IAP pays nothing); App Store **review still applies** to free apps; the **$99/yr Apple Developer
+Program is still required** to publish. Because there is **no revenue**, the UE5 build is funded purely as
+**R&D / showcase** — see the budget note. (Consistent with the browser game, which is already free.) If
+monetization is ever revisited later, it is a separate, explicit decision; the current target is free.
+
 ### Phase 7 — Cinematic features *(once the foundation is stable)*
 - **Environment:** dynamic storms, fog systems, volumetric clouds, river simulation, footprints,
   destructible vegetation.
@@ -247,7 +254,11 @@ rig (Control Rig / MetaHuman) → import to UE5 → Nanite/Lumen setup → in-en
 - **Mid** (custom creatures/anims, full 10–20p MP, more polish): **~$0.5M–$2M.**
 - **Full AAA** (large team, console, original everything): **$5M+** and years.
 - **DIY vertical slice:** cash-light — engine + Megascans + MetaHuman are free; a rigged dino pack is
-  tens–low-hundreds USD. The expensive resource is artist/engineer time, not licenses.
+  tens–low-hundreds USD; add the **$99/yr Apple Developer Program** + a Mac. The expensive resource is
+  artist/engineer time, not licenses.
+- **Revenue: none — the app is FREE** (owner decision). Treat the UE5 build as **R&D / showcase**, funded
+  out of pocket/passion, **not recouped via sales**. This keeps cash exposure to licenses + hardware + the
+  $99/yr program; the real "cost" is time. (The browser game is likewise free.)
 
 ## What I (Claude) can and cannot do here
 **Can:** scaffold `/ue5-cinematic-slice` docs/structure, write GDD/tech-design, define the Data-Asset schema
