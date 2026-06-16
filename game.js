@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-16-w";
+const BUILD = "2026-06-17-x";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -868,7 +868,7 @@ function buildPlayer() {
     fig.position.y = -0.9;   // updatePlayer sets group center to ground+0.9; drop feet to ground
     playerMesh.add(fig);
     scene.add(playerMesh);
-    addBlob(playerMesh, 0.7);
+    0;   // (player foot shadow removed — no blob disc under the avatar)
     const clips = MODEL_ANIMS[PM];
     if (clips && clips.length) {           // play the baked walk clip; speed scaled by gait in frame()
       playerMixer = new THREE.AnimationMixer(src);
@@ -881,7 +881,7 @@ function buildPlayer() {
     scene.add(playerMesh);
     const nub = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.4), new THREE.MeshStandardMaterial({ color: 0xfff0c0 }));
     nub.position.set(0, 0.5, 0.45); playerMesh.add(nub);
-    addBlob(playerMesh, 0.7);
+    0;   // (player foot shadow removed — no blob disc under the avatar)
   }
 }
 // overcast gradient sky dome with faint procedural cloud banding near the horizon (no asset, not fogged)
@@ -1092,7 +1092,7 @@ function buildTowers() {
 let missionSites = [], survivor = null;
 // Missions with a survivor to find → (optionally) stabilise → escort. Generalised from Maya.
 const SURVIVORS = {
-  fallen_outpost: { name: "MAYA", site: "outpost", color: 0x9a5a3c, off: [-2.2, 1.6], escortFrom: 3 },
+  fallen_outpost: { name: "MAYA", site: "outpost", color: 0x9a5a3c, off: [-3.2, -0.6], escortFrom: 3 },
   ghosts: { name: "SURVEYOR", site: "cave", color: 0x3c6a9a, off: [2.4, 1.8], escortFrom: 5 },
 };
 function clearMissionSites() { for (const s of missionSites) scene.remove(s); missionSites = []; survivor = null; missionColliders.length = 0; }
@@ -1119,6 +1119,16 @@ function buildCollapsedTower(g) {                         // a toppled ranger wa
   for (let i = 0; i < 7; i++) { const sb = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.5, 4, 6), _mm(0x6b6347, 1)); sb.rotation.z = Math.PI / 2; sb.position.set(-2.4 + i * 0.6, 0.3, 3); g.add(sb); }   // sandbag wall
   const flood = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 2.6, 6), metal); flood.position.set(3.4, 1.3, -2.6); flood.rotation.z = 0.3; g.add(flood);   // toppled floodlight
 }
+function buildRangerStation(g) {                          // FALLEN OUTPOST — a real ranger station building + collapsed watchtower wreck
+  const st = new THREE.Group(); st.position.set(-3.2, 0, -3.2); g.add(st);   // offset so the landing spot stays clear
+  buildBuilding(st, "safehouse");                                            // full dressed building: walls, roof, lit doorway, porch, windows, comms mast, beacon, sign
+  const dHalf = 1.3;                                                         // safehouse depth/2 → front door plane
+  const doorPivot = new THREE.Group(); doorPivot.position.set(-0.45, 0, dHalf + 0.02); st.add(doorPivot);   // hinge at the door's edge
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.7, 0.07), _mm(0x20231d, 0.9)); door.position.set(0.45, 0.85, 0); doorPivot.add(door);
+  doorPivot.rotation.y = -0.95;                                             // left ajar — a real entrance you move to
+  g.userData.doorPivot = doorPivot;
+  const wreck = new THREE.Group(); wreck.position.set(3.6, 0, 3.6); g.add(wreck); buildCollapsedTower(wreck);   // "the collapsed watchtower" beside the station
+}
 function buildSurvivor(x, z, col) {                       // a survivor — slumped/waving until reached, then follows
   const g = new THREE.Group(); g.position.set(x, groundH(x, z), z);
   const cloth = _mm(col || 0x9a5a3c, 0.9), dark = _mm(0x2a2620, 0.8), skin = _mm(0xb98a6a, 0.7);
@@ -1130,7 +1140,7 @@ function buildSurvivor(x, z, col) {                       // a survivor — slum
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 6, 6), new THREE.MeshBasicMaterial({ color: 0x6fae6b, transparent: true, opacity: 0.25, depthWrite: false })); beam.position.y = 3; g.add(beam);
   addBlob(g, 0.55); scene.add(g);
   g.rotation.x = 0.5;                                     // slumped against the wreckage
-  return { mesh: g, x, z, following: false, slumped: true, halo, beam };
+  return { mesh: g, x, z, following: false, slumped: true, halo, beam, wound };
 }
 function buildGenerator(g) {                              // power-station generator (BLACKOUT)
   const metal = _mm(0x6a6e68, 0.6, 0.6), dark = _mm(0x2a2d28, 0.8, 0.4);
@@ -1187,7 +1197,7 @@ function buildSiteStory(g) {
 }
 function buildSiteProp(type, x, z) {
   const g = new THREE.Group(); g.position.set(x, groundH(x, z), z); g.userData.site = type; scene.add(g); missionSites.push(g);
-  if (type === "outpost") buildCollapsedTower(g);
+  if (type === "outpost") buildRangerStation(g);
   else if (type === "generator") buildGenerator(g);
   else if (type === "cave") buildCave(g);
   else buildBuilding(g, type);   // command / facility / campsite / safehouse / supply
@@ -1206,13 +1216,27 @@ function buildMissionSites() {
     buildSiteProp(ph.site, ph.x, ph.z);
   }
   const sc = SURVIVORS[m.id];   // place the survivor at their site
-  if (sc) { const ph = m.phases.find(p => p.site === sc.site); if (ph) survivor = buildSurvivor(ph.x + sc.off[0], ph.z + sc.off[1], sc.color); }
+  if (sc) { const ph = m.phases.find(p => p.site === sc.site); if (ph) { survivor = buildSurvivor(ph.x + sc.off[0], ph.z + sc.off[1], sc.color); survivor.name = sc.name; } }
 }
 function updateSurvivor(dt) {                             // slumped/waving idle → stands & follows once triggered
   if (!survivor) return;
   const m = survivor.mesh, P = S.player;
   if (survivor.following) {
-    if (survivor.slumped) { survivor.slumped = false; m.rotation.x = 0; if (survivor.halo) survivor.halo.material.color.setHex(0x8fb8c4); if (survivor.beam) survivor.beam.material.color.setHex(0x8fb8c4); }
+    if (survivor.slumped) {
+      survivor.slumped = false; m.rotation.x = 0;
+      if (survivor.halo) survivor.halo.material.color.setHex(0x8fb8c4);
+      if (survivor.beam) survivor.beam.material.color.setHex(0x8fb8c4);
+      // FIRST AID — stop the bleeding: hide the wound, apply a bandage + med cross, float her name, confirm
+      if (survivor.wound) survivor.wound.visible = false;
+      if (!survivor._aided) {
+        survivor._aided = true;
+        const bandage = new THREE.Mesh(new THREE.CapsuleGeometry(0.27, 0.16, 4, 8), new THREE.MeshStandardMaterial({ color: 0xeae3d3, roughness: 0.8 }));
+        bandage.rotation.z = Math.PI / 2; bandage.position.set(0, 1.0, 0.12); m.add(bandage);
+        for (const a of [0, Math.PI / 2]) { const bar = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.03), new THREE.MeshStandardMaterial({ color: 0xc23a2a, emissive: 0x5a1206, emissiveIntensity: 0.5 })); bar.position.set(0, 1.0, 0.2); bar.rotation.z = a; m.add(bar); }
+        const tag = makeNameTag(survivor.name || "MAYA"); tag.position.set(0, 2.05, 0); tag.scale.set(1.7, 0.42, 1); m.add(tag); survivor.tag = tag;
+        toast("✚ FIRST AID — bleeding stopped. " + (survivor.name || "Maya") + " is with you — get her to the safehouse.");
+      }
+    }
     const dx = P.x - survivor.x, dz = P.z - survivor.z, d = Math.hypot(dx, dz) || 1;
     if (d > 2.6) { const step = Math.min(5.2 * dt, d - 2.4); survivor.x += dx / d * step; survivor.z += dz / d * step; m.rotation.y = Math.atan2(dx, dz); }
     m.position.set(survivor.x, groundH(survivor.x, survivor.z) + 0.02, survivor.z);
@@ -2007,10 +2031,7 @@ function requestAirdrop() {
 }
 function spawnAirdropPlane(x, z) {
   if (airdrop.plane) { scene.remove(airdrop.plane); airdrop.plane = null; }
-  const g = new THREE.Group();
-  const fus = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 8, 10), new THREE.MeshStandardMaterial({ color: 0x394036, roughness: 0.7, metalness: 0.3 })); fus.rotation.z = Math.PI / 2; g.add(fus);
-  const wing = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.3, 12), new THREE.MeshStandardMaterial({ color: 0x2c322b })); g.add(wing);
-  const tail = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.4, 0.3), new THREE.MeshStandardMaterial({ color: 0x2c322b })); tail.position.set(-3.8, 1.0, 0); g.add(tail);
+  const g = buildHercules(); g.scale.setScalar(0.85);   // a proper C-130 makes the supply run
   g.position.set(x - 230, groundH(x, z) + 78, z);
   airdrop.plane = g; scene.add(g);
 }
@@ -3648,6 +3669,44 @@ function endIntroMonorail() { introProp = null; endIntroAtOrigin("THE LAST SAMPL
  * The pre-jump cinematic (transport bay / airship deck) hands off to a CONTROLLABLE canopy:
  * the player steers with the stick / A-D, flares with S (pull back), and lands where they choose.
  * This is real player control inside the intro — not a rail. */
+// thin cylinder spanning two points (parachute suspension lines, struts, antennae)
+const _UP = new THREE.Vector3(0, 1, 0);
+function strut(ax, ay, az, bx, by, bz, r, mat) {
+  const dx = bx - ax, dy = by - ay, dz = bz - az, len = Math.hypot(dx, dy, dz) || 0.001;
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 5), mat);
+  m.position.set((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2);
+  m.quaternion.setFromUnitVectors(_UP, new THREE.Vector3(dx / len, dy / len, dz / len));
+  return m;
+}
+// Procedural C-130 Hercules — high straight wing, 4 turboprops, tall fin + low stabiliser,
+// upswept tail with the cargo ramp, gear sponsons. Nose points +x. Used for the HALO intro
+// establishing shot and the resupply flyover.
+function buildHercules() {
+  const g = new THREE.Group();
+  const body = _mm(0x6b7169, 0.7, 0.3), dark = _mm(0x3a3f39, 0.8, 0.3), trim = _mm(0x23271f, 0.85, 0.2);
+  const glass = new THREE.MeshStandardMaterial({ color: 0x16202a, emissive: 0x0a1418, metalness: 0.6, roughness: 0.3 });
+  const fus = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 13, 16), body); fus.rotation.z = Math.PI / 2; fus.position.y = 0.7; g.add(fus);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), dark); nose.rotation.z = -Math.PI / 2; nose.position.set(6.5, 0.7, 0); g.add(nose);
+  const cock = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.7, 2.0), glass); cock.position.set(5.3, 1.35, 0); g.add(cock);
+  // upswept tail boom + ramp underside
+  const tail = new THREE.Group(); tail.position.set(-6.4, 0.7, 0); tail.rotation.z = 0.2;
+  const boom = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 0.5, 4.6, 14), body); boom.rotation.z = Math.PI / 2; boom.position.set(-2.0, 0, 0); tail.add(boom); g.add(tail);
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(2.4, 3.6, 0.2), body); fin.position.set(-9.6, 3.0, 0); g.add(fin);
+  const finCap = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.5, 0.24), dark); finCap.position.set(-9.9, 4.7, 0); g.add(finCap);
+  const hstab = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.18, 6.8), body); hstab.position.set(-9.8, 1.5, 0); g.add(hstab);
+  // high straight wing (spans z) + 4 turboprop nacelles & motion-blur prop discs
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.42, 22.5), body); wing.position.set(0.4, 2.3, 0); g.add(wing);
+  for (const ez of [-7.4, -3.5, 3.5, 7.4]) {
+    const nac = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.42, 2.8, 10), dark); nac.rotation.z = Math.PI / 2; nac.position.set(1.2, 2.05, ez); g.add(nac);
+    const hub = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.6, 10), trim); hub.rotation.z = -Math.PI / 2; hub.position.set(2.8, 2.05, ez); g.add(hub);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(1.5, 20), new THREE.MeshBasicMaterial({ color: 0x1b1e18, transparent: true, opacity: 0.26, side: THREE.DoubleSide, depthWrite: false }));
+    disc.rotation.y = Math.PI / 2; disc.position.set(2.95, 2.05, ez); g.add(disc);
+    for (let b = 0; b < 2; b++) { const bl = new THREE.Mesh(new THREE.BoxGeometry(0.07, 2.9, 0.2), trim); bl.position.set(2.9, 2.05, ez); bl.rotation.x = b * Math.PI / 2; g.add(bl); }   // static blade cross behind the disc
+  }
+  for (const sz of [-1.5, 1.5]) { const spon = new THREE.Mesh(new THREE.BoxGeometry(3.6, 1.1, 0.8), body); spon.position.set(0.4, 0.0, sz); g.add(spon); }   // gear sponson blisters
+  for (const sz of [-1.52, 1.52]) { const stripe = new THREE.Mesh(new THREE.BoxGeometry(10.5, 0.45, 0.04), trim); stripe.position.set(0.5, 1.2, sz); g.add(stripe); }   // fuselage cheat-line
+  return g;
+}
 function buildTransportBay() {                            // C-130-style fuselage interior (rear ramp at +x, open to the storm)
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ color: 0x3a3f3a, roughness: 0.85, metalness: 0.3, side: THREE.DoubleSide });
@@ -3657,7 +3716,15 @@ function buildTransportBay() {                            // C-130-style fuselag
   const ceil = new THREE.Mesh(new THREE.BoxGeometry(L, 0.2, W), mat); ceil.position.y = H; g.add(ceil);
   for (const sz of [W / 2, -W / 2]) { const wall = new THREE.Mesh(new THREE.BoxGeometry(L, H, 0.2), mat); wall.position.set(0, H / 2, sz); g.add(wall); }
   const front = new THREE.Mesh(new THREE.BoxGeometry(0.2, H, W), mat); front.position.set(-L / 2, H / 2, 0); g.add(front);   // cockpit bulkhead
-  const ramp = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.18, W - 0.2), dark); ramp.position.set(L / 2 + 1.1, -0.5, 0); ramp.rotation.z = 0.5; g.add(ramp);   // lowered rear ramp
+  // rear cargo opening at +x: two-piece door — lower ramp hinged at the floor, upper door hinged at
+  // the ceiling. Both start CLOSED (sealed against the storm) and swing open on the green light.
+  const rampPivot = new THREE.Group(); rampPivot.position.set(L / 2, 0.1, 0); g.add(rampPivot);
+  const ramp = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.16, W - 0.2), dark); ramp.position.set(1.7, 0, 0); rampPivot.add(ramp);
+  for (let i = 0; i < 3; i++) { const tread = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, W - 0.5), mat); tread.position.set(0.7 + i * 0.9, 0.1, 0); rampPivot.add(tread); }   // anti-slip treads
+  const upperPivot = new THREE.Group(); upperPivot.position.set(L / 2, H, 0); g.add(upperPivot);
+  const upper = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.16, W - 0.2), mat); upper.position.set(1.05, 0, 0); upperPivot.add(upper);
+  rampPivot.rotation.z = -1.45; upperPivot.rotation.z = -1.45;   // closed pose (both vertical, meeting mid-opening)
+  g.userData.rampPivot = rampPivot; g.userData.upperPivot = upperPivot; g.userData.rampProg = 0;
   for (let i = -1; i <= 1; i++) { const rib = new THREE.Mesh(new THREE.TorusGeometry(W * 0.52, 0.08, 6, 14, Math.PI), mat); rib.position.set(i * 3, 0.1, 0); rib.rotation.z = -Math.PI / 2; g.add(rib); }
   g.add(mk3(new THREE.PointLight(0x9fb0c0, 0.7, 13), { position: new THREE.Vector3(0, H - 0.4, 0) }));
   g.add(mk3(new THREE.PointLight(0xbcd0e6, 1.6, 22), { position: new THREE.Vector3(L / 2 + 2, 1, 0) }));   // storm light through the open ramp
@@ -3679,13 +3746,33 @@ function buildAirshipDeck() {                             // open flight deck of
   g.add(mk3(new THREE.PointLight(0xcfe0ff, 0.6, 16), { position: new THREE.Vector3(0, 3, -2) }));
   return g;
 }
-function buildParachute() {
+function buildParachute() {   // modern ram-air (square) canopy: cambered rectangular wing, cells, cascaded lines
   const g = new THREE.Group();
-  const canMat = new THREE.MeshStandardMaterial({ color: 0x46553a, roughness: 0.92, metalness: 0.04, side: THREE.DoubleSide });
-  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xc9772f, roughness: 0.9, side: THREE.DoubleSide });
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(2.8, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), canMat); dome.position.y = 2.8; g.add(dome);
-  const band = new THREE.Mesh(new THREE.SphereGeometry(2.83, 18, 6, 0, Math.PI * 2, Math.PI * 0.34, Math.PI * 0.12), stripeMat); band.position.y = 2.8; g.add(band);
-  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; const ln = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 3.0, 4), new THREE.MeshBasicMaterial({ color: 0x14140e })); ln.position.set(Math.cos(a) * 2.0, 1.35, Math.sin(a) * 2.0); ln.rotation.x = Math.sin(a) * 0.26; ln.rotation.z = -Math.cos(a) * 0.26; g.add(ln); }
+  const top = new THREE.MeshStandardMaterial({ color: 0xb5341f, roughness: 0.86, metalness: 0.02, side: THREE.DoubleSide });   // hi-vis red
+  const alt = new THREE.MeshStandardMaterial({ color: 0xe6ddcb, roughness: 0.86, metalness: 0.02, side: THREE.DoubleSide });   // off-white
+  const lineMat = new THREE.MeshBasicMaterial({ color: 0x14140e });
+  const cells = 7, cw = 0.62, chord = 2.0, archY = 3.0, archDrop = 0.62;
+  const wing = new THREE.Group(); wing.position.y = archY; g.add(wing);
+  for (let i = 0; i < cells; i++) {
+    const x = (i - (cells - 1) / 2) * cw, t = (i - (cells - 1) / 2) / ((cells - 1) / 2);
+    const cell = new THREE.Mesh(new THREE.BoxGeometry(cw * 0.92, 0.32, chord), i % 2 ? alt : top);
+    cell.position.set(x, -t * t * archDrop, 0); cell.rotation.z = -t * 0.5;   // anhedral arc — tips droop & bank in
+    wing.add(cell);
+  }
+  // rounded leading-edge lip across the front of the wing
+  const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, cw * cells * 0.96, 8), top); lip.rotation.z = Math.PI / 2; lip.position.set(0, archY - archDrop * 0.45, chord / 2 - 0.1); g.add(lip);
+  // slider partway down the lines
+  const slider = new THREE.Mesh(new THREE.BoxGeometry(cw * cells * 0.78, 0.04, chord * 0.5), new THREE.MeshStandardMaterial({ color: 0x2a2e29, side: THREE.DoubleSide })); slider.position.y = archY * 0.55; g.add(slider);
+  // cascaded suspension lines: front & back of every cell down to two riser confluence points
+  const riserL = [-0.2, 0.3, 0], riserR = [0.2, 0.3, 0];
+  for (let i = 0; i < cells; i++) {
+    const cx = (i - (cells - 1) / 2) * cw, t = (i - (cells - 1) / 2) / ((cells - 1) / 2), cy = archY - t * t * archDrop - 0.16;
+    const r = cx < 0 ? riserL : riserR;
+    for (const cz of [-chord * 0.32, chord * 0.32]) g.add(strut(cx, cy, cz, r[0], r[1], r[2], 0.014, lineMat));
+  }
+  // risers from the confluence down into the harness
+  g.add(strut(riserL[0], riserL[1], 0, -0.12, -0.3, 0, 0.03, lineMat));
+  g.add(strut(riserR[0], riserR[1], 0, 0.12, -0.3, 0, 0.03, lineMat));
   return g;
 }
 function steerXZ() {   // unified steering intent (touch stick / gamepad already in input.mx/mz, plus WASD/arrows)
@@ -3704,6 +3791,7 @@ const DESCENT = {
 };
 function beginCanopy(tx, tz) {   // hand off from the pre-jump cinematic into the controllable descent
   if (introProp) { scene.remove(introProp); introProp = null; }
+  if (intro.plane) { scene.remove(intro.plane); intro.plane = null; }
   intro.bay = null; intro.deck = null;
   const D = DESCENT[intro.descent] || DESCENT.chute;
   intro.tx = tx; intro.tz = tz;
@@ -3785,7 +3873,9 @@ function startIntroHalo() {
   const bay = buildTransportBay(); bay.position.set(0, 100, 0);
   seatTroopers(bay, [[-3.6, 0.1, 1.3], [-3.6, 0.1, -1.3], [-1.6, 0.1, 1.3]], Math.PI / 2, 0.85);   // paratroopers along the wall
   scene.add(bay); introProp = bay;
-  intro = { kind: "halo", t: 0, phase: "bay", bay, line: -1, shake: 0.05, camActive: true, descent: "chute", px: -2.5, pz: 0, pyaw: Math.PI / 2 };
+  const plane = buildHercules(); plane.position.set(-34, 118, 42); plane.rotation.y = -0.42;   // exterior C-130 for the establishing shot
+  scene.add(plane);
+  intro = { kind: "halo", t: 0, phase: "approach", bay, plane, line: -1, shake: 0.05, camActive: true, descent: "chute", px: -2.5, pz: 0, pyaw: Math.PI / 2 };
   introOpen("Jurassic Survival · Rescue · Ranger Outpost Echo");
   placeOnPlatform(bay);   // you, standing in the bay
 }
@@ -3795,17 +3885,35 @@ function updateIntroHalo(dt) {
   intro.t += dt; const T = intro.t, tint = $("introTint"), cap = $("introCap"), big = $("introBig");
   radioStep(INTRO_RADIO_HALO);
   tint.style.background = "#1c2630"; tint.style.opacity = (0.34 + (Math.sin(T * 13) > 0.95 ? 0.42 : 0)).toFixed(2);   // storm + lightning flashes
-  if (T < 6) { intro.phase = "bay"; cap.style.opacity = T > 4.5 ? "0" : "1"; placeOnPlatform(intro.bay); big.style.opacity = "0"; }
-  else {                                  // green light — walk the bay to the open ramp, then step off
+  if (T < 3.6) {                          // establishing shot: the C-130 cruising the storm front
+    intro.phase = "approach";
+    if (intro.plane) { intro.plane.position.x += 6 * dt; intro.plane.position.z -= 1.1 * dt; }
+    if (playerMesh) playerMesh.visible = false;
+    cap.style.opacity = "1"; big.style.opacity = "0";
+    return;
+  }
+  if (intro.plane) { scene.remove(intro.plane); intro.plane = null; }   // cut inside the cargo bay — drop the exterior model
+  if (T < 7.6) { intro.phase = "bay"; cap.style.opacity = T > 6 ? "0" : "1"; placeOnPlatform(intro.bay); big.style.opacity = "0"; }
+  else {                                  // green light — ramp opens, walk the bay to the edge, step off
     intro.phase = "walk";
     if (intro.bay.userData.jumpLight) { const j = intro.bay.userData.jumpLight.material; j.color.setHex(0x6fae6b); j.emissive.setHex(0x6fae6b); }
+    const b = intro.bay.userData;
+    if (b.rampPivot) { b.rampProg = Math.min(1, (b.rampProg || 0) + dt * 0.8); const p = b.rampProg; b.rampPivot.rotation.z = lerp(-1.45, 0.5, p); b.upperPivot.rotation.z = lerp(-1.45, 1.3, p); }
+    const rampReady = (b.rampProg || 0) > 0.7;
     const atRamp = platformWalk(dt, intro.bay, { xmin: -4.7, xmax: 5.0, zmin: -1.3, zmax: 1.3 }, "x");
-    big.textContent = atRamp ? "▼ STEP OFF — JUMP" : (isTouch ? "MOVE TO THE OPEN RAMP" : "WALK TO THE RAMP · W A S D"); big.style.opacity = "1";
-    if (intro.px >= 4.9 || (atRamp && jumpPressed()) || T >= 24) { big.style.opacity = "0"; intro.descent = "chute"; beginCanopy(70, -70); }
+    big.textContent = !rampReady ? "RAMP OPENING…" : (atRamp ? "▼ STEP OFF — JUMP" : (isTouch ? "MOVE TO THE OPEN RAMP" : "WALK TO THE RAMP · W A S D")); big.style.opacity = "1";
+    if (rampReady && (intro.px >= 4.9 || (atRamp && jumpPressed()) || T >= 26)) { big.style.opacity = "0"; intro.descent = "chute"; beginCanopy(70, -70); }
   }
 }
 function updateIntroCameraHalo() {
   if (intro.phase === "canopy") return updateCanopyCamera();
+  if (intro.phase === "approach") {       // orbit the exterior C-130
+    const p = intro.plane; if (!p) return;
+    camera.position.lerp(tmp.set(p.position.x - 13, p.position.y + 5, p.position.z + 21), 0.05);
+    camera.lookAt(p.position.x, p.position.y + 1.0, p.position.z);
+    if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+    return;
+  }
   if (intro.phase === "walk") return platformCam("x");
   const b = intro.bay; if (!b) return;
   camera.position.lerp(tmp.set(b.position.x - 3.6, b.position.y + 1.7, b.position.z + 0.3), 0.08);
@@ -3870,6 +3978,7 @@ function skipIntro() {
   if (intro.kind === "monorail") { if (intro.car) scene.remove(intro.car); endIntroMonorail(); return; }
   if (intro.kind === "halo" || intro.kind === "airship") {
     if (intro.bay) scene.remove(intro.bay); if (intro.deck) scene.remove(intro.deck);
+    if (intro.plane) scene.remove(intro.plane);
     if (intro.chute) scene.remove(intro.chute); if (intro.ring) scene.remove(intro.ring); introProp = null;
     const air = intro.kind === "airship", tx = intro.tx != null ? intro.tx : (air ? 0 : 70), tz = intro.tz != null ? intro.tz : (air ? -86 : -70);
     const P = S.player; const c = coopSpread(tx, tz); P.x = c.x; P.z = c.z; P.yaw = 0; cam.yaw = 0; cam.pitch = -0.05; camera.up.set(0, 1, 0);
