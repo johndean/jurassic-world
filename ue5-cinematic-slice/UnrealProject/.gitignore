@@ -1,0 +1,31 @@
+# UE5 project ignore — keep the repo to text (project/config/source).
+# Binary content (.uasset/.umap), builds, and caches are NOT committed here
+# (they belong in the artist's project / Git LFS / Perforce, not this planning repo).
+
+# Engine-generated
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vs/
+*.VC.db
+*.opensdf
+*.sdf
+*.sln
+*.suo
+*.xcodeproj/
+*.xcworkspace/
+
+# Content binaries (authored in-editor; tracked in the art repo, not here)
+Content/**/*.uasset
+Content/**/*.umap
+
+# Platform packaging output
+Builds/
+Packaged/
+*.ipa
+*.app/
+
+# OS cruft
+.DS_Store

@@ -1,0 +1,23 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.4",
+	"Category": "",
+	"Description": "Jurassic Survival: Island Alpha — UE5 Cinematic Slice (native iPad, Metal mobile renderer, baked lighting). Parallel R&D; the browser game is protected, READ-ONLY production. Phase 1 = environment look only, profiled on the A12Z/A13 floor.",
+	"Modules": [
+		{
+			"Name": "JSISlice",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{ "Name": "EnhancedInput", "Enabled": true },
+		{ "Name": "Water", "Enabled": true },
+		{ "Name": "PCG", "Enabled": true },
+		{ "Name": "Landmass", "Enabled": true },
+		{ "Name": "Niagara", "Enabled": true },
+		{ "Name": "GameplayCameras", "Enabled": true },
+		{ "Name": "ModelingToolsEditorMode", "Enabled": true },
+		{ "Name": "Bridge", "Enabled": true, "_comment": "Quixel/Fab Megascans + MetaHuman import" }
+	]
+}
