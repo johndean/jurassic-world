@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-15-l";
+const BUILD = "2026-06-15-m";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -3152,7 +3152,7 @@ function updateDriving(dt) {
   v -= v * VEH.drag * dt;                            // rolling resistance
   v = clamp(v, -VEH.maxRev, VEH.maxFwd);
   if (Math.abs(v) < 0.06) v = 0;
-  if (Math.abs(v) > 0.25) P.driveYaw += ix * VEH.turn * dt * (v >= 0 ? 1 : -1) * Math.min(1, Math.abs(v) / 6 + 0.4);   // steer scales with speed; reverse inverts
+  if (Math.abs(v) > 0.25) P.driveYaw -= ix * VEH.turn * dt * (v >= 0 ? 1 : -1) * Math.min(1, Math.abs(v) / 6 + 0.4);   // stick/D right → turn right (camera looks +z so screen-right = decreasing yaw); reverse inverts
   const sin = Math.sin(P.driveYaw), cos = Math.cos(P.driveYaw);
   const e = { x: j.position.x + sin * v * dt, z: j.position.z + cos * v * dt };
   if (resolveColliders(e, VEH.bodyR)) v *= 0.4;      // shoved off a rock/ruin/building — bleed momentum
