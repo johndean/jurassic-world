@@ -12,7 +12,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-16-v";
+const BUILD = "2026-06-16-w";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -3987,7 +3987,7 @@ function endRun(won, ending) {
 }
 
 // run-summary stat tiles (time / takedowns / DNA / difficulty), plus best-time on a win
-function fmtTime(s) { s = Math.max(0, Math.round(s || 0)); const m = (s / 60) | 0; return m + ":" + String(s % 60).padStart(2, "0"); }
+// (uses the existing fmtTime helper defined later — hoisted)
 function buildEndStats(won) {
   const host = $("endStats"); if (!host) return;
   const stat = (v, l, cls) => `<div class="stat${cls ? " " + cls : ""}"><div class="sv">${v}</div><div class="sl">${l}</div></div>`;
