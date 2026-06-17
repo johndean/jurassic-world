@@ -1323,7 +1323,7 @@ function buildTower(x, z, dir) {
   const cable = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, platformY + 0.5, z), new THREE.Vector3(zipX, aY, zipZ)]), new THREE.LineBasicMaterial({ color: 0x20231e }));
   g.add(cable);
   const anchor = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 1.4, 6), wood); anchor.position.set(zipX - x, aY, zipZ - z); g.add(anchor);
-  TOWERS.push({ x, z, platformY, half, zipX, zipZ });
+  TOWERS.push({ x, z, platformY, half, zipX, zipZ, ladderZ: z + half });
 }
 function buildTowers() {
   if (TOWERS.length) return;
@@ -1423,8 +1423,48 @@ function buildBuilding(g, kind) {                         // generic structure: 
   g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.6, 0.1), _mm(0x20231d, 0.9)), { position: new THREE.Vector3(0, 0.8, d / 2 + 0.02) }));
   const winMat = big ? new THREE.MeshStandardMaterial({ color: 0x1d6b76, emissive: 0x1d6b76, emissiveIntensity: 0.7 }) : _mm(0x3a3026, 1);
   for (const sx of [-1, 1]) g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.06), winMat), { position: new THREE.Vector3(sx * w * 0.28, h * 0.6, d / 2 + 0.03) }));
+  if (kind === "safehouse") {
+    // the survivor's RADIO LOG — a field journal on a crate beside a portable radio set (the recoverable objective)
+    const crate = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.55, 0.6), _mm(0x6b6347, 0.9)); crate.position.set(1.7, 0.28, d / 2 + 0.5); g.add(crate);
+    const book = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 0.46), new THREE.MeshStandardMaterial({ color: 0x7a3b22, roughness: 0.7 })); book.position.set(1.7, 0.59, d / 2 + 0.5); book.rotation.y = 0.4; g.add(book); g.userData.radioLog = book;
+    const pages = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.42), _mm(0xe8e0c8, 0.8)); pages.position.set(1.72, 0.6, d / 2 + 0.5); pages.rotation.y = 0.4; g.add(pages);
+    // a soft glow so the player can spot it
+    g.add(mk3(new THREE.PointLight(0x66e0a0, 0.7, 5), { position: new THREE.Vector3(1.7, 0.9, d / 2 + 0.5) }));
+    // portable field radio set
+    const radio = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.3, 0.35), _mm(0x3a4234, 0.7, 0.2)); radio.position.set(2.4, 0.43, d / 2 + 0.4); g.add(radio);
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.7, 4), _mm(0x2a2620, 0.9)); ant.position.set(2.55, 0.85, d / 2 + 0.4); ant.rotation.z = 0.2; g.add(ant);
+  }
   if (kind === "command") { const dish = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), metal); dish.rotation.x = -0.7; dish.position.set(1.3, h + 1.0, -1); g.add(dish); g.add(mk3(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.0, 6), metal), { position: new THREE.Vector3(1.3, h + 0.5, -1) })); }
-  if (kind === "campsite") { for (const c of [[2.6, 1], [-2.6, -1.4]]) { const tent = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.4, 4), _mm(0x4a5236, 0.95)); tent.position.set(c[0], 0.7, c[1]); tent.rotation.y = 0.5; g.add(tent); } const fire = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 6), new THREE.MeshStandardMaterial({ color: 0xff7e2a, emissive: 0xff5a1e, emissiveIntensity: 1.2 })); fire.position.set(0, 0.25, 2.8); g.add(fire); g.add(mk3(new THREE.PointLight(0xff7e2a, 1.0, 10), { position: new THREE.Vector3(0, 0.7, 2.8) })); }
+  if (kind === "campsite") {
+    const canvas = _mm(0x4a5236, 0.95), canvas2 = _mm(0x3c4a2e, 0.95), tarp = _mm(0x5a5240, 0.92);
+    // ridge tents (A-frame) + a dome tent — a real survey camp
+    for (const c of [[2.8, 1.2, 0.5], [-2.9, -1.2, -0.3], [3.2, -2.4, 1.1]]) {
+      const tent = new THREE.Mesh(new THREE.ConeGeometry(1.15, 1.5, 4), c[0] > 0 ? canvas : canvas2);
+      tent.position.set(c[0], 0.72, c[1]); tent.rotation.y = c[2]; g.add(tent);
+      // guy-lines pegs
+      const peg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 5), _mm(0x2a2620, 0.9)); peg.position.set(c[0] + 1.2, 0.15, c[1]); peg.rotation.z = 0.5; g.add(peg);
+    }
+    // dome tent
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.95, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), tarp); dome.position.set(-3.4, 0, 1.8); g.add(dome);
+    // campfire with stone ring + logs + light
+    const fire = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.55, 6), new THREE.MeshStandardMaterial({ color: 0xff7e2a, emissive: 0xff5a1e, emissiveIntensity: 1.3 })); fire.position.set(0, 0.27, 3.0); g.add(fire); g.userData.campfire = fire;
+    for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2; const st = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 5), _mm(0x6a665e, 1)); st.position.set(Math.cos(a) * 0.65, 0.1, 3.0 + Math.sin(a) * 0.65); g.add(st); }
+    for (const lr of [[-0.5, 0.4], [0.5, -0.3]]) { const lg = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.0, 6), _mm(0x4a3c28, 0.95)); lg.rotation.z = Math.PI / 2; lg.rotation.y = lr[1] * 3; lg.position.set(lr[0], 0.12, 3.0); g.add(lg); }
+    g.add(mk3(new THREE.PointLight(0xff7e2a, 1.4, 12), { position: new THREE.Vector3(0, 0.8, 3.0) }));
+    // log benches around the fire
+    for (const b of [[-1.6, 3.0, 0], [1.6, 3.0, 0.2], [0, 4.4, 1.4]]) { const bench = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 1.6, 8), _mm(0x5a4a30, 0.95)); bench.rotation.z = Math.PI / 2; bench.rotation.y = b[2]; bench.position.set(b[0], 0.18, b[1]); g.add(bench); }
+    // supply crates + barrels + jerrycans stacked
+    for (const cr of [[-4.4, -2.6, 0.3], [-4.0, -2.0, 0]]) { const crate = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.6, 0.7), _mm(0x6b6347, 0.9)); crate.position.set(cr[0], 0.3 + cr[2], cr[1]); crate.rotation.y = cr[2] * 4; g.add(crate); }
+    for (const br of [[4.2, 2.4], [4.6, 2.0]]) { const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.85, 12), _mm(0x4a5a3a, 0.6, 0.3)); barrel.position.set(br[0], 0.42, br[1]); g.add(barrel); }
+    // a folding field table with maps + a lantern
+    const table = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.8), _mm(0x6a5a3c, 0.9)); table.position.set(-1.5, 0.75, -2.6); g.add(table);
+    for (const tx of [-2.0, -1.0]) for (const tz of [-2.95, -2.25]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.75, 5), _mm(0x2c2f28, 0.8)); leg.position.set(tx, 0.37, tz); g.add(leg); }
+    const map = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.55), _mm(0xd9cba0, 0.95)); map.rotation.x = -Math.PI / 2; map.position.set(-1.5, 0.8, -2.6); g.add(map);
+    const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.28, 0.18), new THREE.MeshStandardMaterial({ color: 0xffd98a, emissive: 0xffc060, emissiveIntensity: 1.2 })); lantern.position.set(-0.7, 0.9, -2.6); g.add(lantern); g.add(mk3(new THREE.PointLight(0xffc878, 0.9, 8), { position: new THREE.Vector3(-0.7, 1.0, -2.6) }));
+    // drying rack with hanging gear
+    for (const rx of [-5.0, -5.0]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.6, 6), _mm(0x4a3c28, 0.95)); post.position.set(rx, 0.8, rx === -5.0 ? 0.6 : 2.0); g.add(post); }
+    const line = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.6, 4), _mm(0x2a2620, 0.9)); line.rotation.x = Math.PI / 2; line.position.set(-5.0, 1.5, 1.3); g.add(line);
+  }
   for (const c of [[w * 0.5 + 0.7, 1], [-w * 0.5 - 0.7, -1]]) g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), wood), { position: new THREE.Vector3(c[0], 0.45, c[1]) }));
   // ---- believable structure dressing (so it reads as a real outpost, not a bare box) ----
   const trim = _mm(0x2c2f28, 0.8, 0.3), glow = c => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 1.4 });
@@ -1440,6 +1480,21 @@ function buildBuilding(g, kind) {                         // generic structure: 
   const bcn = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), glow(0xff4030)); bcn.position.set(-w * 0.35, h + 2.3, -d * 0.3); g.add(bcn); g.userData.beaconBlink = bcn;
   // weathered signboard over the door
   g.add(mk3(new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.4, 0.08), new THREE.MeshStandardMaterial({ color: 0x1a1d18, emissive: 0x0a3a2e, emissiveIntensity: 0.45 })), { position: new THREE.Vector3(0, h * 0.92, d / 2 + 0.05) }));
+  // ---- CLIMBABLE roof-access ladder + railed roof deck (player AND survivor can climb) ----
+  if (kind === "safehouse" || kind === "campsite" || kind === "command") {
+    const ladMat = _mm(0x8a8377, 0.6, 0.5), railMat = _mm(0x6e736f, 0.6, 0.6);
+    const deckY = h + 0.25;                    // top surface to stand on
+    const lz = -d / 2 - 0.18;                  // ladder on the -Z (rear) face, away from the lit door
+    for (const rx of [-0.28, 0.28]) { const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, deckY + 0.6, 6), ladMat); rail.position.set(rx, (deckY + 0.6) / 2, lz); g.add(rail); }
+    const rungN = Math.max(6, Math.round(deckY / 0.34));
+    for (let i = 0; i < rungN; i++) { const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.62, 6), ladMat); rung.rotation.z = Math.PI / 2; rung.position.set(0, 0.35 + i * (deckY / rungN), lz); g.add(rung); }
+    // safety rail around the roof deck (3 sides, open on the ladder side)
+    for (const [rx, rz, rw, rd] of [[0, d / 2 - 0.1, w, 0.06], [-w / 2 + 0.1, 0, 0.06, d], [w / 2 - 0.1, 0, 0.06, d]]) {
+      const r = new THREE.Mesh(new THREE.BoxGeometry(rw, 0.5, rd), railMat); r.position.set(rx, deckY + 0.4, rz); g.add(r);
+    }
+    // register as a climbable tower so the existing ladder/climb logic carries player + survivor up
+    TOWERS.push({ x: g.position.x, z: g.position.z, platformY: g.position.y + deckY, half: d / 2 + 0.18, zipX: g.position.x, zipZ: g.position.z + 14, roofW: w, roofD: d, ladderZ: g.position.z - (d / 2 + 0.18) });
+  }
 }
 // Environmental storytelling: scatter readable evidence of what happened here — blood smears,
 // dropped gear, spent shells, raked claw-gashes — so a site tells its story without exposition.
@@ -1497,7 +1552,8 @@ function swapMayaModel() {   // model finished streaming after the capsule was b
   mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
   g.add(mdl); survivor._realModel = mdl;
 }
-function updateSurvivor(dt) {                             // slumped/waving idle → stands & follows once triggered
+function updateSurvivor(dt) {
+  if (survivor && survivor.mesh && !survivor._realModel && MODELS[MAYA_MODEL]) { try { swapMayaModel(); } catch(_){} }                             // slumped/waving idle → stands & follows once triggered
   if (!survivor) return;
   const m = survivor.mesh, P = S.player;
   if (survivor.following) {
@@ -1655,7 +1711,7 @@ function playerFloorY(x, z) {   // player's floor: tower platform / zipline cabl
   return P.onTower ? P.onTower.platformY : groundH(x, z);
 }
 function nearTowerBase(P) {
-  for (const t of TOWERS) { if (dist2(P.x, P.z, t.x, t.z + t.half) < 18) return t; }   // within ~4.2m of the ladder
+  for (const t of TOWERS) { const lz = t.ladderZ != null ? t.ladderZ : t.z + t.half; if (dist2(P.x, P.z, t.x, lz) < 18) return t; }   // within ~4.2m of the ladder
   return null;
 }
 function climbTower(t) {
@@ -2138,7 +2194,7 @@ function updatePlayer(dt) {
     else P.z = Math.max(P.z, t.z - b);
   } else if (!P.zip) {   // watchtowers: step onto the ladder to auto-climb; otherwise you can't walk through the structure
     for (const t of TOWERS) {
-      if (dist2(P.x, P.z, t.x, t.z + t.half) < 2.4 * 2.4) { climbTower(t); break; }   // at the ladder → go up
+      if (dist2(P.x, P.z, t.x, t.ladderZ != null ? t.ladderZ : t.z + t.half) < 2.4 * 2.4) { climbTower(t); break; }   // at the ladder → go up
       const dx = P.x - t.x, dz = P.z - t.z, d = Math.hypot(dx, dz) || 1, rr = t.half + 0.15;
       if (d < rr) { P.x = t.x + dx / d * rr; P.z = t.z + dz / d * rr; }               // solid: push out of the legs
     }
