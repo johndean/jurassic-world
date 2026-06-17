@@ -1495,9 +1495,24 @@ function updateSurvivor(dt) {                             // slumped/waving idle
         toast("✚ FIRST AID — bleeding stopped. " + (survivor.name || "Maya") + " is with you — get her to the safehouse.");
       }
     }
-    const dx = P.x - survivor.x, dz = P.z - survivor.z, d = Math.hypot(dx, dz) || 1;
-    if (d > 2.6) { const step = Math.min(5.2 * dt, d - 2.4); survivor.x += dx / d * step; survivor.z += dz / d * step; m.rotation.y = Math.atan2(dx, dz); }
-    m.position.set(survivor.x, groundH(survivor.x, survivor.z) + 0.02, survivor.z);
+    // RIDE-ALONG: when the player is driving, Maya boards the truck (passenger side) instead of running
+    // alongside exposed to the dinosaurs.
+    if (P.driveVeh) {
+      const j = P.driveVeh, yaw = j.rotation.y, c = Math.cos(yaw), s = Math.sin(yaw);
+      // passenger seat = slightly behind + to the side of the truck origin, on the deck
+      const ox = -0.4, oz = 0.9;                 // local offset (truck forward = +x local)
+      const wx = j.position.x + c * ox - s * oz; // rotate the local offset into world
+      const wz = j.position.z + s * ox + c * oz;
+      survivor.x = wx; survivor.z = wz;
+      m.position.set(wx, j.position.y + 1.15, wz);   // seated on the truck deck
+      m.rotation.y = yaw + Math.PI;                  // face forward with the truck
+      if (!survivor._boarded) { survivor._boarded = true; toast("🚙 " + (survivor.name || "Maya") + " is aboard — drive!"); }
+    } else {
+      if (survivor._boarded) survivor._boarded = false;
+      const dx = P.x - survivor.x, dz = P.z - survivor.z, d = Math.hypot(dx, dz) || 1;
+      if (d > 2.6) { const step = Math.min(5.2 * dt, d - 2.4); survivor.x += dx / d * step; survivor.z += dz / d * step; m.rotation.y = Math.atan2(dx, dz); }
+      m.position.set(survivor.x, groundH(survivor.x, survivor.z) + 0.02, survivor.z);
+    }
   }
   if (survivor.halo) { survivor.halo.rotation.z += dt * 1.5; survivor.halo.position.y = 2.3 + Math.sin(S.t * 3) * 0.08; }
 }
