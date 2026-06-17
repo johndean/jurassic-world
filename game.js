@@ -742,6 +742,33 @@ function onResize() {
 }
 
 /* --------------------------------------------------------------- world ---- */
+function buildCarcass(x, z) {
+  // a rotting half-eaten dinosaur carcass: ribcage, spine, skull, exposed flesh, blood pool, scavenger flies
+  const g = new THREE.Group(); g.position.set(x, groundH(x, z), z); g.rotation.y = rand(0, Math.PI * 2);
+  const bone = _mm(0xcfc6ad, 0.85), boneOld = _mm(0xb0a585, 0.9), flesh = new THREE.MeshStandardMaterial({ color: 0x6a2a22, roughness: 0.7 }), gore = new THREE.MeshStandardMaterial({ color: 0x3a120c, roughness: 0.6 });
+  // spine — a curved row of vertebrae
+  for (let i = 0; i < 11; i++) { const t = i / 10; const v = new THREE.Mesh(new THREE.SphereGeometry(0.22 - t * 0.08, 8, 6), bone); v.position.set(-3 + i * 0.62, 0.5 + Math.sin(t * 3) * 0.1, 0); g.add(v); }
+  // ribcage — arcs rising off the spine, several snapped
+  for (let i = 0; i < 8; i++) { const rx = -2.2 + i * 0.6; for (const s of [-1, 1]) { const broken = (i === 2 || i === 5) && s < 0; const rib = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.06, 6, 10, broken ? Math.PI * 0.55 : Math.PI * 0.95), i % 2 ? bone : boneOld); rib.position.set(rx, 0.55, 0); rib.rotation.set(0, 0, s > 0 ? 0.1 : Math.PI - 0.1); rib.rotation.y = 0.1; g.add(rib); } }
+  // skull at one end + lower jaw fallen open
+  const skull = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 0.5), boneOld); skull.position.set(-3.6, 0.45, 0); skull.rotation.z = -0.2; g.add(skull);
+  const snout = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.7, 6), boneOld); snout.rotation.z = Math.PI / 2 + 0.1; snout.position.set(-4.2, 0.38, 0); g.add(snout);
+  // remaining flesh hanging off the ribs + a torn haunch
+  for (let i = 0; i < 4; i++) { const fl = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.4), flesh); fl.position.set(-1 + i * 0.7, 0.35, rand(-0.3, 0.3)); fl.rotation.set(rand(0, 1), rand(0, 6), rand(0, 1)); g.add(fl); }
+  const haunch = new THREE.Mesh(new THREE.SphereGeometry(0.6, 10, 8), flesh); haunch.position.set(2.6, 0.45, 0.2); haunch.scale.set(1.3, 0.9, 1); g.add(haunch);
+  // tail bones trailing off
+  for (let i = 0; i < 6; i++) { const tb = new THREE.Mesh(new THREE.SphereGeometry(0.16 - i * 0.02, 6, 5), bone); tb.position.set(3.2 + i * 0.5, 0.2, 0.2 + i * 0.05); g.add(tb); }
+  // blood pool + gore smears
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(2.6, 16), gore); pool.rotation.x = -Math.PI / 2; pool.position.y = 0.03; pool.scale.z = 0.8; g.add(pool);
+  for (let i = 0; i < 5; i++) { const sm = new THREE.Mesh(new THREE.CircleGeometry(rand(0.3, 0.7), 10), new THREE.MeshStandardMaterial({ color: 0x4a160e, roughness: 0.7 })); sm.rotation.x = -Math.PI / 2; sm.position.set(rand(-3, 3), 0.035, rand(-2, 2)); g.add(sm); }
+  // scattered ribs/bones pulled away by scavengers
+  for (let i = 0; i < 4; i++) { const lb = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, rand(0.6, 1.1), 6), bone); lb.position.set(rand(-4, 4), 0.08, rand(-2.5, 2.5)); lb.rotation.set(Math.PI / 2, rand(0, 6), rand(0, 1)); g.add(lb); }
+  // a swarm of flies (tiny dark sprites orbiting) — life/decay signal
+  const flies = []; for (let i = 0; i < 14; i++) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.03, 4, 4), _mm(0x0a0a08, 1)); g.add(f); flies.push(f); }
+  g.userData.flies = flies;
+  scene.add(g); return g;
+}
+let _carcass = null, _carcassFlyT = 0;
 function buildWorld() {
   const m = BIOME.map, half = m.size / 2;
 
@@ -796,6 +823,36 @@ function buildWorld() {
     new THREE.MeshStandardMaterial({ color: 0x223f47, roughness: 0.08, metalness: 0.55, transparent: true, opacity: 0.92, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, depthWrite: false }));   // double-sided + polygon-offset kills the hillside z-fight tearing
   water.rotation.x = -Math.PI / 2; water.position.y = WATER_Y; water.renderOrder = -1; scene.add(water);
 
+  // ---- BRIDGE across the river (timber + steel-truss vehicle bridge; the only truck crossing) ----
+  (function buildBridge() {
+    const bg = new THREE.Group(); bg.position.set(BRIDGE.x, 0, BRIDGE.z);
+    const deckMat = new THREE.MeshStandardMaterial({ color: 0x5a4a32, roughness: 0.92 });
+    const beam = new THREE.MeshStandardMaterial({ color: 0x4a4f4a, roughness: 0.6, metalness: 0.6 });
+    const rust = new THREE.MeshStandardMaterial({ color: 0x6b4a32, roughness: 0.85, metalness: 0.3 });
+    // deck slab (runs along Z, the channel-crossing axis)
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(BRIDGE.halfW * 2, 0.4, BRIDGE.halfLen * 2), deckMat);
+    deck.position.y = BRIDGE.deckY - 0.2; deck.receiveShadow = true; bg.add(deck);
+    // plank texture (cross battens)
+    for (let i = -BRIDGE.halfLen + 1; i < BRIDGE.halfLen; i += 1.6) { const pl = new THREE.Mesh(new THREE.BoxGeometry(BRIDGE.halfW * 2 - 0.2, 0.06, 1.2), _mm(0x4a3c28, 0.95)); pl.position.set(0, BRIDGE.deckY + 0.02, i); bg.add(pl); }
+    // side trusses (X-braced steel) + handrails
+    for (const sx of [-BRIDGE.halfW, BRIDGE.halfW]) {
+      const top = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, BRIDGE.halfLen * 2), beam); top.position.set(sx, BRIDGE.deckY + 1.3, 0); bg.add(top);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, BRIDGE.halfLen * 2), rust); rail.position.set(sx, BRIDGE.deckY + 0.7, 0); bg.add(rail);
+      for (let i = -BRIDGE.halfLen + 1.5; i < BRIDGE.halfLen; i += 3) {   // X cross-braces
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.4, 0.14), beam); post.position.set(sx, BRIDGE.deckY + 0.65, i); bg.add(post);
+        const br1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 3.2), rust); br1.position.set(sx, BRIDGE.deckY + 0.7, i + 1.5); br1.rotation.x = 0.7; bg.add(br1);
+      }
+    }
+    // support pylons down into the riverbed
+    for (const pz of [-BRIDGE.halfLen + 3, 0, BRIDGE.halfLen - 3]) for (const px of [-BRIDGE.halfW + 0.5, BRIDGE.halfW - 0.5]) {
+      const py = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, BRIDGE.deckY + 6, 8), _mm(0x4a443a, 0.9)); py.position.set(px, (BRIDGE.deckY - 6) / 2, pz); bg.add(py);
+    }
+    // approach ramps (earthen) at both ends so the truck can drive up onto the deck
+    for (const sz of [-1, 1]) { const ramp = new THREE.Mesh(new THREE.BoxGeometry(BRIDGE.halfW * 2, 0.3, 6), deckMat); ramp.position.set(0, BRIDGE.deckY * 0.5, sz * (BRIDGE.halfLen + 2.5)); ramp.rotation.x = sz * 0.18; bg.add(ramp); }
+    bg.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    scene.add(bg);
+  })();
+
   // boundary walls (charcoal slabs) — soft fence of the valley
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x24282a, roughness: 1, flatShading: true });
   const wGeo = new THREE.BoxGeometry(m.size, 8, 2);
@@ -805,6 +862,15 @@ function buildWorld() {
 
   buildFoliage();
   try { buildHeroProps(); } catch (e) { console.error("heroProps", e); }   // TRACK A: real 3D props every mission
+  // ROTTING CARCASS being eaten — a living-ecosystem set-piece (carcass + a scavenger locked to feed on it)
+  try {
+    const cx = 34, cz = -18; _carcass = buildCarcass(cx, cz);
+    if (!Net.on || Net.isHost) {
+      const feeder = spawnDino(rand(0,1) < 0.5 ? "carnotaurus" : "allosaurus", cx + 3.0, cz + 1.5);
+      feeder.state = "Feed"; feeder.feedT = 9999; feeder.bb.homeX = cx; feeder.bb.homeZ = cz; feeder.hunger = 1; dinos.push(feeder);
+      _carcass.userData.feeder = feeder;
+    }
+  } catch (e) { console.error("carcass", e); }
 
   // INSTANCED rocks — boulders across the valley, clustered along the river, sitting on the terrain
   clearColliders();
@@ -2001,6 +2067,11 @@ function terrainPitch(x, z, yaw) {
   return clamp(Math.atan2(hF - hB, a * 2) * 0.6, -0.5, 0.5);
 }
 function riverCenter(x) { return 48 + Math.sin(x * 0.02) * 28; }   // river centerline z(x)
+// ---- BRIDGE: the one place the truck (and player) can cross the river ----
+const BRIDGE = { x: -18, deckY: 1.4, halfLen: 22, halfW: 4.2 };   // spans the channel at x=-18; deck above the water
+BRIDGE.z = 48 + Math.sin(BRIDGE.x * 0.02) * 28;                   // centred on the river at that x
+function onBridge(x, z) { return Math.abs(x - BRIDGE.x) < BRIDGE.halfW && Math.abs(z - BRIDGE.z) < BRIDGE.halfLen; }
+function bridgeDeckY(x, z) { return onBridge(x, z) ? BRIDGE.deckY : null; }
 function riverSlope(x) { return Math.cos(x * 0.02) * 28 * 0.02; }  // d(riverCenter)/dx — used to align the boat to the current
 function groundH(x, z) {
   const r = Math.hypot(x, z);
@@ -2032,7 +2103,7 @@ function facilityFloorAt(x, z) {
   return null;
 }
 // max(terrain, facility) — the surface things actually stand on.
-function walkH(x, z) { return groundH(x, z); }   // deck-walk disabled: facility is a solid ground landmark (navigate around it via wall colliders); kills the fall-through-world bug
+function walkH(x, z) { { const _bd = bridgeDeckY(x, z); if (_bd != null) return _bd; } return groundH(x, z); }   // deck-walk disabled: facility is a solid ground landmark (navigate around it via wall colliders); kills the fall-through-world bug
 function dist2(ax, az, bx, bz) { const dx = ax - bx, dz = az - bz; return dx * dx + dz * dz; }
 function bearingTo(ax, az, bx, bz) {
   const ang = Math.atan2(bx - ax, -(bz - az)) / DEG; const d = (ang + 360) % 360;
@@ -4032,9 +4103,12 @@ function updateDriving(dt) {
   if (Math.abs(v) > 0.25) P.driveYaw -= ix * VEH.turn * dt * (v >= 0 ? 1 : -1) * Math.min(1, Math.abs(v) / 6 + 0.4);   // stick/D right → turn right (camera looks +z so screen-right = decreasing yaw); reverse inverts
   const sin = Math.sin(P.driveYaw), cos = Math.cos(P.driveYaw);
   const e = { x: j.position.x + sin * v * dt, z: j.position.z + cos * v * dt };
+  // WATER BLOCK: the truck can't drive into deep river water — it must use the BRIDGE.
+  // Deep water at the target, AND not on/near the bridge deck → reject the move (wall) and bleed speed.
+  if ((WATER_Y - groundH(e.x, e.z)) > 0.9 && !onBridge(e.x, e.z)) { e.x = j.position.x; e.z = j.position.z; v *= 0.2; }
   if (resolveColliders(e, VEH.bodyR)) v *= 0.4;      // shoved off a rock/ruin/building — bleed momentum
   const half = BIOME.map.size / 2 - 4; e.x = clamp(e.x, -half, half); e.z = clamp(e.z, -half, half);
-  j.position.set(e.x, groundH(e.x, e.z), e.z);
+  { const bd = bridgeDeckY(e.x, e.z); j.position.set(e.x, bd != null ? bd : groundH(e.x, e.z), e.z); }
   j.rotation.y = Math.atan2(-cos, sin);
   j.userData.speed = v;
   // ride the jeep: keep the player anchored to it, noise rises with speed, camera trails the heading
@@ -5448,6 +5522,8 @@ let devFrames = 0, devAt = performance.now(), devFps = 0;
 
 function simulate(dt) {
   S.t += dt;
+  // carcass flies — orbit the gore (decay/life signal)
+  if (_carcass && _carcass.userData.flies) { _carcassFlyT += dt; const fl = _carcass.userData.flies; for (let i = 0; i < fl.length; i++) { const a = _carcassFlyT * (1.5 + i * 0.13) + i; const r = 0.8 + (i % 4) * 0.45; fl[i].position.set(Math.cos(a) * r, 0.5 + Math.sin(_carcassFlyT * 3 + i) * 0.45 + (i % 3) * 0.2, Math.sin(a * 1.2) * r); } }
   updatePlayer(dt);
   // co-op CLIENT: dinos are host-authoritative — puppet them, don't run a local spawn director or AI
   // (that's what made the world diverge between players). HOST + solo run the full sim.
