@@ -587,6 +587,70 @@ async function boot() {
   }
 }
 
+// ---- TRACK A: cinematic graphics tier (auto-detected, user-overridable, persisted) ----
+// Heavy effects (sun shadows, god-rays, grain, mist) are gated so low-end mobile keeps its frame
+// budget. GAMEPLAY NEVER CHANGES with the tier -- only visuals scale. (Visual Roadmap Phase 3.)
+const GFX = { tier: "high", shadows: true, grain: true, grade: true, godrays: true, mist: true };
+function detectGfxTier() {
+  let saved = null; try { saved = localStorage.getItem("ja_gfx"); } catch (_) {}
+  if (saved === "high" || saved === "low" || saved === "off") { applyGfxTier(saved); return; }
+  const touch = (navigator.maxTouchPoints > 0) || ("ontouchstart" in window) || matchMedia("(pointer:coarse)").matches;
+  const cores = navigator.hardwareConcurrency || 4, mem = navigator.deviceMemory || 4;
+  applyGfxTier((touch || cores <= 4 || mem <= 4) ? "low" : "high");
+}
+function applyGfxTier(tier) {
+  GFX.tier = tier;
+  GFX.shadows = tier === "high";
+  GFX.godrays = tier === "high";
+  GFX.mist    = tier !== "off";
+  GFX.grade   = tier !== "off";
+  GFX.grain   = tier !== "off";
+  try { localStorage.setItem("ja_gfx", tier); } catch (_) {}
+}
+function setGfxTier(tier) {   // live re-apply from the OPTIONS toggle, no reload
+  applyGfxTier(tier);
+  if (sun) sun.castShadow = GFX.shadows;
+  if (renderer) renderer.shadowMap.enabled = GFX.shadows;
+  if (cinePass) { cinePass.uniforms.uGrain.value = GFX.grain ? 1 : 0; cinePass.uniforms.uGrade.value = GFX.grade ? 1 : 0; cinePass.uniforms.uGodray.value = GFX.godrays ? 1 : 0; }
+  try { buildMist(); } catch (_) {}
+}
+
+// CINEGRADE: one combined post pass -- soft god-ray lift toward the sun, filmic color grade
+// (cool shadows / warm highlights), vignette, animated film grain. Supersedes VIGNETTE; OutputPass
+// still does the final tone-map + sRGB after it.
+let cinePass = null;
+const CINEGRADE = {
+  uniforms: {
+    tDiffuse: { value: null }, uTime: { value: 0 }, uVig: { value: 0.85 },
+    uGrain: { value: 1 }, uGrade: { value: 1 }, uGodray: { value: 1 },
+    uSun: { value: new THREE.Vector2(0.5, 0.78) }, uSunVis: { value: 0.0 },
+  },
+  vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+  fragmentShader: [
+    "uniform sampler2D tDiffuse; uniform float uTime,uVig,uGrain,uGrade,uGodray,uSunVis; uniform vec2 uSun; varying vec2 vUv;",
+    "float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }",
+    "void main(){",
+    "  vec3 c = texture2D(tDiffuse, vUv).rgb;",
+    "  if (uGodray > 0.5 && uSunVis > 0.001){",
+    "    vec2 dir = (uSun - vUv) * 0.45; vec3 acc = vec3(0.0); float w = 0.0;",
+    "    for (int i=0;i<6;i++){ float t = float(i)/5.0; vec2 uv = vUv + dir*t; vec3 sm = texture2D(tDiffuse, uv).rgb;",
+    "      float lum = max(sm.r, max(sm.g, sm.b)); sm *= smoothstep(0.62, 1.0, lum); float ww = (1.0 - t); acc += sm*ww; w += ww; }",
+    "    acc /= max(w, 0.001); c += acc * 0.30 * uSunVis * vec3(1.05,0.96,0.78);",
+    "  }",
+    "  if (uGrade > 0.5){",
+    "    float l = dot(c, vec3(0.299,0.587,0.114));",
+    "    c = mix(vec3(l), c, 1.08);",
+    "    c = (c - 0.5) * 1.06 + 0.5;",
+    "    c += vec3(0.02,0.05,0.06) * (1.0 - smoothstep(0.0,0.5,l));",
+    "    c += vec3(0.06,0.04,0.0) * smoothstep(0.55,1.0,l);",
+    "  }",
+    "  vec2 d = vUv - 0.5; float v = smoothstep(0.85, 0.18, dot(d,d)*uVig*2.0); c *= mix(0.74, 1.0, v);",
+    "  if (uGrain > 0.5){ float g = hash(vUv * vec2(1920.0,1080.0) + fract(uTime)*97.0) - 0.5; c += g * 0.035; }",
+    "  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);",
+    "}",
+  ].join("\n"),
+};
+
 // subtle vignette (edge darkening) for cinematic framing
 const VIGNETTE = {
   uniforms: { tDiffuse: { value: null }, strength: { value: 0.85 } },
@@ -599,6 +663,8 @@ function initRenderer() {
   renderer.setSize(innerWidth, innerHeight, false);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic response = more cinematic
   renderer.toneMappingExposure = 1.2;
+  detectGfxTier();
+  renderer.shadowMap.enabled = GFX.shadows; renderer.shadowMap.type = THREE.PCFSoftShadowMap;   // TRACK A soft sun shadows
   scene = new THREE.Scene();
   const m = BIOME.map;
   scene.background = new THREE.Color(0xa6b6a4);   // greener overcast sky
@@ -612,7 +678,7 @@ function initRenderer() {
   composer.addPass(new RenderPass(scene, camera));
   bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.5, 0.8); // strength, radius, threshold
   composer.addPass(bloomPass);
-  composer.addPass(new ShaderPass(VIGNETTE));   // subtle edge darkening = cinematic framing
+  cinePass = new ShaderPass(CINEGRADE); cinePass.uniforms.uGrain.value = GFX.grain ? 1 : 0; cinePass.uniforms.uGrade.value = GFX.grade ? 1 : 0; cinePass.uniforms.uGodray.value = GFX.godrays ? 1 : 0; composer.addPass(cinePass);   // TRACK A grade+grain+godrays
   composer.addPass(new OutputPass());
   addEventListener("resize", onResize);
   onResize();
@@ -631,7 +697,12 @@ function buildWorld() {
   const m = BIOME.map, half = m.size / 2;
 
   // lighting: low directional "moonlight" + dim ambient (formula blocks 3-4)
-  sun = new THREE.DirectionalLight(0xbcc6cf, 0.85); sun.position.set(-60, 90, 40); scene.add(sun);
+  sun = new THREE.DirectionalLight(0xd8e0e6, 1.02); sun.position.set(-60, 90, 40); scene.add(sun);
+  if (GFX.shadows) {   // TRACK A: tight ortho frustum around the play area -> crisp contact shadows
+    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+    const sc = sun.shadow.camera; sc.near = 1; sc.far = 320; sc.left = -120; sc.right = 120; sc.top = 120; sc.bottom = -120; sc.updateProjectionMatrix();
+    sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.6;
+  }
   scene.add(new THREE.HemisphereLight(0x9aa6ad, 0x32383a, 0.55));
   scene.add(new THREE.AmbientLight(0x6b7378, 0.35));
   buildSky();
@@ -649,6 +720,7 @@ function buildWorld() {
   groundTex.colorSpace = THREE.SRGBColorSpace;
   groundTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const ground = new THREE.Mesh(gGeo, new THREE.MeshStandardMaterial({ map: groundTex, color: 0x93a487, roughness: 1, metalness: 0 }));
+  ground.receiveShadow = true;   // TRACK A
   scene.add(ground);
 
   // river: one translucent water plane; the terrain occludes it everywhere except the carved channel
@@ -688,6 +760,7 @@ function buildWorld() {
   buildPlayer();
 
   buildBeacon();
+  buildMist();   // TRACK A
   // blob shadow pool for dinos
   blobPool = [];
 }
@@ -885,6 +958,29 @@ function buildPlayer() {
   }
 }
 // overcast gradient sky dome with faint procedural cloud banding near the horizon (no asset, not fogged)
+// TRACK A: drifting mist / spore motes that follow the camera for volumetric depth (GFX-gated).
+let mistField = null;
+function buildMist() {
+  if (mistField) { scene.remove(mistField); if (mistField.geometry) mistField.geometry.dispose(); mistField = null; }
+  if (!GFX.mist || !scene) return;
+  const N = GFX.tier === "high" ? 600 : 260, R = 60;
+  const pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) { pos[i*3] = rand(-R, R); pos[i*3+1] = rand(0.4, 14); pos[i*3+2] = rand(-R, R); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({ color: 0xcdd8d0, size: 0.13, transparent: true, opacity: 0.32, depthWrite: false, sizeAttenuation: true, fog: true });
+  mistField = new THREE.Points(geo, mat); mistField.frustumCulled = false; mistField.renderOrder = 2; scene.add(mistField);
+}
+function updateMist(dt, now) {
+  if (!mistField || !camera) return;
+  const p = mistField.geometry.attributes.position, t = now * 0.001;
+  mistField.position.set(camera.position.x, 0, camera.position.z);
+  for (let i = 0; i < p.count; i++) {
+    let y = p.getY(i) + dt * 0.25; if (y > 15) y = 0.4;
+    const x = p.getX(i) + Math.sin(t * 0.3 + i) * dt * 0.4;
+    p.setY(i, y); p.setX(i, x);
+  }
+  p.needsUpdate = true;
+}
 function buildSky() {
   const sky = new THREE.Mesh(new THREE.SphereGeometry(380, 32, 18), new THREE.ShaderMaterial({
     side: THREE.BackSide, fog: false, depthWrite: false, depthTest: false,
@@ -1895,6 +1991,7 @@ function fitModel(model, targetH, yawOffset) {
     model.scale.multiplyScalar(targetH / ws.y); model.updateMatrixWorld(true);
     const b2 = new THREE.Box3().setFromObject(model); model.position.y -= b2.min.y;
   }
+  if (GFX.shadows) g.traverse(o => { if (o.isMesh || o.isSkinnedMesh) { o.castShadow = true; o.receiveShadow = true; } });   // TRACK A
   return g;
 }
 // Locate the main rotor hub on a helicopter model: average x/z of the top vertex band.
@@ -2507,6 +2604,7 @@ function animateDino(a, dt) {
       a.roar = 1.1; a.roarCd = rand(6, 11);
       const dxp = a.x - P.x, dzp = a.z - P.z, dd = Math.hypot(dxp, dzp) || 1;
       if (dd < 130) Audio.roarAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw));   // attenuated + panned by bearing
+      if (dd < 46 && isApex(sp)) camShake = Math.min(0.55, camShake + 0.30 * (1 - dd / 46));   // TRACK A felt roar
     }
   }
   // heavy-predator footfalls thud through the ground when one is close (positional)
@@ -2968,6 +3066,13 @@ function initOptions() {
   rows.forEach(([id, key]) => { const r = $(id); if (r) r.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; OPTS[key] = b.dataset[key]; applyOpts(); refresh(); save(); }); });
   refresh();
   const ob = $("optBtn"); if (ob) { ob.style.display = "block"; if (isTouch) ob.textContent = "⚙"; ob.addEventListener("click", () => $("opts").classList.toggle("on")); }
+  // TRACK A: graphics tier toggle (separate persistence key, live re-apply)
+  const gr = $("optGfx");
+  if (gr) {
+    const refreshGfx = () => [...gr.children].forEach(b => b.classList.toggle("on", b.dataset.gfx === GFX.tier));
+    refreshGfx();
+    gr.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; setGfxTier(b.dataset.gfx); refreshGfx(); });
+  }
   const oc = $("optsClose"); if (oc) oc.addEventListener("click", () => $("opts").classList.remove("on"));
 }
 let _subTimer = null;
@@ -4580,6 +4685,20 @@ let toastTimer = 0;
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.style.opacity = "1"; toastTimer = 2.4; }
 function flash() { const f = $("flash"); f.style.transition = "none"; f.style.opacity = "0.5"; requestAnimationFrame(() => { f.style.transition = "opacity .4s"; f.style.opacity = "0"; }); }
 
+// TRACK A: feed the cinematic pass each frame -- animate grain + project the sun to screen UV for god-rays.
+const _sunNDC = new THREE.Vector3();
+function updateCineUniforms(now) {
+  if (!cinePass) return;
+  cinePass.uniforms.uTime.value = now * 0.001;
+  if (GFX.godrays && sun && camera) {
+    _sunNDC.copy(sun.position).normalize().multiplyScalar(300).add(camera.position).project(camera);
+    const onScreen = _sunNDC.z < 1 && Math.abs(_sunNDC.x) < 1.25 && Math.abs(_sunNDC.y) < 1.25;
+    cinePass.uniforms.uSun.value.set(_sunNDC.x * 0.5 + 0.5, _sunNDC.y * 0.5 + 0.5);
+    const want = onScreen ? Math.max(0, Math.min(1, (1.1 - Math.hypot(_sunNDC.x, _sunNDC.y)))) : 0;
+    const cur = cinePass.uniforms.uSunVis.value;
+    cinePass.uniforms.uSunVis.value = cur + (want - cur) * 0.1;
+  } else { cinePass.uniforms.uSunVis.value *= 0.9; }
+}
 /* ====================================================== camera =========== */
 function updateCamera() {
   const P = S.player;
@@ -4671,6 +4790,8 @@ function frame(now) {
   // toast fade
   if (toastTimer > 0) { toastTimer -= dtMs / 1000; if (toastTimer <= 0) $("toast").style.opacity = "0"; }
   if (playerMixer) { playerAction.timeScale = GAIT_RATE[S.player.gait] ?? 1; playerMixer.update(dtMs / 1000); }
+  updateCineUniforms(now);   // TRACK A
+  if (S.phase === "playing") updateMist(Math.min(0.05, dtMs / 1000), now);   // TRACK A
   composer.render();
   if (dev) {
     devFrames++; if (now - devAt >= 500) { devFps = Math.round(devFrames * 1000 / (now - devAt)); devFrames = 0; devAt = now; }
