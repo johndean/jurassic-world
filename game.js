@@ -5170,6 +5170,20 @@ function renderDex(id) {
   dexSetModel(id);
 }
 $("guideBtn").addEventListener("click", () => { $("codex").classList.add("on"); if (!dexBuilt) buildFieldGuide(); dexStart(); });
+// homepage GRAPHICS quick-toggle (mirrors OPTIONS > GRAPHICS; cycles High -> Low -> Off)
+(function(){
+  const b = $("gfxBtn"); if (!b) return;
+  try { detectGfxTier(); } catch (_) {}   // reflect the real auto-detected/saved tier on the label before boot()
+  const order = ["high", "low", "off"];
+  const paint = () => { b.textContent = "\u2728 GRAPHICS: " + (GFX.tier || "high").toUpperCase(); };
+  paint();
+  b.addEventListener("click", () => {
+    const i = order.indexOf(GFX.tier); const next = order[(i + 1) % order.length];
+    try { setGfxTier(next); } catch (_) { applyGfxTier(next); }
+    paint();
+    const gr = $("optGfx"); if (gr) [...gr.children].forEach(x => x.classList.toggle("on", x.dataset.gfx === GFX.tier));
+  });
+})();
 $("dexClose").addEventListener("click", () => $("codex").classList.remove("on"));
 
 $("startBtn").addEventListener("click", () => { Audio.init(); startRun(); });   // pointer lock acquired at the intro handoff
