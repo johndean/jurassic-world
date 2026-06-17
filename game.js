@@ -3504,7 +3504,17 @@ function nearVehicle(P) {   // the parked drivable jeep, if you're standing next
 function ensureDriveJeep() {   // make sure a drivable jeep is parked near the player in EVERY mission (spawns once)
   if (worldJeep || S.phase !== "playing") return;
   const P = S.player;
-  let jx = P.x + Math.sin(P.yaw) * 7, jz = P.z + Math.cos(P.yaw) * 7;   // a few metres ahead, in view
+  let jx = P.x + Math.sin(P.yaw) * 9, jz = P.z + Math.cos(P.yaw) * 9;   // a few metres ahead, in view
+  // keep the parked jeep clear of the insertion wreck / intro prop so it never renders inside the chopper
+  const avoid = [];
+  if (wreckMesh) avoid.push(wreckMesh.position);
+  if (introProp) avoid.push(introProp.position);
+  for (const ap of avoid) {
+    let guard = 0;
+    while (Math.hypot(jx - ap.x, jz - ap.z) < 8 && guard++ < 8) {
+      jx += Math.cos(P.yaw) * 4; jz -= Math.sin(P.yaw) * 4;   // slide sideways off the wreck
+    }
+  }
   const e = { x: jx, z: jz }; resolveColliders(e, 2.6); jx = e.x; jz = e.z;
   const half = BIOME.map.size / 2 - 6; jx = clamp(jx, -half, half); jz = clamp(jz, -half, half);
   const j = buildJeep();
