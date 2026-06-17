@@ -2550,6 +2550,7 @@ function decide(a, P) {
   const prey = nearestPreyTo(a.x, a.z);
   if (prey && Math.hypot(prey.x - a.x, prey.z - a.z) < sp.senses.sightRangeM) { a.state = "Chase"; bb.lastSeenX = prey.x; bb.lastSeenZ = prey.z; bb.preyHunt = prey; }
   else if (rng() < 0.05 && dist2(P.x, P.z, a.x, a.z) > 60 * 60) { a.state = "Rest"; a.restT = rand(3, 7); bb.preyHunt = null; }   // calm & far → lie up
+  else if (rng() < 0.06 && dist2(P.x, P.z, a.x, a.z) > 30 * 30) { a.state = "Feed"; a.feedT = rand(5, 9); bb.preyHunt = null; }   // calm → scavenge/feed at a carcass (visible eating)
   else { a.state = "Patrol"; bb.preyHunt = null; }
 }
 
@@ -2730,14 +2731,19 @@ function animateDino(a, dt) {
       body.rotation.y = (sp.modelYaw || 0) + Math.cos(ph) * 0.06 * amp;
     }
   }
-  // ---- roar: apex / heavy predators bellow periodically while engaged (with a camera-felt audio cue) ----
-  if ((isApex(sp) || sp.combat.health >= 300) && a.lod === "full" && (a.state === "Chase" || a.state === "Attack")) {
+  // ---- roar: big predators bellow when the player is near (every ~20s, ANY state) AND more often in combat ----
+  const bigPredator = (isApex(sp) || sp.combat.health >= 300);
+  if (bigPredator && a.lod === "full") {
+    const dxp = a.x - P.x, dzp = a.z - P.z, dd = Math.hypot(dxp, dzp) || 1;
+    const engaged = (a.state === "Chase" || a.state === "Attack");
+    const near = dd < 75;                                  // "near the player" radius
     a.roarCd -= dt;
-    if (a.roarCd <= 0) {
-      a.roar = 1.1; a.roarCd = rand(6, 11);
-      const dxp = a.x - P.x, dzp = a.z - P.z, dd = Math.hypot(dxp, dzp) || 1;
-      if (dd < 130) Audio.roarAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw));   // attenuated + panned by bearing
-      if (dd < 46 && isApex(sp)) camShake = Math.min(0.55, camShake + 0.30 * (1 - dd / 46));   // TRACK A felt roar
+    if (a.roarCd <= 0 && (engaged || near)) {
+      a.roar = 1.2;
+      // engaged → bellow often (6-11s); just nearby & calm → territorial roar every ~20s
+      a.roarCd = engaged ? rand(6, 11) : rand(18, 22);
+      if (dd < 140) Audio.roarAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw));   // attenuated + panned by bearing
+      if (dd < 50 && isApex(sp)) camShake = Math.min(0.6, camShake + 0.32 * (1 - dd / 50));   // felt roar
     }
   }
   // heavy-predator footfalls thud through the ground when one is close (positional)
@@ -2791,6 +2797,22 @@ function animateDino(a, dt) {
       if (!a.mixer) body.rotation.x += bob * 0.10;
     }
     if (!a.mixer && a.state === "Flee") body.rotation.x += moveAmt * 0.12;   // FLEE: panic forward lean
+    // ---- IDLE LIFE + HEAD TRACKING (Phases 5/10): a calm dino never stares forward. It scans the
+    // environment, and when it's aware of the player it tracks them with its head/neck. ----
+    const calmIdle = (a.state === "Patrol" || a.state === "Rest" || a.state === "Graze") && vmag < 0.4;
+    const aware = (a.state === "Chase" || a.state === "Attack" || a.state === "Stalk" || a.state === "Investigate");
+    if (aware) {
+      // track the player: yaw the head toward them (clamped so it doesn't snap past the shoulder)
+      const want = Math.atan2(P.x - a.x, P.z - a.z) - a.yaw;
+      const rel = ((want + Math.PI) % (Math.PI * 2)) - Math.PI;
+      headYaw += clamp(rel, -0.7, 0.7) * 0.7;
+      headPitch += clamp((1.6 - (a.sp.greybox.standH || 3)) * 0.0, -0.2, 0.2);
+    } else if (calmIdle) {
+      // idle scan: slow wandering head sweep + occasional sharper "check" — looks alive, not scripted
+      const t = S.t * 0.5 + a.gaitPhase;
+      headYaw += Math.sin(t) * 0.32 + Math.sin(t * 2.7) * 0.10;
+      headPitch += Math.sin(t * 0.7) * 0.12 - 0.04;       // gentle up/down sniff/listen
+    }
   }
   // apply accumulated head/neck/jaw drive (greybox dinos have articulated parts; loaded models don't)
   if (head) { head.rotation.x = headPitch; head.rotation.y = headYaw; }
