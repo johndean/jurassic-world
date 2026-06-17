@@ -635,14 +635,14 @@ const CINEGRADE = {
     "    vec2 dir = (uSun - vUv) * 0.45; vec3 acc = vec3(0.0); float w = 0.0;",
     "    for (int i=0;i<6;i++){ float t = float(i)/5.0; vec2 uv = vUv + dir*t; vec3 sm = texture2D(tDiffuse, uv).rgb;",
     "      float lum = max(sm.r, max(sm.g, sm.b)); sm *= smoothstep(0.62, 1.0, lum); float ww = (1.0 - t); acc += sm*ww; w += ww; }",
-    "    acc /= max(w, 0.001); c += acc * 0.30 * uSunVis * vec3(1.05,0.96,0.78);",
+    "    acc /= max(w, 0.001); c += acc * 0.42 * uSunVis * vec3(1.06,0.97,0.80);",
     "  }",
     "  if (uGrade > 0.5){",
     "    float l = dot(c, vec3(0.299,0.587,0.114));",
     "    c = mix(vec3(l), c, 1.08);",
     "    c = (c - 0.5) * 1.06 + 0.5;",
-    "    c += vec3(0.02,0.05,0.06) * (1.0 - smoothstep(0.0,0.5,l));",
-    "    c += vec3(0.06,0.04,0.0) * smoothstep(0.55,1.0,l);",
+    "    c += vec3(0.025,0.060,0.072) * (1.0 - smoothstep(0.0,0.5,l));",
+    "    c += vec3(0.070,0.045,0.005) * smoothstep(0.55,1.0,l);",
     "  }",
     "  vec2 d = vUv - 0.5; float v = smoothstep(0.85, 0.18, dot(d,d)*uVig*2.0); c *= mix(0.74, 1.0, v);",
     "  if (uGrain > 0.5){ float g = hash(vUv * vec2(1920.0,1080.0) + fract(uTime)*97.0) - 0.5; c += g * 0.035; }",
@@ -662,13 +662,14 @@ function initRenderer() {
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, DPR_CAP));
   renderer.setSize(innerWidth, innerHeight, false);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic response = more cinematic
-  renderer.toneMappingExposure = 1.2;
+  renderer.toneMappingExposure = 1.28;   // TRACK A: lift for the misty key-art read
   detectGfxTier();
   renderer.shadowMap.enabled = GFX.shadows; renderer.shadowMap.type = THREE.PCFSoftShadowMap;   // TRACK A soft sun shadows
   scene = new THREE.Scene();
   const m = BIOME.map;
-  scene.background = new THREE.Color(0xa6b6a4);   // greener overcast sky
-  scene.fog = new THREE.FogExp2(new THREE.Color(0x93a791), 0.009); // lighter green haze so the dense foliage reads
+  scene.background = new THREE.Color(0xb7c3bf);   // brighter misty-valley sky (key-art match)
+  // TRACK A: denser, cooler teal-green valley haze — reads as the layered fog in the key art.
+  scene.fog = new THREE.FogExp2(new THREE.Color(0x9fb0ad), GFX.tier === "off" ? 0.009 : 0.0135);
   // image-based lighting: procedural neutral studio env so PBR materials get real ambient + reflections
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
@@ -676,7 +677,7 @@ function initRenderer() {
   // post-processing: subtle cinematic bloom on bright/foggy areas; OutputPass does tone-map + sRGB
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.5, 0.8); // strength, radius, threshold
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.7, 0.6, 0.72); // TRACK A: richer glow on facility lights / wet water / fog
   composer.addPass(bloomPass);
   cinePass = new ShaderPass(CINEGRADE); cinePass.uniforms.uGrain.value = GFX.grain ? 1 : 0; cinePass.uniforms.uGrade.value = GFX.grade ? 1 : 0; cinePass.uniforms.uGodray.value = GFX.godrays ? 1 : 0; composer.addPass(cinePass);   // TRACK A grade+grain+godrays
   composer.addPass(new OutputPass());
