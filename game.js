@@ -747,12 +747,20 @@ function buildWorld() {
   scene.add(new THREE.AmbientLight(0x5e676b, 0.22));   // TRACK A: lower flat fill so shadows + sun contrast read
   buildSky();
 
-  // ground: rolling valley floor ringed by mountains, carved by a winding river (shaped by groundH)
-  const seg = 110;
-  const gGeo = new THREE.PlaneGeometry(m.size, m.size, seg, seg);
+  // ground: rolling valley floor ringed by mountains, carved by a winding river (shaped by groundH).
+  // The mesh extends 1.8x BEYOND the play area so the camera never sees the plane edge / void at the
+  // map border — the outer skirt rises into the mountain ring and is hidden by fog. (Fixes edge-tearing.)
+  const seg = 150, groundSpan = m.size * 1.8;
+  const gGeo = new THREE.PlaneGeometry(groundSpan, groundSpan, seg, seg);
   gGeo.rotateX(-Math.PI / 2);
   const pos = gGeo.attributes.position;
-  for (let i = 0; i < pos.count; i++) pos.setY(i, groundH(pos.getX(i), pos.getZ(i)));
+  for (let i = 0; i < pos.count; i++) {
+    const gx = pos.getX(i), gz = pos.getZ(i);
+    let h = groundH(gx, gz);
+    const rr = Math.hypot(gx, gz);
+    if (rr > m.size / 2) h += (rr - m.size / 2) * 0.9;   // skirt climbs steeply past the border → solid wall of land
+    pos.setY(i, h);
+  }
   gGeo.computeVertexNormals();
   const groundTex = _texLoader.load(GROUND_TEX);
   groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
@@ -774,7 +782,7 @@ function buildWorld() {
   scene.add(ground);
 
   // river: one translucent water plane; the terrain occludes it everywhere except the carved channel
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(m.size, m.size),
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(m.size * 1.8, m.size * 1.8),
     new THREE.MeshStandardMaterial({ color: 0x223f47, roughness: 0.08, metalness: 0.55, transparent: true, opacity: 0.92, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, depthWrite: false }));   // double-sided + polygon-offset kills the hillside z-fight tearing
   water.rotation.x = -Math.PI / 2; water.position.y = WATER_Y; water.renderOrder = -1; scene.add(water);
 
@@ -1638,6 +1646,13 @@ function buildFacility(bx, bz) {
   const roof = new THREE.Mesh(new THREE.BoxGeometry(24, 1, 16), dark); roof.position.set(0, 9.4, -17); g.add(roof);
   const tower = new THREE.Mesh(new THREE.BoxGeometry(3, 18, 3), concrete); tower.position.set(13, 9, -21); g.add(tower);
   const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 8, 6), dark); antenna.position.set(13, 22, -21); g.add(antenna);
+  // service ladder up the comms tower (was missing) — rails + rungs on the +x face, ground to deck
+  const rungMat = new THREE.MeshStandardMaterial({ color: 0x6e736f, roughness: 0.6, metalness: 0.6 });
+  for (const sx of [-0.45, 0.45]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 18, 0.08), rungMat); rail.position.set(14.55, 9, -21 + sx); g.add(rail); }
+  for (let r = 0; r < 17; r++) { const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.0, 6), rungMat); rung.rotation.x = Math.PI / 2; rung.position.set(14.55, 0.8 + r * 1.0, -21); g.add(rung); }
+  // a small railed lookout deck at the top so the ladder leads somewhere
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(4, 0.3, 4), dark); deck.position.set(13, 18.1, -21); g.add(deck);
+  for (const [dx, dz] of [[-1.8, -1.8], [1.8, -1.8], [-1.8, 1.8], [1.8, 1.8]]) { const rp = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.1, 0.1), rungMat); rp.position.set(13 + dx, 18.7, -21 + dz); g.add(rp); }
   for (const [px, pz] of [[-11, -3], [11, -3], [-11, -29], [11, -29]]) {
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.32, 12, 6), dark); pole.position.set(px, 6, pz); g.add(pole);
     const l = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 10), lamp); l.position.set(px, 12, pz); g.add(l);
@@ -2227,7 +2242,10 @@ function perceive(a, P) {
  * Deterrence, not action-hero firepower: a flare scares predators off, a thrown
  * decoy lures them away, melee is a risky last resort. The beacon is a SAFE ZONE. */
 const SAFE_R = 18;                                  // beacon safe-zone radius (m)
-function playerSafe() { if (S.player.driveVeh) return true; const b = S.extraction.beacon; return dist2(S.player.x, S.player.z, b.x, b.z) < SAFE_R * SAFE_R; }   // inside the jeep = a mobile safe zone (no damage, predators disengage)
+function playerSafe() { if (S.player.driveVeh) return true; const b = S.extraction.beacon; return dist2(S.player.x, S.player.z, b.x, b.z) < SAFE_R * SAFE_R; }   // inside the jeep = a mobile safe zone (no DAMAGE)
+// Predators DISENGAGE only inside the beacon zone. The truck is NOT a disengage bubble — big predators
+// chase & harry the moving vehicle (you just can't be bitten through the cab). Lets the hunt continue on wheels.
+function playerEngageable() { const b = S.extraction.beacon; return !(dist2(S.player.x, S.player.z, b.x, b.z) < SAFE_R * SAFE_R); }
 /* ---- world FX so tool use + dino reactions are actually VISIBLE in the scene ---- */
 const fxList = [];
 function addFx(obj, life, update) { scene.add(obj); fxList.push({ obj, life, t: 0, update }); }
@@ -2531,12 +2549,12 @@ function decide(a, P) {
   if (decoy.t > 0 && dist2(a.x, a.z, decoy.x, decoy.z) < (sp.senses.sightRangeM * 1.3) ** 2) {                  // a thrown decoy pulls them off you
     a.state = "Investigate"; bb.lastSeenX = decoy.x; bb.lastSeenZ = decoy.z; bb.hasTarget = true; bb.preyHunt = null; return;
   }
-  if (!playerSafe() && S.t >= DIFF.grace) {   // beacon = SAFE ZONE: predators won't engage the player inside it (grace scales with difficulty)
+  if (playerEngageable() && S.t >= DIFF.grace) {   // beacon zone is the ONLY true disengage; the truck is still hunted
     if (per.seen && per.d < sp.combat.attackRangeM + 0.5) { a.state = "Attack"; return; }
     if ((per.seen || (bb.hasTarget && rng() < aggr)) && per.d < sp.senses.sightRangeM * 1.4) { a.state = (usesPackTactics(sp) ? "Chase" : (per.seen ? "Chase" : "Stalk")); return; }
     if (bb.hasTarget && (per.heard || rng() < aggr * 0.6)) { a.state = "Investigate"; return; }
   }
-  if (playerSafe()) {
+  if (!playerEngageable()) {
     // hysteresis: don't blank the hunt the instant the player crosses the safe line. A predator that was
     // chasing paces the boundary toward where it last saw them for a few seconds, then loses interest —
     // no arcade on/off "sanctuary wall". (decide() runs ~4 Hz, so 6 / 0.25 ≈ 6 s of prowling.)
@@ -2716,6 +2734,13 @@ function steer(a, dt, P) {
   a.x += a.vx * dt; a.z += a.vz * dt;
   // structure collision: slide around solid props/buildings/rocks rather than grinding into them & twitching
   if (a.lod === "full" && !a.inWater) resolveColliders(a, dinoRadius(sp));
+  // ---- VEHICLE COLLISION: a dino can NEVER stand inside the truck — push it out to the cab's edge.
+  // (the truck moves, so it's not in the static grid; resolve it directly here every frame). ----
+  if (a.lod === "full" && worldJeep && worldJeep.visible !== false) {
+    const jr = 3.0 + dinoRadius(sp);            // cab half-extent + the dino's body radius
+    const dxv = a.x - worldJeep.position.x, dzv = a.z - worldJeep.position.z, dv = Math.hypot(dxv, dzv);
+    if (dv < jr && dv > 1e-3) { const push = (jr - dv); a.x += (dxv / dv) * push; a.z += (dzv / dv) * push; }
+  }
   const lim = BIOME.map.size / 2 - 3; a.x = clamp(a.x, -lim, lim); a.z = clamp(a.z, -lim, lim);
   // ---- FACING with MOMENTUM (Phase 8): heavy dinos cannot snap-turn. Rotational inertia scales with
   // mass — a 2.5t T-Rex slows, leans, then swings around; an agile raptor pivots fast. The turn rate is
