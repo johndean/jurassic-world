@@ -1670,8 +1670,8 @@ function buildFacility(bx, bz) {
   // The pretty GLB is the LOOK; invisible analytic volumes make it playable:
   // player + raptors walk on the raised deck, climb the ramp, weave around wall colliders.
   const FOOT = 44;                 // facility footprint diameter in metres
-  const DECK = 2.6;                // walkable deck height above local ground
-  const PAD_H = 5.4;               // elevated helipad height
+  const DECK = 4.4;                // walkable main-deck height (matches footprint-scaled model)
+  const PAD_H = 7.6;               // elevated helipad height (top of the pylon)
   const baseY = groundH(bx, bz);
   FACILITY = { x: bx, z: bz, r: FOOT * 0.5, deck: DECK, padH: PAD_H,
                padX: bx - FOOT * 0.33, padZ: bz, padR: 6.0,
@@ -1681,8 +1681,18 @@ function buildFacility(bx, bz) {
     if (!MODELS[EVAC_MODEL]) return false;
     // hide the procedural blocks (keep lights/strobes/pad-ring which read well)
     for (const c of procShell) { if (c.geometry && (c.geometry.type === "BoxGeometry" || c.geometry.type === "CylinderGeometry")) c.visible = false; }
-    const mdl = fitModel(MODELS[EVAC_MODEL].clone(true), FOOT, 0);   // scale longest axis to footprint
-    mdl.position.y = 0; mdl.rotation.y = Math.atan2(-bx, -bz);
+    const mdl = MODELS[EVAC_MODEL].clone(true);
+    mdl.scale.setScalar(1); mdl.rotation.set(0, 0, 0); mdl.updateMatrixWorld(true);
+    // scale by the FOOTPRINT (largest horizontal axis), NOT height — a building is wide, not tall
+    let box = new THREE.Box3().setFromObject(mdl), size = new THREE.Vector3(); box.getSize(size);
+    const horiz = Math.max(size.x, size.z) || 1;
+    mdl.scale.setScalar(FOOT / horiz);
+    mdl.updateMatrixWorld(true);
+    // re-measure and seat the BASE on the ground (centre x/z, bottom at y=0 of the facility group)
+    box = new THREE.Box3().setFromObject(mdl);
+    const c = new THREE.Vector3(); box.getCenter(c);
+    mdl.position.x -= c.x; mdl.position.z -= c.z; mdl.position.y -= box.min.y;   // base sits exactly on ground
+    mdl.rotation.y = Math.atan2(-bx, -bz);
     mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
     g.add(mdl);
     return true;
