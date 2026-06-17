@@ -105,6 +105,7 @@ const PROPS3D = {
 };
 const HELI_MODEL = "./assets/models/helicopter.glb";   // realistic evac chopper (streams in; procedural fallback)
 const JEEP_MODEL = "./assets/models/defender.glb";   // real Land Rover Defender 110 (streams in; procedural fallback)
+const BOAT_MODEL = "./assets/models/gunboat.glb";   // AAA military riverine gunboat (replaces procedural box-boat)
 const EVAC_MODEL = "./assets/models/evac_facility.glb";   // iconic EVAC complex (visual shell; analytic collision/walk volumes overlaid)
 let FACILITY = null;   // {x,z,r,deck,padH,padX,padZ,padR,rampA} — traversal descriptor for facilityFloorAt()
 const JEEP_YAW = Math.PI;   // model-front -> local +x. At yaw=0 it drove rear-first (W=back, steer mirrored) => model front is at -x, so +180deg.
@@ -499,6 +500,7 @@ async function preloadModels() {
   if (HELI_MODEL) loadModelOnce(HELI_MODEL);
   if (JEEP_MODEL) loadModelOnce(JEEP_MODEL);
   if (EVAC_MODEL) loadModelOnce(EVAC_MODEL);
+  if (BOAT_MODEL) loadModelOnce(BOAT_MODEL);
   const tier1 = [...new Set([PLAYER_MODEL, ...ROLES.map(r => r.model)].filter(Boolean))];
   await loadWave(tier1, 4);                                // the ONLY wait before the game is playable
   if (!playerMixer) buildPlayer();
@@ -3263,7 +3265,7 @@ function clearEvac() { if (evac) { scene.remove(evac.heli.group); evac = null; }
  * -> trouble -> MAYDAY -> spin -> crash -> black -> wake at the burning wreck ->
  * mission update -> jungle silence + distant roar -> hand control to the player.
  * Skippable; auto-skips on later runs in the same session (you've seen it). */
-let intro = null, wreckMesh = null, introSeen = false, introProp = null, introExtra = [];
+let intro = null, wreckMesh = null, introSeen = false, introProp = null, introExtra = [], introPersist = [];
 let worldJeep = null;   // the drivable ranger jeep parked in-world (every mission gets one near the player)
 function clearIntroProp() { if (introProp) { scene.remove(introProp); introProp = null; } for (const e of introExtra) scene.remove(e); introExtra = []; }   // parked intro vehicle + props (jeep/boat/dock) left in-world
 function coopSpread(bx, bz) {   // fan co-op players out from a shared hand-off point so they don't stack on each other
@@ -3963,7 +3965,24 @@ function endIntroAtOrigin(msg) {                          // continuous hand-off
 }
 
 /* ── OPERATION BLACKOUT · armored river-boat insertion (dawn mist → tunnel → dock) ── */
-function buildBoat() {                                    // detailed armored riverine patrol boat (bow = local +x, rides on the river)
+function buildBoat() {                                    // AAA military gunboat model (bow = local +x, rides on the river); procedural fallback below
+  if (MODELS[BOAT_MODEL]) {
+    const b = new THREE.Group();
+    const mdl = MODELS[BOAT_MODEL].clone(true);
+    mdl.scale.setScalar(1); mdl.rotation.set(0, 0, 0); mdl.updateMatrixWorld(true);
+    let box = new THREE.Box3().setFromObject(mdl), size = new THREE.Vector3(); box.getSize(size);
+    mdl.scale.setScalar(9.0 / (size.x || 1));           // ~9 m long
+    mdl.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(mdl); const c = new THREE.Vector3(); box.getCenter(c);
+    mdl.position.x -= c.x; mdl.position.z -= c.z; mdl.position.y -= box.min.y; mdl.position.y -= 0.35;  // hull sits at the waterline
+    mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+    b.add(mdl);
+    // wake foam behind the stern (kept so the river ride reads with motion)
+    const wake = new THREE.Mesh(new THREE.CircleGeometry(3.4, 24, 0, Math.PI), new THREE.MeshBasicMaterial({ color: 0xcfe0dc, transparent: true, opacity: 0.3, depthWrite: false }));
+    wake.rotation.x = -Math.PI / 2; wake.rotation.z = -Math.PI / 2; wake.position.set(-5.4, -0.18, 0); b.add(wake); b.userData.wake = wake;
+    const beam = new THREE.SpotLight(0xfff0c4, 4, 50, 0.45, 0.5, 1.1); beam.position.set(-0.8, 2.6, 0); beam.target.position.set(20, -0.5, 0); b.add(beam); b.add(beam.target); b.userData.beam = beam;
+    return b;
+  }
   const b = new THREE.Group();
   const hullMat = new THREE.MeshStandardMaterial({ color: 0x3a4636, roughness: 0.8, metalness: 0.25 });
   const hullDk = new THREE.MeshStandardMaterial({ color: 0x2b3329, roughness: 0.85, metalness: 0.3 });
@@ -4046,8 +4065,8 @@ function startIntroBoat() {
   scene.add(b); introProp = b;
   intro = { kind: "boat", t: 0, phase: "river", boat: b, bx: startX, dockX: 6, line: -1, shake: 0.04, camActive: true };
   introOpen("Jurassic Survival · Power Restoration · River insertion");
-  intro._prevFog = scene.fog; scene.fog = new THREE.FogExp2(new THREE.Color(0x8aa0a4), 0.02);   // thick, mystic Lost World haze
-  const dock = buildDock(intro.dockX); scene.add(dock); introExtra.push(dock); intro.dock = dock;
+  intro._prevFog = scene.fog; scene.fog = new THREE.FogExp2(new THREE.Color(0x9fb2b0), 0.012);   // dawn river haze (thinned so the boat & banks read)
+  const dock = buildDock(intro.dockX); scene.add(dock); intro.dock = dock; introPersist.push(dock);   // pier PERSISTS (player stands on it; not cleared with the intro)
   placeRiverDinos(startX);
 }
 function updateIntroBoat(dt) {
@@ -4063,7 +4082,7 @@ function updateIntroBoat(dt) {
   tint.style.background = "#5a6e72"; tint.style.opacity = (0.34 - prog * 0.12).toFixed(2);   // mist thins as you arrive
   cap.style.opacity = T > 4.5 ? "0" : "1";
   intro.phase = prog > 0.86 ? "dock" : "river";
-  if (intro.bx >= intro.dockX - 0.05) { if (intro.boat) scene.remove(intro.boat); endIntroBoat(); }
+  if (intro.bx >= intro.dockX - 0.05) { if (intro.boat) { introPersist.push(intro.boat); intro.boat.userData._moored = true; } endIntroBoat(); }   // boat stays MOORED at the dock (no vanish)
 }
 function updateIntroCameraBoat() {
   const b = intro.boat; if (!b) return;
