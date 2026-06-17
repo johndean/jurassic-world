@@ -2072,6 +2072,8 @@ function spawnDino(speciesId, x, z) {
     state: baseStateFor(sp),
     bb: { lastSeenX: 0, lastSeenZ: 0, hasTarget: false, threat: 0, role: "harry", scared: 0, homeX: x, homeZ: z, hue: 0 },
     cd: 0, decideIn: rand(0, 0.25), lod: "full", anim: 0, alive: true, gaitPhase: rand(0, 6.28), roar: 0, roarCd: rand(2, 6), eatPhase: rand(0, 6.28), roarShake: 0,
+    tailYaw: 0, tailVel: 0, prevYaw: rand(0, 6.28), lean: 0,   // Phase 4/8: tail-lag + turn momentum
+    hunger: rand(0.2, 0.7), thirst: rand(0.2, 0.6), fatigue: rand(0, 0.3), driveT: 0,   // Phase 12: ecosystem drives
     sedation: 0, sedated: false, downT: 0, trapped: false, trappedT: 0, drawn: false,   // field-science (tranq/trap/sample)
   };
 }
@@ -2173,7 +2175,7 @@ function buildDinoMesh(sp) {
   const jaw = new THREE.Mesh(new THREE.BoxGeometry(gb.bodyW * 0.7, gb.bodyH * 0.22, gb.bodyL * 0.5), mat);
   jaw.position.set(0, scale * 0.66, gb.bodyL * 0.85); g.add(jaw); g.userData.jaw = jaw;
   const tail = new THREE.Mesh(new THREE.BoxGeometry(gb.bodyW * 0.5, gb.bodyH * 0.5, gb.bodyL * 1.1), mat);
-  tail.position.set(0, scale * 0.5, -gb.bodyL * 0.9); g.add(tail);
+  tail.position.set(0, scale * 0.5, -gb.bodyL * 0.9); g.add(tail); g.userData.tail = tail;
   const legGeo = new THREE.BoxGeometry(gb.bodyW * 0.32, scale * 0.55, gb.bodyW * 0.4);
   const L1 = new THREE.Mesh(legGeo, mat), L2 = new THREE.Mesh(legGeo, mat);
   L1.position.set(gb.bodyW * 0.45, scale * 0.27, 0); L2.position.set(-gb.bodyW * 0.45, scale * 0.27, 0);
@@ -2520,6 +2522,7 @@ function decide(a, P) {
     const pred = nearestPredatorTo(a.x, a.z, 1);
     const predD = pred ? Math.hypot(pred.x - a.x, pred.z - a.z) : 999;
     if (predD < sp.behavior.fleeFromPredatorM || bb.scared > 0) { a.state = "Flee"; bb.fleeFromX = pred ? pred.x : a.x; bb.fleeFromZ = pred ? pred.z : a.z; }
+    else if (a.thirst > 0.78 && dist2(P.x, P.z, a.x, a.z) > 30 * 30) a.state = "Drink";   // Phase 12: thirsty → water
     else a.state = "Graze";
     return;
   }
@@ -2549,8 +2552,10 @@ function decide(a, P) {
   // no player interest → hunt herd prey (predator vs prey), rest, or patrol the home territory
   const prey = nearestPreyTo(a.x, a.z);
   if (prey && Math.hypot(prey.x - a.x, prey.z - a.z) < sp.senses.sightRangeM) { a.state = "Chase"; bb.lastSeenX = prey.x; bb.lastSeenZ = prey.z; bb.preyHunt = prey; }
+  else if (a.thirst > 0.75 && dist2(P.x, P.z, a.x, a.z) > 36 * 36) { a.state = "Drink"; bb.preyHunt = null; }       // Phase 12: thirsty → head to water
+  else if (a.fatigue > 0.8 && dist2(P.x, P.z, a.x, a.z) > 55 * 55) { a.state = "Rest"; a.restT = rand(5, 9); bb.preyHunt = null; }  // exhausted → lie up
+  else if (a.hunger > 0.7 && dist2(P.x, P.z, a.x, a.z) > 30 * 30) { a.state = "Feed"; a.feedT = rand(5, 9); bb.preyHunt = null; }   // hungry → feed/scavenge (visible eating)
   else if (rng() < 0.05 && dist2(P.x, P.z, a.x, a.z) > 60 * 60) { a.state = "Rest"; a.restT = rand(3, 7); bb.preyHunt = null; }   // calm & far → lie up
-  else if (rng() < 0.06 && dist2(P.x, P.z, a.x, a.z) > 30 * 30) { a.state = "Feed"; a.feedT = rand(5, 9); bb.preyHunt = null; }   // calm → scavenge/feed at a carcass (visible eating)
   else { a.state = "Patrol"; bb.preyHunt = null; }
 }
 
@@ -2610,6 +2615,15 @@ function steer(a, dt, P) {
   }
   if (bb.scared > 0) bb.scared = Math.max(0, bb.scared - dt);   // flare/melee fear wears off (Flee/Graze re-set it as needed)
   if (a.feedT > 0) a.feedT -= dt; if (a.restT > 0) a.restT -= dt;   // ecosystem timers (feeding/resting)
+  // ---- Phase 12: ECOSYSTEM DRIVES — hunger/thirst/fatigue rise over time and are relieved by the
+  // matching activity. They bias decide() so a dino's behaviour follows real needs, not infinite wander. ----
+  const moving12 = (a.state === "Chase" || a.state === "Attack" || a.state === "Flee" || a.state === "Patrol");
+  a.hunger = clamp(a.hunger + dt * 0.006, 0, 1);
+  a.thirst = clamp(a.thirst + dt * 0.008, 0, 1);
+  a.fatigue = clamp(a.fatigue + (moving12 ? dt * 0.012 : -dt * 0.02), 0, 1);
+  if (a.state === "Feed" || a.state === "Graze") a.hunger = clamp(a.hunger - dt * 0.10, 0, 1);
+  if (a.state === "Drink") a.thirst = clamp(a.thirst - dt * 0.18, 0, 1);
+  if (a.state === "Rest") a.fatigue = clamp(a.fatigue - dt * 0.10, 0, 1);
   let tx = a.x, tz = a.z, run = false, sepW = 1;
   switch (a.state) {
     case "Graze": {
@@ -2622,6 +2636,12 @@ function steer(a, dt, P) {
     }
     case "Feed": { tx = a.x; tz = a.z; break; }   // stationary at the carcass
     case "Rest": { tx = a.x; tz = a.z; break; }   // lying up
+    case "Drink": {   // Phase 12/13: walk to the nearest riverbank, then stand & drink (head-dip anim)
+      const bankZ = riverCenter(a.x) - (a.z < riverCenter(a.x) ? RIVER_HALF + 1 : -(RIVER_HALF + 1));
+      if (Math.abs(a.z - bankZ) > 2.5) { tx = a.x; tz = bankZ; }   // approach the bank
+      else { tx = a.x; tz = a.z; if (a.thirst < 0.15) a.state = "Patrol"; }   // at the water → drink until slaked
+      break;
+    }
     case "Flee": {
       run = true; bb.scared = 0.8;
       tx = a.x + (a.x - bb.fleeFromX); tz = a.z + (a.z - bb.fleeFromZ);
@@ -2682,6 +2702,14 @@ function steer(a, dt, P) {
   let spd = (run ? sp.move.run : sp.move.walk) * (a.lod === "full" ? 1 : 0.4) * (sp.diet === "carnivore" ? DIFF.predSpeed : 1);
   if (dd < arriveR) spd *= dd / arriveR;                        // ease to zero on approach
   if (a.inWater) spd *= 0.6;
+  // ---- Phase 9: TERRAIN-AWARE LOCOMOTION — climbing a slope costs speed (uphill drag). Sample the
+  // ground gradient along the travel direction; steeper uphill = slower, matching visible mass/effort. ----
+  if (a.lod === "full" && (dx || dz)) {
+    const ahx = a.x + dx * 2.5, ahz = a.z + dz * 2.5;
+    const slope = groundH(ahx, ahz) - groundH(a.x, a.z);       // +ve = uphill ahead
+    if (slope > 0.15) spd *= clamp(1 - slope * 0.55, 0.45, 1);  // uphill drag
+    else if (slope < -0.2) spd *= clamp(1 - slope * 0.10, 1, 1.15);  // slight downhill momentum
+  }
   // frame-rate-independent acceleration (smooth ease in/out — no per-frame snap, no FPS dependence)
   const ak = 1 - Math.exp(-dt * (run ? 6 : 3.5));
   a.vx = lerp(a.vx, dx * spd, ak); a.vz = lerp(a.vz, dz * spd, ak);
@@ -2689,21 +2717,33 @@ function steer(a, dt, P) {
   // structure collision: slide around solid props/buildings/rocks rather than grinding into them & twitching
   if (a.lod === "full" && !a.inWater) resolveColliders(a, dinoRadius(sp));
   const lim = BIOME.map.size / 2 - 3; a.x = clamp(a.x, -lim, lim); a.z = clamp(a.z, -lim, lim);
-  // ---- FACING: turn toward travel ONLY when genuinely moving, with a dead-zone so micro-motion never
-  // rotates the body (the root cause of the side-to-side shimmer). Turn rate scales with species agility
-  // (move.turnRate deg/s; 180 = neutral) and is dt-scaled so heavy animals swing slowly, agile ones snap. ----
+  // ---- FACING with MOMENTUM (Phase 8): heavy dinos cannot snap-turn. Rotational inertia scales with
+  // mass — a 2.5t T-Rex slows, leans, then swings around; an agile raptor pivots fast. The turn rate is
+  // additionally throttled by current speed (you can't hard-cut at a run). ----
   const vmag = Math.hypot(a.vx, a.vz), moveThresh = (run ? sp.move.run : sp.move.walk) * 0.18;
   if (vmag > moveThresh && dd > arriveR * 0.5) {
     const want = Math.atan2(a.vx, a.vz);
     const dyaw = ((want - a.yaw + Math.PI) % (Math.PI * 2)) - Math.PI;
-    if (Math.abs(dyaw) > 0.05) a.yaw = lerp2angle(a.yaw, want, Math.min(0.9, dt * 3.2 * Math.min(2.2, ((sp.move && sp.move.turnRate) || 180) / 180)));
+    if (Math.abs(dyaw) > 0.05) {
+      const mass = (sp.size && sp.size.massKg) || 200;
+      const inertia = clamp(900 / (mass + 300), 0.35, 2.2);      // heavier = lower = slower turn
+      const speedThrottle = 1 - Math.min(0.6, vmag / (sp.move.run || 9) * 0.6);  // fast = harder to turn
+      const rate = dt * 3.2 * Math.min(2.4, ((sp.move && sp.move.turnRate) || 180) / 180) * inertia * speedThrottle;
+      a.yaw = lerp2angle(a.yaw, want, Math.min(0.9, rate));
+    }
   }
-  animateDino(a, dt);
+  // turn rate this frame → drives BANKING LEAN (Phase 8) and TAIL LAG (Phase 4)
+  const yawDelta = ((a.yaw - a.prevYaw + Math.PI) % (Math.PI * 2)) - Math.PI;
+  a.prevYaw = a.yaw;
+  const turnSpeed = dt > 0 ? yawDelta / dt : 0;
+  a.lean = lerp(a.lean, clamp(-turnSpeed * 0.16 * Math.min(1.4, vmag / (sp.move.walk || 2)), -0.28, 0.28), Math.min(1, dt * 6));   // bank into the turn
+  animateDino(a, dt, turnSpeed, vmag);
 }
 // Drive a dino's mesh placement + procedural animation from its current x/z/yaw/vx/vz/state. Shared by
 // the AI path (steer) and the co-op CLIENT puppet path (host-authoritative transforms, no local AI).
-function animateDino(a, dt) {
+function animateDino(a, dt, turnSpeed, vmag2) {
   const sp = a.sp, P = S.player;
+  if (turnSpeed == null) turnSpeed = 0;
   // place + animate (fliers cruise/dive, aquatic species float in the channel)
   a.mesh.position.set(a.x, dinoY(a), a.z);
   a.mesh.rotation.y = a.yaw;
@@ -2788,6 +2828,13 @@ function animateDino(a, dt) {
       headYaw += Math.sin(a.eatPhase * 0.5) * 0.18;      // wrench side-to-side ripping flesh
       jawOpen = Math.max(jawOpen, 0.25 + (1 - tear) * 0.6);  // chomp: open between pulls, clamp on the down-stroke
     }
+    // ---- DRINK — head dips low to the water and laps (Phase 13) ----
+    else if (a.state === "Drink") {
+      a.eatPhase += dt * 2.4;
+      const lap = Math.abs(Math.sin(a.eatPhase));
+      headPitch += 0.65 + lap * 0.18;                    // head down at the water, lapping bob
+      jawOpen = Math.max(jawOpen, 0.08 + lap * 0.16);
+    }
     // ---- GRAZE — herbivore cropping vegetation: slow head-down bob + gentle chew ----
     else if (a.state === "Graze") {
       a.eatPhase += dt * 1.8;                            // calm cadence
@@ -2799,7 +2846,7 @@ function animateDino(a, dt) {
     if (!a.mixer && a.state === "Flee") body.rotation.x += moveAmt * 0.12;   // FLEE: panic forward lean
     // ---- IDLE LIFE + HEAD TRACKING (Phases 5/10): a calm dino never stares forward. It scans the
     // environment, and when it's aware of the player it tracks them with its head/neck. ----
-    const calmIdle = (a.state === "Patrol" || a.state === "Rest" || a.state === "Graze") && vmag < 0.4;
+    const calmIdle = (a.state === "Patrol" || a.state === "Rest") && vmag < 0.4;
     const aware = (a.state === "Chase" || a.state === "Attack" || a.state === "Stalk" || a.state === "Investigate");
     if (aware) {
       // track the player: yaw the head toward them (clamped so it doesn't snap past the shoulder)
@@ -2813,6 +2860,24 @@ function animateDino(a, dt) {
       headYaw += Math.sin(t) * 0.32 + Math.sin(t * 2.7) * 0.10;
       headPitch += Math.sin(t * 0.7) * 0.12 - 0.04;       // gentle up/down sniff/listen
     }
+  }
+  // ---- Phase 8: BANKING LEAN — the whole body rolls into a turn (visible weight shift) ----
+  if (body) body.rotation.z += (a.lean || 0);
+  // ---- Phase 4: TAIL LAG — spring-damper. The tail trails the turn, overshoots, settles. Heavy dinos
+  // swing a heavier (slower, wider) tail; small dinos snap it fast. Greybox dinos have a real tail mesh;
+  // loaded single-mesh models express it through the body roll above. ----
+  const tail = a.mesh.userData.tail;
+  if (tail) {
+    const mass = (sp.size && sp.size.massKg) || 200;
+    const stiff = clamp(60 / Math.sqrt(mass + 50), 1.4, 7);   // big = looser/slower spring
+    const damp = clamp(stiff * 1.1, 2, 9);
+    // target tail offset lags OPPOSITE the turn (conservation of momentum) + a gentle walk sway
+    const target = clamp(-turnSpeed * 0.42, -0.9, 0.9) + Math.sin(a.gaitPhase) * 0.10 * Math.min(1, (vmag2 || 0) / (sp.move.walk || 2));
+    a.tailVel += (target - a.tailYaw) * stiff * dt - a.tailVel * damp * dt;   // spring toward target, damped
+    a.tailYaw += a.tailVel * dt;
+    a.tailYaw = clamp(a.tailYaw, -1.1, 1.1);
+    tail.rotation.y = a.tailYaw;
+    tail.rotation.x = Math.sin(a.gaitPhase * 2) * 0.05 * Math.min(1, (vmag2 || 0) / (sp.move.walk || 2));   // vertical bob with stride
   }
   // apply accumulated head/neck/jaw drive (greybox dinos have articulated parts; loaded models don't)
   if (head) { head.rotation.x = headPitch; head.rotation.y = headYaw; }
@@ -4771,7 +4836,7 @@ let mapLayers = (() => { try { return Object.assign({ threat: true, territory: f
 function dinoMapState(d) {
   if (isDown(d)) return d.sedated ? "SEDATED" : "TRAPPED";
   return ({ Chase: "HUNTING", Attack: "ATTACKING", Stalk: "STALKING", Investigate: "ALERT",
-    Flee: "FLEEING", Retreat: "RETREATING", Patrol: "ROAMING", Graze: "GRAZING", Feed: "FEEDING", Rest: "RESTING" })[d.state] || "";
+    Flee: "FLEEING", Retreat: "RETREATING", Patrol: "ROAMING", Graze: "GRAZING", Feed: "FEEDING", Rest: "RESTING", Drink: "DRINKING" })[d.state] || "";
 }
 function mapThreatRadiusM(d) {  // how far this predator projects danger — drives the threat ring
   const b = d.sp.behavior || {};
