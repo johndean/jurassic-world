@@ -85,7 +85,7 @@ const MODEL_ANIMS = {};            // modelPath/url -> AnimationClip[] (for rigg
 // Models are WebP+quantized-compressed (gltf-transform), ~1-2 MB each, served from the repo
 // (was ~10-16 MB each off the Higgsfield CDN — 12x smaller, so dinos texture in near-instantly).
 const PLAYER_MODEL = "./assets/models/player.glb";
-const GROUND_TEX = "https://d8j0ntlcm91z4.cloudfront.net/user_3F4NGeiRVgVtbKFFkoeC4vFwa2f/hf_20260614_002025_be16d317-be18-49b8-95e3-b3ad06fb8dc2.png";
+const GROUND_TEX = "./assets/textures/jungle_floor.jpg";   // photoreal seamless jungle forest floor (dirt+moss+leaf litter)
 const _texLoader = new THREE.TextureLoader();
 // alpha-cutout billboard textures (transparent PNGs) for dense instanced jungle foliage
 const BILLBOARDS = {
@@ -750,10 +750,10 @@ function buildWorld() {
   gGeo.computeVertexNormals();
   const groundTex = _texLoader.load(GROUND_TEX);
   groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
-  groundTex.repeat.set(36, 36);
+  groundTex.repeat.set(22, 22);
   groundTex.colorSpace = THREE.SRGBColorSpace;
   groundTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, color: 0x93a487, roughness: 1, metalness: 0 });
+  const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, color: 0xcdc9bf, roughness: 1, metalness: 0 });
   // TRACK A: break the obvious 36x36 tiling with an in-shader detail octave + slope/height terrain blend.
   groundMat.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader
@@ -761,7 +761,7 @@ function buildWorld() {
       .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\n  vWPos = (modelMatrix * vec4(transformed,1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);");
     sh.fragmentShader = sh.fragmentShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vWPos; varying vec3 vWNrm;")
-      .replace("#include <map_fragment>", "#include <map_fragment>\n{\n  vec2 duv = vWPos.xz * 0.18;\n  vec3 det = texture2D(map, duv).rgb;\n  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * det * 1.9, 0.45);\n  float slope = 1.0 - clamp(vWNrm.y, 0.0, 1.0);\n  vec3 dirt = vec3(0.30, 0.24, 0.17);\n  diffuseColor.rgb = mix(diffuseColor.rgb, dirt, smoothstep(0.18, 0.5, slope));\n  float h = vWPos.y;\n  vec3 mud = vec3(0.20, 0.19, 0.14);\n  diffuseColor.rgb = mix(mud, diffuseColor.rgb, smoothstep(-2.0, 2.5, h));\n  vec3 dry = vec3(0.42, 0.42, 0.28);\n  diffuseColor.rgb = mix(diffuseColor.rgb, dry, smoothstep(6.0, 16.0, h) * 0.5);\n  float macro = sin(vWPos.x*0.06)*sin(vWPos.z*0.055)*0.5+0.5;\n  diffuseColor.rgb *= mix(0.82, 1.08, macro);\n}\n");
+      .replace("#include <map_fragment>", "#include <map_fragment>\n{\n  vec2 duv = vWPos.xz * 0.18;\n  vec3 det = texture2D(map, duv).rgb;\n  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * det * 1.25, 0.30);\n  float slope = 1.0 - clamp(vWNrm.y, 0.0, 1.0);\n  vec3 dirt = vec3(0.30, 0.24, 0.17);\n  diffuseColor.rgb = mix(diffuseColor.rgb, dirt, smoothstep(0.18, 0.5, slope));\n  float h = vWPos.y;\n  vec3 mud = vec3(0.20, 0.19, 0.14);\n  diffuseColor.rgb = mix(mud, diffuseColor.rgb, smoothstep(-2.0, 2.5, h));\n  vec3 dry = vec3(0.42, 0.42, 0.28);\n  diffuseColor.rgb = mix(diffuseColor.rgb, dry, smoothstep(6.0, 16.0, h) * 0.5);\n  float macro = sin(vWPos.x*0.06)*sin(vWPos.z*0.055)*0.5+0.5;\n  diffuseColor.rgb *= mix(0.82, 1.08, macro);\n}\n");
   };
   const ground = new THREE.Mesh(gGeo, groundMat);
   ground.receiveShadow = true;   // TRACK A
