@@ -609,10 +609,21 @@ function applyGfxTier(tier) {
 }
 function setGfxTier(tier) {   // live re-apply from the OPTIONS toggle, no reload
   applyGfxTier(tier);
-  if (sun) sun.castShadow = GFX.shadows;
   if (renderer) renderer.shadowMap.enabled = GFX.shadows;
+  if (sun) {
+    sun.castShadow = GFX.shadows;
+    if (GFX.shadows && sun.shadow && sun.shadow.map === null) { /* frustum already configured at build */ }
+  }
+  // re-traverse the live scene so every mesh casts/receives per the new tier (the build-time pass
+  // only ran for whatever tier was active at load; switching tiers must update existing meshes).
+  if (scene) scene.traverse(o => { if (o.isMesh || o.isSkinnedMesh) {
+    if (o.material && o.material.depthWrite === false) return;   // skip transparent FX (mist, blobs, water)
+    o.castShadow = GFX.shadows; o.receiveShadow = GFX.shadows;
+  } });
   if (cinePass) { cinePass.uniforms.uGrain.value = GFX.grain ? 1 : 0; cinePass.uniforms.uGrade.value = GFX.grade ? 1 : 0; cinePass.uniforms.uGodray.value = GFX.godrays ? 1 : 0; cinePass.uniforms.uDof.value = (GFX.tier === "high") ? 1 : 0; }
+  if (scene && scene.fog) scene.fog.density = (GFX.tier === "off") ? 0.009 : 0.0135;
   try { buildMist(); } catch (_) {}
+  try { buildFoliage(); } catch (_) {}
 }
 
 // CINEGRADE: one combined post pass -- soft god-ray lift toward the sun, filmic color grade
@@ -710,11 +721,11 @@ function buildWorld() {
 
   // lighting: low directional "moonlight" + dim ambient (formula blocks 3-4)
   sun = new THREE.DirectionalLight(0xd8e0e6, 1.02); sun.position.set(-60, 90, 40); scene.add(sun);
-  if (GFX.shadows) {   // TRACK A: tight ortho frustum around the play area -> crisp contact shadows
-    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-    const sc = sun.shadow.camera; sc.near = 1; sc.far = 320; sc.left = -120; sc.right = 120; sc.top = 120; sc.bottom = -120; sc.updateProjectionMatrix();
-    sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.6;
-  }
+  // TRACK A: ALWAYS configure the shadow frustum so switching to High later actually casts.
+  sun.shadow.mapSize.set(2048, 2048);
+  { const sc = sun.shadow.camera; sc.near = 1; sc.far = 320; sc.left = -120; sc.right = 120; sc.top = 120; sc.bottom = -120; sc.updateProjectionMatrix(); }
+  sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.6;
+  sun.castShadow = GFX.shadows;
   scene.add(new THREE.HemisphereLight(0x9aa6ad, 0x32383a, 0.55));
   scene.add(new THREE.AmbientLight(0x6b7378, 0.35));
   buildSky();
