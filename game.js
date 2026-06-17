@@ -96,6 +96,12 @@ const FOLIAGE = {
   tree: "./assets/models/tree.glb",
   fern: "./assets/models/fern.glb",
 };
+// TRACK A: real textured 3D environment props (Higgsfield image->3D, streamed from CDN, CORS *).
+const PROPS3D = {
+  rock: "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/40a5832e-7980-4162-b250-d9b548b0017b.glb",
+  fern: "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/543c77b4-b6f4-41dc-9474-3b42d7533c54.glb",
+  log:  "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/e5f01b57-8ec9-471f-9ff4-465e449201d2.glb",
+};
 const HELI_MODEL = "./assets/models/helicopter.glb";   // realistic evac chopper (streams in; procedural fallback)
 // photoreal hero ruin structures (streamed .glb); empty until generated. {url, x, z, targetH, yaw}
 const RUINS = {
@@ -492,6 +498,8 @@ async function preloadModels() {
     await loadWave(all, 5);                                // creatures reskin as they land (all now ~1-2 MB)
     const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.fern].filter(Boolean))];
     await loadWave(foliage, 2); buildFoliage();
+    const props = [...new Set([PROPS3D.rock, PROPS3D.fern, PROPS3D.log].filter(Boolean))];
+    await loadWave(props, 2); try { buildHeroProps(); } catch (e) { console.error("heroProps", e); }
     const ruins = [...new Set([RUINS.gate.url, RUINS.centre.url].filter(Boolean))];
     await loadWave(ruins, 2); buildRuinModels();
   })();
@@ -772,14 +780,14 @@ function buildWorld() {
 
   // INSTANCED rocks — boulders across the valley, clustered along the river, sitting on the terrain
   const dm = new THREE.Object3D();
-  const NR = 130;
+  const NR = 70;   // TRACK A: fewer, smaller procedural pebbles -- hero rocks (buildHeroProps) carry the big boulders now
   clearColliders();
-  const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0x5b615f, roughness: 1, flatShading: true }), NR);
+  const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0x5b615f, roughness: 1 }), NR);
   for (let i = 0; i < NR; i++) {
     let x, z;
     if (i % 3 === 0) { x = rand(-half + 10, half - 10); z = 48 + Math.sin(x * 0.02) * 28 + rand(-13, 13); }  // riverside
     else { x = rand(-half + 4, half - 4); z = rand(-half + 4, half - 4); }
-    const s = rand(0.7, 3.6) * (i % 3 === 0 ? 1.4 : 1);
+    const s = rand(0.5, 1.4) * (i % 3 === 0 ? 1.2 : 1);   // TRACK A: capped small
     dm.position.set(x, groundH(x, z) + s * 0.25, z); dm.rotation.set(rand(0, 3), rand(0, 6), rand(0, 3)); dm.scale.set(s, s * 0.7, s); dm.updateMatrix();
     rocks.setMatrixAt(i, dm.matrix);
     if (s > 1.35) { const h = s * 0.95, top = groundH(x, z) + h; addCollider(x, z, s * 0.6, { h, top, climb: h >= 1.6 && h <= 4.2 }); }   // big boulders are solid; mid ones are climbable; small stay steppable
@@ -1049,6 +1057,31 @@ function billboardLayer(texUrl, count, hMin, hMax, opts) {
 }
 // dense instanced jungle: ground grass + understory bushes + tall canopy + a perimeter jungle wall,
 // plus a few solid 3D trees for foreground variety. Billboards stream their textures async.
+// TRACK A: place real textured 3D props (rocks/ferns/logs) where they read best -- replaces the look
+// of the flat-shaded primitives with photoreal geometry. Rocks are solid (colliders); ferns/logs dress.
+let heroPropsGroup = null;
+function buildHeroProps() {
+  if (heroPropsGroup) { scene.remove(heroPropsGroup); heroPropsGroup = null; }
+  if (GFX.tier === "off") return;
+  const m = BIOME.map, half = m.size / 2; heroPropsGroup = new THREE.Group(); reseed(4242);
+  const place = (url, count, hMin, hMax, solid, rMul) => {
+    if (!MODELS[url]) return;
+    for (let i = 0; i < count; i++) {
+      let x = rand(-half + 8, half - 8), z = rand(-half + 8, half - 8);
+      if (Math.hypot(x, z) < 14) continue;
+      const h = rand(hMin, hMax);
+      const o = fitModel(MODELS[url].clone(true), h, rand(0, 6.28));
+      o.position.set(x, groundH(x, z), z);
+      heroPropsGroup.add(o);
+      if (solid) { const r = h * (rMul || 0.35); addCollider(x, z, r, { h: h * 0.7, top: groundH(x, z) + h * 0.7, climb: false }); }
+    }
+  };
+  const d = GFX.tier === "high" ? 1.0 : 0.5;
+  place(PROPS3D.rock, Math.round(14 * d), 1.6, 4.5, true, 0.40);   // hero boulders, solid
+  place(PROPS3D.fern, Math.round(40 * d), 0.8, 1.8, false);        // real ferns dressing the floor
+  place(PROPS3D.log,  Math.round(10 * d), 1.0, 1.7, true, 0.30);   // fallen logs, solid cover
+  scene.add(heroPropsGroup);
+}
 function buildFoliage() {
   const m = BIOME.map, half = m.size / 2;
   if (foliageGroup) scene.remove(foliageGroup);
