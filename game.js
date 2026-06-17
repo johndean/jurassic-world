@@ -537,7 +537,7 @@ let beaconMesh, beaconRing, beaconGlow, playerMesh;
 
 // camera orbit
 const cam = { yaw: 0, pitch: -0.18, dist: 7.2, height: 2.4 };
-let driveCamFP = true;        // in-vehicle camera: true = first-person (driver seat), false = third-person chase
+let driveCamFP = false;       // in-vehicle camera: false = third-person chase (default, reliable), true = first-person hood view
 let driveLookYaw = 0, driveLookPitch = 0;   // free-look offset from the drive heading (look around without steering)
 let driveLookT = 0;   // ms timestamp of last free-look input; recenter only after a pause
 
@@ -759,7 +759,7 @@ function buildWorld() {
   groundTex.repeat.set(22, 22);
   groundTex.colorSpace = THREE.SRGBColorSpace;
   groundTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, color: 0xcdc9bf, roughness: 1, metalness: 0 });
+  const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, color: 0xcdc9bf, roughness: 1, metalness: 0, side: THREE.DoubleSide });   // double-sided: no void if the camera grazes below the surface
   // TRACK A: break the obvious 36x36 tiling with an in-shader detail octave + slope/height terrain blend.
   groundMat.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader
@@ -775,8 +775,8 @@ function buildWorld() {
 
   // river: one translucent water plane; the terrain occludes it everywhere except the carved channel
   const water = new THREE.Mesh(new THREE.PlaneGeometry(m.size, m.size),
-    new THREE.MeshStandardMaterial({ color: 0x223f47, roughness: 0.08, metalness: 0.55, transparent: true, opacity: 0.92 }));   // TRACK A: wetter, more reflective
-  water.rotation.x = -Math.PI / 2; water.position.y = WATER_Y; scene.add(water);
+    new THREE.MeshStandardMaterial({ color: 0x223f47, roughness: 0.08, metalness: 0.55, transparent: true, opacity: 0.92, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, depthWrite: false }));   // double-sided + polygon-offset kills the hillside z-fight tearing
+  water.rotation.x = -Math.PI / 2; water.position.y = WATER_Y; water.renderOrder = -1; scene.add(water);
 
   // boundary walls (charcoal slabs) — soft fence of the valley
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x24282a, roughness: 1, flatShading: true });
@@ -3651,7 +3651,7 @@ function enterVehicle(j) {
   P.driveYaw = Math.atan2(Math.cos(j.rotation.y), -Math.sin(j.rotation.y));   // adopt the jeep's current facing (model +x = forward)
   cam.yaw = P.driveYaw; cam.pitch = -0.12;
   if (playerMesh) playerMesh.visible = false;
-  driveCamFP = true; driveLookYaw = 0; driveLookPitch = 0;
+  driveCamFP = false; driveLookYaw = 0; driveLookPitch = 0;
   { const bc = $("btnCam"); if (bc) bc.style.display = isTouch ? "flex" : "none"; }
   Audio.step("run"); toast("DRIVING · W/S throttle · A/D steer · " + (isTouch ? "VIEW toggles camera · ACTION" : "V toggles camera · E") + " to exit");
 }
@@ -4938,26 +4938,26 @@ function updateCamera() {
   if (P.driveVeh) {
     const j = P.driveVeh, hy = j.position.y;
     const s = Math.sin(P.driveYaw), c = Math.cos(P.driveYaw);   // truck heading
-    // free-look = OFFSET on the heading, so you can look around 360deg without changing steering.
+    // free-look = OFFSET on the heading, so you can look around without changing steering.
     const lookYaw = P.driveYaw + driveLookYaw, ls = Math.sin(lookYaw), lc = Math.cos(lookYaw);
-    const lookPitch = clamp(driveLookPitch, -0.5, 0.45), lp = Math.cos(lookPitch);
+    const lookPitch = clamp(driveLookPitch, -0.55, 0.5), lp = Math.cos(lookPitch);
     if (driveCamFP) {
-      // FIRST PERSON — driver-eye height at the cabin; the truck shell is HIDDEN so the view out is
-      // clear 360deg (the closed photogrammetry shell has no real interior to look through). A light
-      // cockpit overlay (dash + wheel) rides with the camera for the in-cab feel.
-      j.visible = false; showCockpit(true);
-      const ex = j.position.x - c * 0.3, ez = j.position.z + s * 0.3, ey = hy + 1.7;   // at the driver seat
-      const cy = Math.max(ey, groundH(ex, ez) + 1.3);
+      // FIRST PERSON — eye height just above the hood, looking out over the bonnet. The truck shell is
+      // hidden (no real interior in the photogrammetry shell) so the view is clean; no cockpit overlay
+      // meshes (those were occluding the windscreen as a grey slab).
+      j.visible = false;
+      const ex = j.position.x - c * 0.2, ez = j.position.z + s * 0.2;
+      const cy = hy + 2.05;                                  // above the bonnet line
       camera.position.set(ex, cy, ez);
-      camera.lookAt(ex + ls * lp * 14, cy + Math.sin(lookPitch) * 14, ez + lc * lp * 14);
-      updateCockpit(ex, cy, ez, lookYaw, lookPitch);
+      camera.lookAt(ex + ls * lp * 16, cy + Math.sin(lookPitch) * 16, ez + lc * lp * 16);
     } else {
-      j.visible = true; showCockpit(false);
-      // THIRD PERSON — chase cam behind/above, orbitable via free-look, clamped above the ground.
-      let cx = j.position.x - ls * 9.5, cz = j.position.z - lc * 9.5;
-      let cy = hy + 4.8 - Math.sin(lookPitch) * 6;
-      cy = Math.max(cy, groundH(cx, cz) + 1.4);
-      camera.position.lerp(tmp.set(cx, cy, cz), 0.18);
+      j.visible = true;
+      // THIRD PERSON — chase cam behind/above, orbitable via free-look, hard-clamped above terrain.
+      let cx = j.position.x - ls * 10, cz = j.position.z - lc * 10;
+      let cy = hy + 5.0 - Math.sin(lookPitch) * 5;
+      const floor = Math.max(groundH(cx, cz), WATER_Y) + 1.6;
+      if (cy < floor) cy = floor;
+      camera.position.lerp(tmp.set(cx, cy, cz), 0.2);
       camera.lookAt(j.position.x + s * 5, hy + 1.7, j.position.z + c * 5);
     }
     if (beaconRing) beaconRing.rotation.z += (S.extraction.called ? 0.08 : 0.02);
