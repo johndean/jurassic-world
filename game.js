@@ -486,7 +486,7 @@ function loadModelOnce(path) {
   if (!path) return Promise.resolve(null);
   if (MODELS[path]) return Promise.resolve(MODELS[path]);
   if (_loadingModels[path]) return _loadingModels[path];
-  const p = loadModel(path).then(m => { MODELS[path] = m; if (m) reskinDinos(path); if (m && path === JEEP_MODEL) { try { buildWreckTruck(); } catch(_){} try { swapDriveJeep(); } catch(_){} } delete _loadingModels[path]; return m; });
+  const p = loadModel(path).then(m => { MODELS[path] = m; if (m) reskinDinos(path); if (m && path === JEEP_MODEL) { try { buildWreckTruck(); } catch(_){} try { swapDriveJeep(); } catch(_){} } if (m && path === MAYA_MODEL) { try { swapMayaModel(); } catch(_){} } delete _loadingModels[path]; return m; });
   return (_loadingModels[path] = p);
 }
 // Fetch a batch of models at most `conc` at a time (bandwidth cap so one huge .glb can't starve the rest).
@@ -1398,7 +1398,7 @@ function buildSurvivor(x, z, col) {                       // Maya — real scien
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 6, 6), new THREE.MeshBasicMaterial({ color: 0x6fae6b, transparent: true, opacity: 0.25, depthWrite: false })); beam.position.y = 3; g.add(beam);
   addBlob(g, 0.55); scene.add(g);
   g.rotation.x = 0.5;                                     // slumped against the wreckage
-  return { mesh: g, x, z, following: false, slumped: true, halo, beam, wound };
+  return { mesh: g, x, z, following: false, slumped: true, halo, beam, wound, _realModel: g.userData.mdl || null };
 }
 function buildGenerator(g) {                              // power-station generator (BLACKOUT)
   const metal = _mm(0x6a6e68, 0.6, 0.6), dark = _mm(0x2a2d28, 0.8, 0.4);
@@ -1475,6 +1475,27 @@ function buildMissionSites() {
   }
   const sc = SURVIVORS[m.id];   // place the survivor at their site
   if (sc) { const ph = m.phases.find(p => p.site === sc.site); if (ph) { survivor = buildSurvivor(ph.x + sc.off[0], ph.z + sc.off[1], sc.color); survivor.name = sc.name; } }
+}
+function swapMayaModel() {   // model finished streaming after the capsule was built — swap in the real Maya
+  if (!survivor || !survivor.mesh || survivor._realModel || !MODELS[MAYA_MODEL]) return;
+  const g = survivor.mesh;
+  // hide the capsule placeholder primitives (keep halo/beam/wound/tag which are tracked separately)
+  for (const c of g.children.slice()) {
+    if (c.geometry && (c.geometry.type === "CapsuleGeometry" || c.geometry.type === "SphereGeometry") && c !== survivor.wound) {
+      // don't hide the halo ring (RingGeometry) or beam (CylinderGeometry) — only the body capsules/head sphere
+      if (c.geometry.type === "CapsuleGeometry" || (c.geometry.type === "SphereGeometry" && c.position.y > 1.3)) c.visible = false;
+    }
+  }
+  const mdl = MODELS[MAYA_MODEL].clone(true);
+  mdl.scale.setScalar(1); mdl.rotation.set(0, 0, 0); mdl.updateMatrixWorld(true);
+  let box = new THREE.Box3().setFromObject(mdl), size = new THREE.Vector3(); box.getSize(size);
+  mdl.scale.setScalar(1.78 / (size.y || 1));
+  mdl.updateMatrixWorld(true);
+  box = new THREE.Box3().setFromObject(mdl); const c = new THREE.Vector3(); box.getCenter(c);
+  mdl.position.x -= c.x; mdl.position.z -= c.z; mdl.position.y -= box.min.y;
+  mdl.rotation.y = Math.PI;
+  mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+  g.add(mdl); survivor._realModel = mdl;
 }
 function updateSurvivor(dt) {                             // slumped/waving idle → stands & follows once triggered
   if (!survivor) return;
