@@ -1,5 +1,6 @@
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
+import { DRACOLoader } from "./vendor/DRACOLoader.js";
 import { RoomEnvironment } from "./vendor/RoomEnvironment.js";
 import { EffectComposer } from "./vendor/postprocessing/EffectComposer.js";
 import { RenderPass } from "./vendor/postprocessing/RenderPass.js";
@@ -98,9 +99,9 @@ const FOLIAGE = {
 };
 // TRACK A: real textured 3D environment props (Higgsfield image->3D, streamed from CDN, CORS *).
 const PROPS3D = {
-  rock: "./assets/models/prop_rock.glb",
-  fern: "./assets/models/prop_fern.glb",
-  log:  "./assets/models/prop_log.glb",
+  rock: "./assets/models/prop_rock.glb?v=3",
+  fern: "./assets/models/prop_fern.glb?v=3",
+  log:  "./assets/models/prop_log.glb?v=3",
 };
 const HELI_MODEL = "./assets/models/helicopter.glb";   // realistic evac chopper (streams in; procedural fallback)
 // photoreal hero ruin structures (streamed .glb); empty until generated. {url, x, z, targetH, yaw}
@@ -464,6 +465,8 @@ let DIFF = DIFFICULTIES.survivor;   // default to the playable, balanced tier
 function setDifficulty(id) { if (DIFFICULTIES[id]) { DIFF = DIFFICULTIES[id]; try { localStorage.setItem("ja_diff", id); } catch (_) {} } }
 try { const _sd = localStorage.getItem("ja_diff"); if (_sd && DIFFICULTIES[_sd]) DIFF = DIFFICULTIES[_sd]; } catch (_) {}
 const _gltfLoader = new GLTFLoader();
+// Defensive: register a DRACOLoader so any Draco-compressed .glb (incl. stale-cached props) decodes instead of throwing.
+try { const _draco = new DRACOLoader(); _draco.setDecoderPath("./vendor/draco/"); _gltfLoader.setDRACOLoader(_draco); } catch (e) { console.warn("DRACOLoader init skipped:", e && e.message); }
 function loadModel(path) {
   return new Promise(res => _gltfLoader.load(path,
     gltf => { gltf.scene.traverse(o => { if (o.isMesh) o.frustumCulled = true; }); MODEL_ANIMS[path] = gltf.animations || []; if (/prop_/.test(path)) console.log("[PROP-LOAD-OK]", path); res(gltf.scene); },
