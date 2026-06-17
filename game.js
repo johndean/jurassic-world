@@ -4456,19 +4456,34 @@ function updateIntroHalo(dt) {
   intro.t += dt; const T = intro.t, tint = $("introTint"), cap = $("introCap"), big = $("introBig");
   radioStep(INTRO_RADIO_HALO);
   tint.style.background = "#1c2630"; tint.style.opacity = (0.34 + (Math.sin(T * 13) > 0.95 ? 0.42 : 0)).toFixed(2);   // storm + lightning flashes
-  if (T < 3.6) {                          // establishing shot: the C-130 cruising the storm front
+  // ── PHASE 1 (0-6.5s): cinematic establishing shot — the C-130 cruising the storm front ──
+  if (T < 6.5) {
     intro.phase = "approach";
-    if (intro.plane) { intro.plane.position.x += 6 * dt; intro.plane.position.z -= 1.1 * dt; }
+    if (intro.plane) { intro.plane.position.x += 3.2 * dt; intro.plane.position.z -= 0.6 * dt; intro.plane.rotation.z = Math.sin(T * 0.5) * 0.03; }
     if (playerMesh) playerMesh.visible = false;
     cap.style.opacity = "1"; big.style.opacity = "0";
     return;
   }
-  if (intro.plane) { scene.remove(intro.plane); intro.plane = null; }   // cut inside the cargo bay — drop the exterior model
+  // ── PHASE 2 (6.5-8.5s): FADE through — push toward the C-130's tail, fade to black, no box-pop ──
+  if (T < 8.5) {
+    intro.phase = "approach";
+    if (intro.plane) { intro.plane.position.x += 3.2 * dt; }
+    const f = (T - 6.5) / 2.0;            // 0..1 fade out then in
+    tint.style.background = "#0a0d10"; tint.style.opacity = (f < 0.5 ? f * 2 : (1 - f) * 2).toFixed(2);
+    cap.style.opacity = "0"; big.style.opacity = "0";
+    if (f >= 0.5 && intro.plane) { scene.remove(intro.plane); intro.plane = null; }   // swap to interior at the darkest point
+    return;
+  }
+  if (intro.plane) { scene.remove(intro.plane); intro.plane = null; }
   const lamps = intro.bay.userData.lamps;
-  if (T < 7.6) {                          // BAY · RED light — hold, seated/standing, ramp sealed
-    intro.phase = "bay"; cap.style.opacity = T > 6 ? "0" : "1"; placeOnPlatform(intro.bay); big.style.opacity = "0";
-    if (lamps) { setLamp(lamps.red, true, 0xff2a1a); setLamp(lamps.amber, false); setLamp(lamps.green, false); if (lamps.glow) { lamps.glow.color.setHex(0xff2a1a); lamps.glow.intensity = 1.4; } }
-  } else {                                // RAMP OPENS · AMBER standby → GREEN go ("GO GO GO")
+  // ── PHASE 3 (8.5-16s): inside the cargo bay — crew strapped in, RED light, hold (longer, builds tension) ──
+  if (T < 16) {
+    intro.phase = "bay"; placeOnPlatform(intro.bay); big.style.opacity = "0";
+    cap.style.opacity = T > 14.5 ? "0" : "1";
+    if (lamps) { setLamp(lamps.red, true, 0xff2a1a); setLamp(lamps.amber, false); setLamp(lamps.green, false); if (lamps.glow) { lamps.glow.color.setHex(0xff2a1a); lamps.glow.intensity = 1.4 + Math.sin(T * 4) * 0.3; } }
+    if (T > 9.5 && !intro._holdLine) { intro._holdLine = true; big.textContent = "● RED LIGHT — STAND BY"; big.style.opacity = "1"; }
+    if (T > 13) { big.textContent = "● RED LIGHT — STAND BY"; big.style.opacity = (T > 15 ? "0" : "1"); }
+  } else {                                // ── PHASE 4 (16s+): RAMP OPENS · AMBER → GREEN "GO GO" → jump ──
     intro.phase = "walk";
     const b = intro.bay.userData;
     if (b.rampPivot) { b.rampProg = Math.min(1, (b.rampProg || 0) + dt * 0.8); const p = b.rampProg; b.rampPivot.rotation.z = lerp(-1.45, 0.5, p); b.upperPivot.rotation.z = lerp(-1.45, 1.3, p); }
@@ -4480,7 +4495,7 @@ function updateIntroHalo(dt) {
     }
     const atRamp = platformWalk(dt, intro.bay, { xmin: -4.7, xmax: 5.0, zmin: -1.3, zmax: 1.3 }, "x");
     big.textContent = !rampReady ? "● STANDBY — RAMP OPENING" : (atRamp ? "▼ GO — JUMP" : (isTouch ? "GREEN LIGHT · MOVE TO THE RAMP" : "GREEN LIGHT · GO GO GO · W A S D")); big.style.opacity = "1";
-    if (rampReady && (intro.px >= 4.9 || (atRamp && jumpPressed()) || T >= 26)) { big.style.opacity = "0"; intro.descent = "chute"; beginCanopy(70, -70); }
+    if (rampReady && (intro.px >= 4.9 || (atRamp && jumpPressed()) || T >= 38)) { big.style.opacity = "0"; intro.descent = "chute"; beginCanopy(70, -70); }
   }
 }
 function updateIntroCameraHalo() {
