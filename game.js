@@ -1061,9 +1061,17 @@ function billboardLayer(texUrl, count, hMin, hMax, opts) {
 // TRACK A: place real textured 3D props (rocks/ferns/logs) where they read best -- replaces the look
 // of the flat-shaded primitives with photoreal geometry. Rocks are solid (colliders); ferns/logs dress.
 let heroPropsGroup = null;
+let _heroPropsLoading = false;
 function buildHeroProps() {
   if (heroPropsGroup) { scene.remove(heroPropsGroup); heroPropsGroup = null; }
   if (GFX.tier === "off") return;
+  // ensure the prop models are loaded; if any is missing, load them then rebuild once (no silent no-op)
+  const urls = [PROPS3D.rock, PROPS3D.fern, PROPS3D.log].filter(Boolean);
+  const missing = urls.filter(u => !MODELS[u]);
+  if (missing.length && !_heroPropsLoading) {
+    _heroPropsLoading = true;
+    Promise.all(missing.map(u => loadModelOnce(u))).then(() => { _heroPropsLoading = false; try { buildHeroProps(); } catch (e) { console.error("heroProps reload", e); } });
+  }
   const m = BIOME.map, half = m.size / 2; heroPropsGroup = new THREE.Group(); reseed(4242);
   const place = (url, count, hMin, hMax, solid, rMul) => {
     if (!MODELS[url]) return;
