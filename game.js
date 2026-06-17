@@ -769,7 +769,6 @@ function buildWorld() {
   });
 
   buildFoliage();
-  buildScatter();   // TRACK A: jungle-floor detail props
 
   // INSTANCED rocks — boulders across the valley, clustered along the river, sitting on the terrain
   const dm = new THREE.Object3D();
@@ -1050,47 +1049,6 @@ function billboardLayer(texUrl, count, hMin, hMax, opts) {
 }
 // dense instanced jungle: ground grass + understory bushes + tall canopy + a perimeter jungle wall,
 // plus a few solid 3D trees for foreground variety. Billboards stream their textures async.
-// TRACK A: scatter detail props -- fallen logs, rock clusters, stumps -- so the ground reads as a
-// living jungle floor instead of a bare plane. Solid (colliders) + shadow-casting, tier-scaled.
-let scatterGroup = null;
-function buildScatter() {
-  if (scatterGroup) { scene.remove(scatterGroup); scatterGroup = null; }
-  if (GFX.tier === "off") return;
-  const m = BIOME.map, half = m.size / 2;
-  scatterGroup = new THREE.Group(); reseed(8821);
-  const dens = GFX.tier === "high" ? 1.0 : 0.6;
-  const barkMat = new THREE.MeshStandardMaterial({ color: 0x4a3b2a, roughness: 1, flatShading: true });
-  const mossMat = new THREE.MeshStandardMaterial({ color: 0x3c4a2c, roughness: 1, flatShading: true });
-  const rockMat = new THREE.MeshStandardMaterial({ color: 0x5b615f, roughness: 1, flatShading: true });
-  // fallen logs (solid, you vault/round them)
-  const NLOG = Math.round(26 * dens);
-  for (let i = 0; i < NLOG; i++) {
-    let x = rand(-half + 8, half - 8), z = rand(-half + 8, half - 8); if (Math.hypot(x, z) < 14) continue;
-    const len = rand(3.5, 7), rad = rand(0.35, 0.7);
-    const log = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad * 0.85, len, 8), i % 2 ? mossMat : barkMat);
-    log.rotation.z = Math.PI / 2; log.rotation.y = rand(0, 6.28);
-    log.position.set(x, groundH(x, z) + rad * 0.8, z);
-    if (GFX.shadows) { log.castShadow = true; log.receiveShadow = true; }
-    scatterGroup.add(log); addCollider(x, z, rad + 0.3, { h: rad * 1.6, top: groundH(x, z) + rad * 1.6, climb: false });
-  }
-  // rock clusters (instanced, a few solid anchors each)
-  const NRC = Math.round(40 * dens);
-  const rockGeo = new THREE.DodecahedronGeometry(1, 0);
-  const rocks = new THREE.InstancedMesh(rockGeo, rockMat, NRC * 3);
-  if (GFX.shadows) { rocks.castShadow = true; rocks.receiveShadow = true; }
-  const dm = new THREE.Object3D(); let ri = 0;
-  for (let i = 0; i < NRC; i++) {
-    const cx = rand(-half + 6, half - 6), cz = rand(-half + 6, half - 6); if (Math.hypot(cx, cz) < 12) { for (let k=0;k<3;k++){ dm.position.set(0,-999,0); dm.updateMatrix(); rocks.setMatrixAt(ri++, dm.matrix);} continue; }
-    for (let k = 0; k < 3; k++) {
-      const ox = cx + rand(-2.2, 2.2), oz = cz + rand(-2.2, 2.2), sc = rand(0.4, 1.3);
-      dm.position.set(ox, groundH(ox, oz) + sc * 0.3, oz); dm.rotation.set(rand(0,3), rand(0,6), rand(0,3)); dm.scale.set(sc, sc * 0.8, sc); dm.updateMatrix();
-      rocks.setMatrixAt(ri++, dm.matrix);
-    }
-    addCollider(cx, cz, 1.4, { h: 1.0, top: groundH(cx, cz) + 1.0, climb: false });
-  }
-  rocks.instanceMatrix.needsUpdate = true; scatterGroup.add(rocks);
-  scene.add(scatterGroup);
-}
 function buildFoliage() {
   const m = BIOME.map, half = m.size / 2;
   if (foliageGroup) scene.remove(foliageGroup);
@@ -1599,7 +1557,6 @@ function buildFacility(bx, bz) {
     const pl = new THREE.PointLight(0xfff2c0, 1.2, 55); pl.position.set(px, 12, pz); g.add(pl);
   }
   for (const [px, pz] of [[-11, -10], [11, -10]]) { const rb = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), red); rb.position.set(px, 10.3, pz); g.add(rb); }
-  if (GFX.shadows) g.traverse(o => { if (o.isMesh && o.material && !o.material.emissive) { o.castShadow = true; o.receiveShadow = true; } else if (o.isMesh) { o.receiveShadow = true; } });   // TRACK A: facility grounds
   scene.add(g);
 }
 
