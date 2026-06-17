@@ -655,12 +655,12 @@ const CINEGRADE = {
     "void main(){",
     "  vec3 c = texture2D(tDiffuse, vUv).rgb;",
     "  if (uDof > 0.5){",
-    "    vec2 dd = vUv - 0.5; dd.x *= uAspect; float foc = smoothstep(0.16, 0.55, dot(dd,dd));",
+    "    vec2 dd = vUv - 0.5; dd.x *= uAspect; float foc = smoothstep(0.42, 0.95, dot(dd,dd));",
     "    if (foc > 0.01){",
     "      vec2 px = vec2(0.0015, 0.0015) * foc;",
     "      vec3 b = texture2D(tDiffuse, vUv + vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, vUv - vec2(px.x, 0.0)).rgb",
     "            + texture2D(tDiffuse, vUv + vec2(0.0, px.y)).rgb + texture2D(tDiffuse, vUv - vec2(0.0, px.y)).rgb;",
-    "      c = mix(c, b * 0.25, foc * 0.7);",
+    "      c = mix(c, b * 0.25, foc * 0.35);",
     "    }",
     "  }",
     "  if (uGodray > 0.5 && uSunVis > 0.001){",
@@ -673,7 +673,7 @@ const CINEGRADE = {
     "    float l = dot(c, vec3(0.299,0.587,0.114));",
     "    c = mix(vec3(l), c, 1.08);",
     "    c = (c - 0.5) * 1.06 + 0.5;",
-    "    c += vec3(0.025,0.060,0.072) * (1.0 - smoothstep(0.0,0.5,l));",
+    "    c += vec3(0.012,0.028,0.034) * (1.0 - smoothstep(0.0,0.5,l));",
     "    c += vec3(0.070,0.045,0.005) * smoothstep(0.55,1.0,l);",
     "  }",
     "  vec2 d = vUv - 0.5; float v = smoothstep(0.85, 0.18, dot(d,d)*uVig*2.0); c *= mix(0.74, 1.0, v);",
@@ -709,7 +709,7 @@ function initRenderer() {
   // post-processing: subtle cinematic bloom on bright/foggy areas; OutputPass does tone-map + sRGB
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.7, 0.6, 0.72); // TRACK A: richer glow on facility lights / wet water / fog
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.45, 0.6, 0.82); // TRACK A: richer glow on facility lights / wet water / fog
   composer.addPass(bloomPass);
   cinePass = new ShaderPass(CINEGRADE); cinePass.uniforms.uGrain.value = GFX.grain ? 1 : 0; cinePass.uniforms.uGrade.value = GFX.grade ? 1 : 0; cinePass.uniforms.uGodray.value = GFX.godrays ? 1 : 0; cinePass.uniforms.uDof.value = (GFX.tier === "high") ? 1 : 0; cinePass.uniforms.uAspect.value = innerWidth / innerHeight; composer.addPass(cinePass);   // TRACK A grade+grain+godrays
   composer.addPass(new OutputPass());
