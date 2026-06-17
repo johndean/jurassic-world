@@ -105,6 +105,7 @@ const PROPS3D = {
 };
 const HELI_MODEL = "./assets/models/helicopter.glb";   // realistic evac chopper (streams in; procedural fallback)
 const JEEP_MODEL = "./assets/models/defender.glb";   // real Land Rover Defender 110 (streams in; procedural fallback)
+const JEEP_YAW = 0;   // model-front -> local +x (drive-forward). Was -PI/2 (right side fwd); +90deg lands front on +x. Tune by +/- PI/2 if still wrong.
 // photoreal hero ruin structures (streamed .glb); empty until generated. {url, x, z, targetH, yaw}
 const RUINS = {
   gate: { url: "./assets/models/ruin_gate.glb", x: 0, z: -56, h: 12, yaw: 0 },
@@ -3467,8 +3468,10 @@ function buildJeep() {                                    // ranger Land Rover D
   if (MODELS[JEEP_MODEL]) {
     const j = new THREE.Group();
     const model = fitModel(MODELS[JEEP_MODEL].clone(true), 2.55, 0);   // ~2.55 m tall Defender 110
-    // image-to-3d front faces -Z; rotate so the vehicle front = local +x (matches driving + lights)
-    model.rotation.y = -Math.PI / 2;
+    // Orient the Defender so its FRONT (bonnet/headlights) points to local +x (the drive-forward axis).
+    // Symptom before: passenger-RIGHT side faced forward => model was 90 deg off. Rotating +90 deg (from
+    // -PI/2 to +PI/2) swings the bonnet from sideways onto +x. JEEP_YAW is exposed for quick tuning.
+    model.rotation.y = JEEP_YAW;
     j.add(model);
     const lights = [];
     for (const lz of [0.62, -0.62]) {
