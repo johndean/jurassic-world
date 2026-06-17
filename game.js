@@ -3975,6 +3975,7 @@ function buildBoat() {                                    // AAA military gunboa
     mdl.updateMatrixWorld(true);
     box = new THREE.Box3().setFromObject(mdl); const c = new THREE.Vector3(); box.getCenter(c);
     mdl.position.x -= c.x; mdl.position.z -= c.z; mdl.position.y -= box.min.y; mdl.position.y -= 0.35;  // hull sits at the waterline
+    mdl.rotation.y = Math.PI;   // BOW FIX: model bow faces -x; rotate 180 so it points +x = travel direction (no more reversing)
     mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
     b.add(mdl);
     // wake foam behind the stern (kept so the river ride reads with motion)
@@ -4052,7 +4053,7 @@ function positionBoatOnRiver(b, x, y) {                   // sit the boat on the
 }
 function placeRiverDinos(startX) {                         // stage herbivores on the banks — the Lost World reveal as you motor past
   const herb = dinos.filter(d => d.alive && d.sp && d.sp.diet !== "carnivore");
-  const spots = [[-42, 15], [-18, -15], [6, 16], [-56, -14], [-30, 14]];
+  const spots = [[-50, 19], [-34, -19], [-14, 20], [4, -19], [-58, -20]];   // alternating banks, spaced — a reveal as you motor past, not a wall
   for (let i = 0; i < Math.min(herb.length, spots.length); i++) {
     const d = herb[i], sx = spots[i][0], sz = riverCenter(sx) + spots[i][1];
     d.x = sx; d.z = sz; if (d.mesh) d.mesh.position.set(sx, groundH(sx, sz), sz);
@@ -4065,7 +4066,7 @@ function startIntroBoat() {
   scene.add(b); introProp = b;
   intro = { kind: "boat", t: 0, phase: "river", boat: b, bx: startX, dockX: 6, line: -1, shake: 0.04, camActive: true };
   introOpen("Jurassic Survival · Power Restoration · River insertion");
-  intro._prevFog = scene.fog; scene.fog = new THREE.FogExp2(new THREE.Color(0x9fb2b0), 0.012);   // dawn river haze (thinned so the boat & banks read)
+  intro._prevFog = scene.fog; scene.fog = new THREE.FogExp2(new THREE.Color(0xa8bab8), 0.0072);   // light dawn haze — pier visible down the channel, both banks read
   const dock = buildDock(intro.dockX); scene.add(dock); intro.dock = dock; introPersist.push(dock);   // pier PERSISTS (player stands on it; not cleared with the intro)
   placeRiverDinos(startX);
 }
@@ -4087,8 +4088,16 @@ function updateIntroBoat(dt) {
 function updateIntroCameraBoat() {
   const b = intro.boat; if (!b) return;
   const slope = riverSlope(intro.bx), inv = 1 / Math.hypot(1, slope), vx = inv, vz = slope * inv;   // unit travel dir
-  camera.position.lerp(tmp.set(b.position.x - vx * 8.5, b.position.y + 3.1, b.position.z - vz * 8.5), 0.06);
-  camera.lookAt(b.position.x + vx * 6, b.position.y + 1.1, b.position.z + vz * 6);
+  // cinematic riverine establishing shot: high 3/4 side angle so the RIVER reads — its length stretches
+  // toward the pier ahead, both banks visible. Offset to the side + up, looking down-river past the bow.
+  const sideX = -vz, sideZ = vx;   // perpendicular (river's left bank side)
+  const cx = b.position.x - vx * 6 + sideX * 7;
+  const cy = b.position.y + 5.5;
+  const cz = b.position.z - vz * 6 + sideZ * 7;
+  camera.up.set(0, 1, 0);
+  camera.position.lerp(tmp.set(cx, cy, cz), 0.05);
+  // look DOWN-river toward the pier (well ahead of the bow) so the channel + far dock fill the frame
+  camera.lookAt(b.position.x + vx * 18, b.position.y + 0.6, b.position.z + vz * 18);
   if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
 }
 function endIntroBoat() {
