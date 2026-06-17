@@ -720,14 +720,14 @@ function buildWorld() {
   const m = BIOME.map, half = m.size / 2;
 
   // lighting: low directional "moonlight" + dim ambient (formula blocks 3-4)
-  sun = new THREE.DirectionalLight(0xd8e0e6, 1.02); sun.position.set(-60, 90, 40); scene.add(sun);
+  sun = new THREE.DirectionalLight(0xe6ead8, 1.45); sun.position.set(-60, 95, 38); scene.add(sun);   // TRACK A: brighter warm key for shadow contrast
   // TRACK A: ALWAYS configure the shadow frustum so switching to High later actually casts.
   sun.shadow.mapSize.set(2048, 2048);
   { const sc = sun.shadow.camera; sc.near = 1; sc.far = 320; sc.left = -120; sc.right = 120; sc.top = 120; sc.bottom = -120; sc.updateProjectionMatrix(); }
   sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.6;
   sun.castShadow = GFX.shadows;
-  scene.add(new THREE.HemisphereLight(0x9aa6ad, 0x32383a, 0.55));
-  scene.add(new THREE.AmbientLight(0x6b7378, 0.35));
+  scene.add(new THREE.HemisphereLight(0xaab6bd, 0x35402f, 0.5));   // TRACK A: warmer sky / greener ground bounce
+  scene.add(new THREE.AmbientLight(0x5e676b, 0.22));   // TRACK A: lower flat fill so shadows + sun contrast read
   buildSky();
 
   // ground: rolling valley floor ringed by mountains, carved by a winding river (shaped by groundH)
@@ -742,7 +742,17 @@ function buildWorld() {
   groundTex.repeat.set(36, 36);
   groundTex.colorSpace = THREE.SRGBColorSpace;
   groundTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const ground = new THREE.Mesh(gGeo, new THREE.MeshStandardMaterial({ map: groundTex, color: 0x93a487, roughness: 1, metalness: 0 }));
+  const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, color: 0x93a487, roughness: 1, metalness: 0 });
+  // TRACK A: break the obvious 36x36 tiling with an in-shader detail octave + slope/height terrain blend.
+  groundMat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vWPos; varying vec3 vWNrm;")
+      .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\n  vWPos = (modelMatrix * vec4(transformed,1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);");
+    sh.fragmentShader = sh.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vWPos; varying vec3 vWNrm;")
+      .replace("#include <map_fragment>", "#include <map_fragment>\n{\n  vec2 duv = vWPos.xz * 0.18;\n  vec3 det = texture2D(map, duv).rgb;\n  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * det * 1.9, 0.45);\n  float slope = 1.0 - clamp(vWNrm.y, 0.0, 1.0);\n  vec3 dirt = vec3(0.30, 0.24, 0.17);\n  diffuseColor.rgb = mix(diffuseColor.rgb, dirt, smoothstep(0.18, 0.5, slope));\n  float h = vWPos.y;\n  vec3 mud = vec3(0.20, 0.19, 0.14);\n  diffuseColor.rgb = mix(mud, diffuseColor.rgb, smoothstep(-2.0, 2.5, h));\n  vec3 dry = vec3(0.42, 0.42, 0.28);\n  diffuseColor.rgb = mix(diffuseColor.rgb, dry, smoothstep(6.0, 16.0, h) * 0.5);\n  float macro = sin(vWPos.x*0.06)*sin(vWPos.z*0.055)*0.5+0.5;\n  diffuseColor.rgb *= mix(0.82, 1.08, macro);\n}\n");
+  };
+  const ground = new THREE.Mesh(gGeo, groundMat);
   ground.receiveShadow = true;   // TRACK A
   scene.add(ground);
 
