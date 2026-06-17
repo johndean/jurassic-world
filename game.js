@@ -105,6 +105,8 @@ const PROPS3D = {
 };
 const HELI_MODEL = "./assets/models/helicopter.glb";   // realistic evac chopper (streams in; procedural fallback)
 const JEEP_MODEL = "./assets/models/defender.glb";   // real Land Rover Defender 110 (streams in; procedural fallback)
+const EVAC_MODEL = "./assets/models/evac_facility.glb";   // iconic EVAC complex (visual shell; analytic collision/walk volumes overlaid)
+let FACILITY = null;   // {x,z,r,deck,padH,padX,padZ,padR,rampA} — traversal descriptor for facilityFloorAt()
 const JEEP_YAW = Math.PI;   // model-front -> local +x. At yaw=0 it drove rear-first (W=back, steer mirrored) => model front is at -x, so +180deg.
 // photoreal hero ruin structures (streamed .glb); empty until generated. {url, x, z, targetH, yaw}
 const RUINS = {
@@ -496,6 +498,7 @@ async function loadWave(paths, conc = 5) {
 async function preloadModels() {
   if (HELI_MODEL) loadModelOnce(HELI_MODEL);
   if (JEEP_MODEL) loadModelOnce(JEEP_MODEL);
+  if (EVAC_MODEL) loadModelOnce(EVAC_MODEL);
   const tier1 = [...new Set([PLAYER_MODEL, ...ROLES.map(r => r.model)].filter(Boolean))];
   await loadWave(tier1, 4);                                // the ONLY wait before the game is playable
   if (!playerMixer) buildPlayer();
@@ -1234,10 +1237,12 @@ function _pushOut(e, c, pr, feetY) {
 
 function buildBeacon() {
   const half = BIOME.map.size / 2;
-  const [a, b] = BIOME.extraction.beaconPickRingM;
-  const ang = rand(0, Math.PI * 2), d = rand(a, Math.min(b, half - 12));
-  const bx = Math.cos(ang) * d, bz = Math.sin(ang) * d;
+  // FIXED canonical EVAC complex location — a permanent landmark, never random.
+  // North shelf of the valley, pulled in from the edge; the iconic facility lives here every mission.
+  const FX = 0, FZ = -(half - 34);
+  const bx = FX, bz = FZ;
   S.extraction.beacon.x = bx; S.extraction.beacon.z = bz;
+  S.extraction.facility = { x: bx, z: bz };
 
   const g = new THREE.Group(); g.position.set(bx, groundH(bx, bz), bz);
   // SAFE ZONE ring on the ground — inside this radius predators disengage and you take no damage
@@ -1659,6 +1664,46 @@ function buildFacility(bx, bz) {
     const pl = new THREE.PointLight(0xfff2c0, 1.2, 55); pl.position.set(px, 12, pz); g.add(pl);
   }
   for (const [px, pz] of [[-11, -10], [11, -10]]) { const rb = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), red); rb.position.set(px, 10.3, pz); g.add(rb); }
+
+  // ===== REAL EVAC MODEL (visual) + TRAVERSAL VOLUMES (collision/walk) =====
+  // The pretty GLB is the LOOK; invisible analytic volumes make it playable:
+  // player + raptors walk on the raised deck, climb the ramp, weave around wall colliders.
+  const FOOT = 44;                 // facility footprint diameter in metres
+  const DECK = 2.6;                // walkable deck height above local ground
+  const PAD_H = 5.4;               // elevated helipad height
+  const baseY = groundH(bx, bz);
+  FACILITY = { x: bx, z: bz, r: FOOT * 0.5, deck: DECK, padH: PAD_H,
+               padX: bx - FOOT * 0.33, padZ: bz, padR: 6.0,
+               rampA: Math.atan2(-bz, -bx) };   // ramp faces valley centre
+  const procShell = g.children.slice();   // remember procedural meshes to hide when model arrives
+  function placeEvacModel() {
+    if (!MODELS[EVAC_MODEL]) return false;
+    // hide the procedural blocks (keep lights/strobes/pad-ring which read well)
+    for (const c of procShell) { if (c.geometry && (c.geometry.type === "BoxGeometry" || c.geometry.type === "CylinderGeometry")) c.visible = false; }
+    const mdl = fitModel(MODELS[EVAC_MODEL].clone(true), FOOT, 0);   // scale longest axis to footprint
+    mdl.position.y = 0; mdl.rotation.y = Math.atan2(-bx, -bz);
+    mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+    g.add(mdl);
+    return true;
+  }
+  if (!placeEvacModel()) loadModelOnce(EVAC_MODEL).then(m => { if (m) placeEvacModel(); });
+
+  // --- walkable deck collider footprint registered for floor sampling (facilityFloorAt) ---
+  // --- perimeter buttress + inner-hub WALL colliders: real chase geometry, you weave around them ---
+  const RING = FOOT * 0.46;
+  for (let i = 0; i < 12; i++) {                    // outer buttress ring (gaps = entrances)
+    if (i === 0 || i === 6) continue;               // leave two ramp/entrance gaps
+    const a = (i / 12) * Math.PI * 2;
+    addCollider(bx + Math.cos(a) * RING, bz + Math.sin(a) * RING, 1.6, { tall: true });
+  }
+  const HUB = FOOT * 0.13;
+  for (let i = 0; i < 8; i++) {                     // central octagonal hub
+    const a = (i / 8) * Math.PI * 2;
+    addCollider(bx + Math.cos(a) * HUB, bz + Math.sin(a) * HUB, 1.3, { tall: true });
+  }
+  // helipad support pylon collider (walk around its base)
+  addCollider(FACILITY.padX, FACILITY.padZ, 3.4, { tall: true });
+
   scene.add(g);
 }
 
@@ -1833,6 +1878,28 @@ function groundH(x, z) {
   if (dRiver < RIVER_HALF) { const t = dRiver / RIVER_HALF; h -= (1 - t * t) * 6.0; }   // wide, smooth-banked navigable channel
   return h;
 }
+// Walkable surface height: terrain PLUS the EVAC facility deck/helipad where applicable.
+// Lets the player AND raptors stand on / run across / climb the structure (traversal volumes).
+function facilityFloorAt(x, z) {
+  if (!FACILITY) return null;
+  const dx = x - FACILITY.x, dz = z - FACILITY.z, d = Math.hypot(dx, dz);
+  if (d > FACILITY.r + 6) return null;                       // outside footprint
+  const base = groundH(FACILITY.x, FACILITY.z);
+  // elevated helipad disc (highest level)
+  const pd = Math.hypot(x - FACILITY.padX, z - FACILITY.padZ);
+  if (pd < FACILITY.padR) return base + FACILITY.padH;
+  // main raised deck inside the inner radius
+  const inner = FACILITY.r - 3.5;
+  if (d < inner) return base + FACILITY.deck;
+  // ramp band around the rim: blend deck->ground so you can walk up onto it
+  if (d < FACILITY.r + 3) {
+    const t = 1 - (d - inner) / (FACILITY.r + 3 - inner);    // 1 at deck edge, 0 at outer
+    return Math.max(groundH(x, z), base + FACILITY.deck * Math.max(0, t));
+  }
+  return null;
+}
+// max(terrain, facility) — the surface things actually stand on.
+function walkH(x, z) { const f = facilityFloorAt(x, z); const g = groundH(x, z); return f != null && f > g ? f : g; }
 function dist2(ax, az, bx, bz) { const dx = ax - bx, dz = az - bz; return dx * dx + dz * dz; }
 function bearingTo(ax, az, bx, bz) {
   const ang = Math.atan2(bx - ax, -(bz - az)) / DEG; const d = (ang + 360) % 360;
@@ -1884,7 +1951,7 @@ function updateTraversal(dt, wx, wz, moving) {
   }
   // auto-vault: jog into a knee/waist-high obstacle while grounded → assisted hop over it
   if (moving && P.air <= 0.02 && P.vy <= 0) {
-    const feetY = groundH(P.x, P.z) + P.air;
+    const feetY = walkH(P.x, P.z) + P.air;
     if (lowObstacleAhead(P, wx, wz, feetY)) { P.vy = JUMP_V * 0.8; P.air = 0.001; }
   }
   // airborne: integrate gravity over the ground
@@ -2949,7 +3016,7 @@ const isFlier = sp => sp.role === "flier";          // wheels overhead, dives to
 // Per-archetype vertical placement: fliers cruise at altitude (dive when hunting), aquatic species
 // float at the surface over deep water, everyone else stands on the terrain.
 function dinoY(a) {
-  const g = groundH(a.x, a.z);
+  const g = (isFlier(a.sp) || isAquatic(a.sp)) ? groundH(a.x, a.z) : walkH(a.x, a.z);
   if (isFlier(a.sp)) { const tgt = (a.state === "Chase" || a.state === "Attack") ? 2.4 : 9; a.fly = lerp(a.fly == null ? 9 : a.fly, tgt, 0.04); return g + a.fly + Math.sin(S.t * 2 + a.x) * 0.25; }
   if (isAquatic(a.sp) && WATER_Y - g > 1.0) return WATER_Y - 0.4 + Math.sin(S.t * 1.6 + a.z) * 0.08;   // swimming at the surface
   if (WATER_Y - g > 0.8 && !isFlier(a.sp)) { const sink = Math.min(0.7, (sp => (sp.greybox && sp.greybox.standH ? sp.greybox.standH : 2) * 0.35)(a.sp)); return Math.max(g, WATER_Y - sink) + Math.sin(S.t * 1.5 + a.x) * 0.05; }   // land animal wading/swimming — float at the surface, don't sink through the bed
