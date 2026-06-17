@@ -804,6 +804,38 @@ function buildWorld() {
   buildTowers();
   buildPlayer();
 
+  // ===== PROP SELF-TEST (temporary diagnostic) — parks 1 huge copy of each prop at spawn + on-screen verdict =====
+  (function propSelfTest(){
+    try {
+      var spots = [ ["rock", PROPS3D.rock, -10, -14, 6], ["fern", PROPS3D.fern, 0, -16, 6], ["log", PROPS3D.log, 10, -14, 6] ];
+      var stg = document.getElementById("propSelfTestHUD");
+      if (!stg) { stg = document.createElement("div"); stg.id = "propSelfTestHUD";
+        stg.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:99999;font:bold 12px monospace;color:#0f0;background:rgba(0,0,0,.78);padding:8px 10px;border:1px solid #0f0;border-radius:6px;white-space:pre;max-width:46vw;pointer-events:none;line-height:1.45";
+        document.body.appendChild(stg); }
+      var lines = ["PROP SELF-TEST  build B:2026-06-17-x"];
+      var grp = new THREE.Group(); grp.name = "propSelfTest"; scene.add(grp);
+      spots.forEach(function(s){
+        var name=s[0], url=s[1], x=s[2], z=s[3], H=s[4];
+        loadModelOnce(url).then(function(mdl){
+          if (!mdl) { lines.push(name+": LOAD FAILED (null)"); stg.textContent=lines.join("\n"); return; }
+          try {
+            var o = fitModel(mdl.clone(true), H, 0);
+            o.position.set(x, (typeof groundH==="function"?groundH(x,z):0), z);
+            o.traverse(function(n){ if(n.isMesh){ n.frustumCulled=false; } });
+            grp.add(o);
+            var wb = new THREE.Box3().setFromObject(o), ws = new THREE.Vector3(); wb.getSize(ws);
+            var mat="?", vis="?", meshN=0;
+            o.traverse(function(n){ if(n.isMesh){ meshN++; vis=n.visible; if(n.material){ mat=(n.material.type||"?")+(n.material.map?"+tex":"+NOtex")+(n.material.transparent?"/transp":""); } } });
+            lines.push(name+": OK meshes="+meshN+" vis="+vis+" size="+ws.x.toFixed(1)+"x"+ws.y.toFixed(1)+"x"+ws.z.toFixed(1)+" mat="+mat);
+          } catch(e){ lines.push(name+": fitModel ERR "+(e&&e.message)); }
+          stg.textContent=lines.join("\n");
+        }).catch(function(e){ lines.push(name+": PROMISE ERR "+(e&&e.message)); stg.textContent=lines.join("\n"); });
+      });
+      stg.textContent=lines.join("\n");
+    } catch(e){ console.error("propSelfTest fatal", e); }
+  })();
+  // ===== END PROP SELF-TEST =====
+
   buildBeacon();
   buildMist();   // TRACK A
   // blob shadow pool for dinos
