@@ -1240,7 +1240,7 @@ function buildBeacon() {
   const half = BIOME.map.size / 2;
   // FIXED canonical EVAC complex location — a permanent landmark, never random.
   // North shelf of the valley, pulled in from the edge; the iconic facility lives here every mission.
-  const FX = 0, FZ = -(half - 34);
+  const FX = -(half - 40), FZ = -(half - 30);   // deep NW corner — isolated landmark, far from towers/wreck
   const bx = FX, bz = FZ;
   S.extraction.beacon.x = bx; S.extraction.beacon.z = bz;
   S.extraction.facility = { x: bx, z: bz };
@@ -1321,7 +1321,7 @@ function buildTower(x, z, dir) {
 }
 function buildTowers() {
   if (TOWERS.length) return;
-  const spots = [[40, 34], [-46, -16], [14, 62], [-30, 50]];
+  const spots = [[44, 30], [40, -28], [14, 62], [-22, 54]];   // spread out; none crowd the NW facility
   for (const [x, z] of spots) buildTower(x, z, Math.atan2(-x, -z) + (rand(-0.5, 0.5)));   // zip aims roughly toward open valley
 }
 
@@ -1688,13 +1688,17 @@ function buildFacility(bx, bz) {
     const horiz = Math.max(size.x, size.z) || 1;
     mdl.scale.setScalar(FOOT / horiz);
     mdl.updateMatrixWorld(true);
-    // re-measure and seat the BASE on the ground (centre x/z, bottom at y=0 of the facility group)
+    mdl.rotation.y = Math.atan2(-bx, -bz);
+    mdl.updateMatrixWorld(true);
+    // re-measure AFTER rotation, seat the BASE on the ground, then sink slightly so it beds into terrain (no gap)
     box = new THREE.Box3().setFromObject(mdl);
     const c = new THREE.Vector3(); box.getCenter(c);
-    mdl.position.x -= c.x; mdl.position.z -= c.z; mdl.position.y -= box.min.y;   // base sits exactly on ground
-    mdl.rotation.y = Math.atan2(-bx, -bz);
+    mdl.position.x -= c.x; mdl.position.z -= c.z;
+    mdl.position.y -= box.min.y;          // lowest point of the mesh now at y=0
+    mdl.position.y -= 1.2;                 // bed it INTO the ground so the base never floats
     mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
     g.add(mdl);
+    console.log("[EVAC] seated at facility-group y", g.position.y.toFixed(2), "model base offset", mdl.position.y.toFixed(2), "bounds", box.min.y.toFixed(2), box.max.y.toFixed(2));
     return true;
   }
   if (!placeEvacModel()) loadModelOnce(EVAC_MODEL).then(m => { if (m) placeEvacModel(); });
@@ -2607,7 +2611,7 @@ function decide(a, P) {
   const sp = a.sp, bb = a.bb;
   if (isDown(a)) { a.state = "Down"; return; }   // sedated / trapped → no AI
   // feeding at a kill / resting — but a close player snaps the predator out of it (stays a threat)
-  if (a.feedT > 0 && dist2(P.x, P.z, a.x, a.z) > 18 * 18) { a.state = "Feed"; return; }
+  if (a.feedT > 0 && dist2(P.x, P.z, a.x, a.z) > 12 * 12) { a.state = "Feed"; return; }
   if (a.restT > 0 && dist2(P.x, P.z, a.x, a.z) > 30 * 30) { a.state = "Rest"; return; }
   if (a.feedT > 0 || a.restT > 0) { a.feedT = 0; a.restT = 0; }
   const per = (a.lod === "full") ? perceive(a, P) : { seen: false, heard: false, d: 999 };
@@ -2650,7 +2654,7 @@ function decide(a, P) {
   if (prey && Math.hypot(prey.x - a.x, prey.z - a.z) < sp.senses.sightRangeM) { a.state = "Chase"; bb.lastSeenX = prey.x; bb.lastSeenZ = prey.z; bb.preyHunt = prey; }
   else if (a.thirst > 0.75 && dist2(P.x, P.z, a.x, a.z) > 36 * 36) { a.state = "Drink"; bb.preyHunt = null; }       // Phase 12: thirsty → head to water
   else if (a.fatigue > 0.8 && dist2(P.x, P.z, a.x, a.z) > 55 * 55) { a.state = "Rest"; a.restT = rand(5, 9); bb.preyHunt = null; }  // exhausted → lie up
-  else if (a.hunger > 0.7 && dist2(P.x, P.z, a.x, a.z) > 30 * 30) { a.state = "Feed"; a.feedT = rand(5, 9); bb.preyHunt = null; }   // hungry → feed/scavenge (visible eating)
+  else if (a.hunger > 0.45 && dist2(P.x, P.z, a.x, a.z) > 16 * 16) { a.state = "Feed"; a.feedT = rand(6, 11); bb.preyHunt = null; }   // hungry → feed/scavenge (visible eating, lower bar)
   else if (rng() < 0.05 && dist2(P.x, P.z, a.x, a.z) > 60 * 60) { a.state = "Rest"; a.restT = rand(3, 7); bb.preyHunt = null; }   // calm & far → lie up
   else { a.state = "Patrol"; bb.preyHunt = null; }
 }
@@ -2718,6 +2722,7 @@ function steer(a, dt, P) {
   a.thirst = clamp(a.thirst + dt * 0.008, 0, 1);
   a.fatigue = clamp(a.fatigue + (moving12 ? dt * 0.012 : -dt * 0.02), 0, 1);
   if (a.state === "Feed" || a.state === "Graze") a.hunger = clamp(a.hunger - dt * 0.10, 0, 1);
+  else a.hunger = clamp(a.hunger + dt * 0.012, 0, 1);   // hunger climbs so feeding recurs (visible eating)
   if (a.state === "Drink") a.thirst = clamp(a.thirst - dt * 0.18, 0, 1);
   if (a.state === "Rest") a.fatigue = clamp(a.fatigue - dt * 0.10, 0, 1);
   let tx = a.x, tz = a.z, run = false, sepW = 1;
@@ -2875,18 +2880,19 @@ function animateDino(a, dt, turnSpeed, vmag2) {
     }
   }
   // ---- roar: big predators bellow when the player is near (every ~20s, ANY state) AND more often in combat ----
-  const bigPredator = (isApex(sp) || sp.combat.health >= 300);
-  if (bigPredator && a.lod === "full") {
+  const predator = (sp.diet !== "herbivore");
+  if (predator && a.lod !== "cull") {
     const dxp = a.x - P.x, dzp = a.z - P.z, dd = Math.hypot(dxp, dzp) || 1;
     const engaged = (a.state === "Chase" || a.state === "Attack");
-    const near = dd < 75;                                  // "near the player" radius
+    const near = dd < 90;                                  // "near the player" radius (widened)
     a.roarCd -= dt;
     if (a.roarCd <= 0 && (engaged || near)) {
-      a.roar = 1.2;
-      // engaged → bellow often (6-11s); just nearby & calm → territorial roar every ~20s
-      a.roarCd = engaged ? rand(6, 11) : rand(18, 22);
-      if (dd < 140) Audio.roarAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw));   // attenuated + panned by bearing
-      if (dd < 50 && isApex(sp)) camShake = Math.min(0.6, camShake + 0.32 * (1 - dd / 50));   // felt roar
+      a.roar = 1.3;
+      // engaged → bellow often (5-9s); just nearby → territorial roar every ~14-18s
+      a.roarCd = engaged ? rand(5, 9) : rand(14, 18);
+      Audio.init();   // ensure the audio context is running so the roar is audible
+      if (dd < 160) Audio.roarAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw));   // attenuated + panned by bearing
+      if (dd < 60) camShake = Math.min(0.6, camShake + 0.30 * (1 - dd / 60));   // felt roar
     }
   }
   // heavy-predator footfalls thud through the ground when one is close (positional)
