@@ -804,37 +804,6 @@ function buildWorld() {
   buildTowers();
   buildPlayer();
 
-  // ===== PROP SELF-TEST (temporary diagnostic) — parks 1 huge copy of each prop at spawn + on-screen verdict =====
-  (function propSelfTest(){
-    try {
-      var spots = [ ["rock", PROPS3D.rock, -10, -14, 6], ["fern", PROPS3D.fern, 0, -16, 6], ["log", PROPS3D.log, 10, -14, 6] ];
-      var stg = document.getElementById("propSelfTestHUD");
-      if (!stg) { stg = document.createElement("div"); stg.id = "propSelfTestHUD";
-        stg.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:99999;font:bold 12px monospace;color:#0f0;background:rgba(0,0,0,.78);padding:8px 10px;border:1px solid #0f0;border-radius:6px;white-space:pre;max-width:46vw;pointer-events:none;line-height:1.45";
-        document.body.appendChild(stg); }
-      var lines = ["PROP SELF-TEST  build B:2026-06-17-x"];
-      var grp = new THREE.Group(); grp.name = "propSelfTest"; scene.add(grp);
-      spots.forEach(function(s){
-        var name=s[0], url=s[1], x=s[2], z=s[3], H=s[4];
-        loadModelOnce(url).then(function(mdl){
-          if (!mdl) { lines.push(name+": LOAD FAILED (null)"); stg.textContent=lines.join("\n"); return; }
-          try {
-            var o = fitModel(mdl.clone(true), H, 0);
-            o.position.set(x, (typeof groundH==="function"?groundH(x,z):0), z);
-            o.traverse(function(n){ if(n.isMesh){ n.frustumCulled=false; } });
-            grp.add(o);
-            var wb = new THREE.Box3().setFromObject(o), ws = new THREE.Vector3(); wb.getSize(ws);
-            var mat="?", vis="?", meshN=0;
-            o.traverse(function(n){ if(n.isMesh){ meshN++; vis=n.visible; if(n.material){ mat=(n.material.type||"?")+(n.material.map?"+tex":"+NOtex")+(n.material.transparent?"/transp":""); } } });
-            lines.push(name+": OK meshes="+meshN+" vis="+vis+" size="+ws.x.toFixed(1)+"x"+ws.y.toFixed(1)+"x"+ws.z.toFixed(1)+" mat="+mat);
-          } catch(e){ lines.push(name+": fitModel ERR "+(e&&e.message)); }
-          stg.textContent=lines.join("\n");
-        }).catch(function(e){ lines.push(name+": PROMISE ERR "+(e&&e.message)); stg.textContent=lines.join("\n"); });
-      });
-      stg.textContent=lines.join("\n");
-    } catch(e){ console.error("propSelfTest fatal", e); }
-  })();
-  // ===== END PROP SELF-TEST =====
 
   buildBeacon();
   buildMist();   // TRACK A
@@ -1095,6 +1064,24 @@ function billboardLayer(texUrl, count, hMin, hMax, opts) {
 // plus a few solid 3D trees for foreground variety. Billboards stream their textures async.
 // TRACK A: place real textured 3D props (rocks/ferns/logs) where they read best -- replaces the look
 // of the flat-shaded primitives with photoreal geometry. Rocks are solid (colliders); ferns/logs dress.
+// Robust prop fitter: scale a static .glb so its LARGEST world dimension equals targetSize.
+// Unlike fitModel (which scales by height Y), this handles long logs and quantized meshes correctly,
+// so a "fallen log" stays log-sized instead of exploding to 21m. Centers x/z, drops feet to y=0.
+function fitProp(model, targetSize, yawOffset) {
+  const g = new THREE.Group();
+  model.scale.setScalar(1); model.rotation.y = yawOffset || 0; model.updateMatrixWorld(true);
+  let box = new THREE.Box3().setFromObject(model);
+  const size = new THREE.Vector3(); box.getSize(size);
+  const largest = Math.max(size.x, size.y, size.z) || 1;
+  model.scale.setScalar(targetSize / largest);
+  model.updateMatrixWorld(true);
+  box = new THREE.Box3().setFromObject(model);
+  const c = new THREE.Vector3(); box.getCenter(c);
+  model.position.x -= c.x; model.position.z -= c.z; model.position.y -= box.min.y;
+  g.add(model);
+  if (GFX.shadows) g.traverse(o => { if (o.isMesh || o.isSkinnedMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
 let heroPropsGroup = null;
 let _heroPropsLoading = false;
 function buildHeroProps() {
@@ -1108,23 +1095,23 @@ function buildHeroProps() {
     Promise.all(missing.map(u => loadModelOnce(u))).then(() => { _heroPropsLoading = false; try { buildHeroProps(); } catch (e) { console.error("heroProps reload", e); } });
   }
   const m = BIOME.map, half = m.size / 2; heroPropsGroup = new THREE.Group(); reseed(4242);
-  const place = (url, count, hMin, hMax, solid, rMul) => {
+  // sMin/sMax = target LARGEST-dimension in metres (human ~1.8m tall for scale reference).
+  const place = (url, count, sMin, sMax, solid, rMul) => {
     if (!MODELS[url]) return;
     for (let i = 0; i < count; i++) {
       let x = rand(-half + 8, half - 8), z = rand(-half + 8, half - 8);
-      if (Math.hypot(x, z) < 14) continue;
-      const h = rand(hMin, hMax);
-      const o = fitModel(MODELS[url].clone(true), h, rand(0, 6.28));
+      if (Math.hypot(x, z) < 16) continue;          // keep props off the spawn pad
+      const s = rand(sMin, sMax);
+      const o = fitProp(MODELS[url].clone(true), s, rand(0, 6.28));
       o.position.set(x, groundH(x, z), z);
       heroPropsGroup.add(o);
-      if (solid) { const r = h * (rMul || 0.35); addCollider(x, z, r, { h: h * 0.7, top: groundH(x, z) + h * 0.7, climb: false }); }
+      if (solid) { const r = s * (rMul || 0.30); addCollider(x, z, r, { h: s * 0.5, top: groundH(x, z) + s * 0.5, climb: false }); }
     }
   };
   const d = GFX.tier === "high" ? 1.0 : 0.5;
-  console.log("[HEROPROPS] tier=" + GFX.tier + " rockLoaded=" + !!MODELS[PROPS3D.rock] + " fernLoaded=" + !!MODELS[PROPS3D.fern] + " logLoaded=" + !!MODELS[PROPS3D.log]);
-  place(PROPS3D.rock, Math.round(14 * d), 1.6, 4.5, true, 0.40);   // hero boulders, solid
-  place(PROPS3D.fern, Math.round(40 * d), 0.8, 1.8, false);        // real ferns dressing the floor
-  place(PROPS3D.log,  Math.round(10 * d), 1.0, 1.7, true, 0.30);   // fallen logs, solid cover
+  place(PROPS3D.rock, Math.round(10 * d), 1.0, 2.2, true, 0.34);   // boulders, human-scale, solid
+  place(PROPS3D.fern, Math.round(30 * d), 0.7, 1.4, false);        // knee-to-waist ferns dressing the floor
+  place(PROPS3D.log,  Math.round(8 * d),  2.2, 3.6, true, 0.28);   // fallen logs ~human-length, solid cover
   scene.add(heroPropsGroup);
 }
 function buildFoliage() {
@@ -1135,17 +1122,17 @@ function buildFoliage() {
   reseed(1337);
   // TRACK A: density scales with the graphics tier (mobile stays light; high = lush key-art canopy)
   const fol = GFX.tier === "high" ? 1.6 : GFX.tier === "low" ? 1.0 : 0.7;
-  if (BILLBOARDS.grass) foliageGroup.add(billboardLayer(BILLBOARDS.grass, Math.round(2400 * fol), 0.5, 1.5, { minR: 6 }));
+  if (BILLBOARDS.grass) foliageGroup.add(billboardLayer(BILLBOARDS.grass, Math.round(2600 * fol), 0.4, 1.1, { minR: 5 }));
   if (BILLBOARDS.bush) {
-    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(1000 * fol), 1.6, 4.5, { minR: 8 }));                    // understory
-    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(380 * fol), 7, 14, { minR: 14, color: 0xb9cdb6 }));      // tall canopy
-    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(600 * fol), 10, 20, { edge: true, minR: 10, color: 0xacc2ac })); // perimeter jungle wall
+    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(900 * fol), 1.2, 2.6, { minR: 10 }));                   // understory ferns, knee-to-chest
+    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(300 * fol), 4, 7, { minR: 22, color: 0xb9cdb6 }));      // mid canopy, set back
+    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(520 * fol), 8, 15, { edge: true, minR: 16, color: 0xacc2ac })); // perimeter jungle wall, far
   }
   // TRACK A: scattered ferns hugging the camera for the dense-foreground key-art read
   if (MODELS[FOLIAGE.fern]) { const NF = Math.round(46 * fol); for (let i = 0; i < NF; i++) {
     let x, z, ok = 0;
     do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); } while (Math.hypot(x, z) < 8 && ++ok < 8);
-    const fr = fitModel(MODELS[FOLIAGE.fern].clone(true), rand(0.8, 2.0), rand(0, 6.28));
+    const fr = fitProp(MODELS[FOLIAGE.fern].clone(true), rand(0.6, 1.3), rand(0, 6.28));
     fr.position.set(x, groundH(x, z), z); foliageGroup.add(fr);
   } }
   if (MODELS[FOLIAGE.tree]) { const NT = Math.round(30 * fol); for (let i = 0; i < NT; i++) {   // solid 3D trees for close-up variety
