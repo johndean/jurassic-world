@@ -481,7 +481,7 @@ function loadModelOnce(path) {
   if (!path) return Promise.resolve(null);
   if (MODELS[path]) return Promise.resolve(MODELS[path]);
   if (_loadingModels[path]) return _loadingModels[path];
-  const p = loadModel(path).then(m => { MODELS[path] = m; if (m) reskinDinos(path); delete _loadingModels[path]; return m; });
+  const p = loadModel(path).then(m => { MODELS[path] = m; if (m) reskinDinos(path); if (m && path === JEEP_MODEL) { try { buildWreckTruck(); } catch(_){} try { swapDriveJeep(); } catch(_){} } delete _loadingModels[path]; return m; });
   return (_loadingModels[path] = p);
 }
 // Fetch a batch of models at most `conc` at a time (bandwidth cap so one huge .glb can't starve the rest).
@@ -539,6 +539,7 @@ let beaconMesh, beaconRing, beaconGlow, playerMesh;
 const cam = { yaw: 0, pitch: -0.18, dist: 7.2, height: 2.4 };
 let driveCamFP = true;        // in-vehicle camera: true = first-person (driver seat), false = third-person chase
 let driveLookYaw = 0, driveLookPitch = 0;   // free-look offset from the drive heading (look around without steering)
+let driveLookT = 0;   // ms timestamp of last free-look input; recenter only after a pause
 
 /* ---------------------------------------------------------------- boot ---- */
 // visible boot-failure banner — so a load/graphics failure is never a silent blank menu
@@ -905,30 +906,8 @@ function buildRuins() {
     for (const yo of [0, -1.6, -3.2]) { const v = []; for (const [x, y, z] of pts) v.push(x, y + yo + Math.sin(x) * 0.3, z); const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); g.add(new THREE.Line(lg, wireMat)); }
   })();
 
-  // ---- abandoned, half-wrecked Land Rover Defender (real .glb when loaded; tilted + weathered) ----
-  (function wreckTruck() {
-    const jx = 18, jz = 16;
-    if (MODELS[JEEP_MODEL]) {
-      const j = fitModel(MODELS[JEEP_MODEL].clone(true), 2.55, JEEP_YAW);
-      // desaturate + darken so it reads as a long-dead wreck, not the clean drivable one
-      j.traverse(o => { if (o.isMesh && o.material) {
-        const mats = Array.isArray(o.material) ? o.material : [o.material];
-        mats.forEach(mm => { if (mm.color) mm.color.multiplyScalar(0.55); if ('metalness' in mm) mm.metalness = Math.min(1, (mm.metalness||0) + 0.15); if ('roughness' in mm) mm.roughness = 1; });
-      }});
-      j.position.set(jx, groundH(jx, jz) - 0.15, jz);
-      j.rotation.set(0.06, 0.6, 0.10);   // slumped, one side dug into the mud
-      g.add(j);
-      return;
-    }
-    // fallback: simple rusted box hulk if the model has not streamed yet
-    const j = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3a4030, roughness: 1, metalness: 0.2 });
-    const hull = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.6, 2.1), bodyMat); hull.position.y = 1.1; j.add(hull);
-    const tyreMat = new THREE.MeshStandardMaterial({ color: 0x14140f, roughness: 1 });
-    const wgeo = new THREE.CylinderGeometry(0.7, 0.7, 0.5, 14);
-    for (const [dx, dz] of [[1.5, 1.0], [1.5, -1.0], [-1.5, 1.0], [-1.5, -1.0]]) { const w = new THREE.Mesh(wgeo, tyreMat); w.rotation.x = Math.PI / 2; w.position.set(dx, 0.7, dz); j.add(w); }
-    j.position.set(jx, groundH(jx, jz), jz); j.rotation.set(0.06, 0.6, 0.10); g.add(j);
-  })();
+  // ---- abandoned, half-wrecked Land Rover Defender (real .glb when loaded; rebuilt when it streams in) ----
+  buildWreckTruck(g);
 
   // ---- scattered ruins across the valley: broken columns, wall fragments, rubble ----
   for (let i = 0; i < 9; i++) {
@@ -942,6 +921,32 @@ function buildRuins() {
 
   g.userData.gateGrp = gateGrp; g.userData.centreGrp = centreGrp;
   scene.add(g);
+}
+
+let wreckTruckGroup = null, wreckTruckParent = null;
+function buildWreckTruck(parent) {
+  wreckTruckParent = parent || wreckTruckParent;
+  if (!wreckTruckParent) return;
+  if (wreckTruckGroup && wreckTruckGroup.parent) wreckTruckGroup.parent.remove(wreckTruckGroup);
+  const jx = 18, jz = 16;
+  if (MODELS[JEEP_MODEL]) {
+    const j = fitModel(MODELS[JEEP_MODEL].clone(true), 2.55, JEEP_YAW);
+    j.traverse(o => { if (o.isMesh && o.material) {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach(mm => { if (mm.color) mm.color.multiplyScalar(0.55); if ('metalness' in mm) mm.metalness = Math.min(1, (mm.metalness||0) + 0.15); if ('roughness' in mm) mm.roughness = 1; });
+    }});
+    j.position.set(jx, groundH(jx, jz) - 0.15, jz);
+    j.rotation.set(0.06, 0.6, 0.10);
+    wreckTruckParent.add(j); wreckTruckGroup = j; return;
+  }
+  // fallback rusted box hulk until the model streams in
+  const j = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2e3327, roughness: 1, metalness: 0.2 });
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.6, 2.1), bodyMat); hull.position.y = 1.1; j.add(hull);
+  const tyreMat = new THREE.MeshStandardMaterial({ color: 0x14140f, roughness: 1 });
+  const wgeo = new THREE.CylinderGeometry(0.7, 0.7, 0.5, 14);
+  for (const [dx, dz] of [[1.5, 1.0], [1.5, -1.0], [-1.5, 1.0], [-1.5, -1.0]]) { const w = new THREE.Mesh(wgeo, tyreMat); w.rotation.x = Math.PI / 2; w.position.set(dx, 0.7, dz); j.add(w); }
+  j.position.set(jx, groundH(jx, jz), jz); j.rotation.set(0.06, 0.6, 0.10); wreckTruckParent.add(j); wreckTruckGroup = j;
 }
 
 // swap the procedural gate/centre for photoreal .glb ruin models once they stream in
@@ -1070,41 +1075,47 @@ function fitProp(model, targetSize, yawOffset) {
   return g;
 }
 let heroPropsGroup = null;
-let _propLoading = {}, _propRebuildQueued = false;
+let _propLoading = {}, _propRebuildDone = false;
 function buildHeroProps() {
   if (heroPropsGroup) { scene.remove(heroPropsGroup); heroPropsGroup = null; }
   if (GFX.tier === "off") return;
-  // Self-healing loader (mirrors the proven self-test path): each prop loads independently and
-  // triggers exactly ONE rebuild when it lands. No shared stuck-flag, no all-or-nothing Promise.all —
-  // if one prop fails the others still place.
   const urls = [PROPS3D.rock, PROPS3D.fern, PROPS3D.log].filter(Boolean);
-  // Kick off any not-yet-loaded prop; when EACH lands, rebuild once so every prop ends up placed.
-  urls.forEach(u => {
-    if (MODELS[u] || _propLoading[u]) return;
-    _propLoading[u] = true;
-    loadModelOnce(u).then(() => { requestAnimationFrame(() => { try { buildHeroProps(); } catch (e) { console.error("heroProps reload", e); } }); });
-  });
+  // Kick off any not-yet-loaded prop; rebuild ONCE when the last one lands (all three placed together).
+  const missing = urls.filter(u => !MODELS[u]);
+  if (missing.length) {
+    missing.forEach(u => {
+      if (_propLoading[u]) return;
+      _propLoading[u] = true;
+      loadModelOnce(u).then(() => {
+        const stillMissing = urls.some(x => !MODELS[x]);
+        if (!stillMissing && !_propRebuildDone) { _propRebuildDone = true; requestAnimationFrame(() => { try { buildHeroProps(); } catch (e) { console.error("heroProps reload", e); } }); }
+      });
+    });
+  }
   const m = BIOME.map, half = m.size / 2; heroPropsGroup = new THREE.Group(); reseed(4242);
-  // sMin/sMax = target LARGEST-dimension in metres (human ~1.8m tall for scale reference).
-  const place = (url, count, sMin, sMax, solid, rMul) => {
+  // Cluster-place: scatter CLUSTER CENTRES across the map, drop several props around each centre so the
+  // player actually walks into dense pockets of rocks/logs/ferns instead of lone props 50m apart.
+  const place = (url, clusters, perCluster, sMin, sMax, solid, rMul) => {
     if (!MODELS[url]) return;
-    let placed = 0, guard = 0;
-    while (placed < count && guard < count * 8) {     // retry skipped spots so the FULL count always lands
-      guard++;
-      let x = rand(-half + 8, half - 8), z = rand(-half + 8, half - 8);
-      if (Math.hypot(x, z) < 16) continue;            // keep props off the spawn pad (retried, not lost)
-      const s = rand(sMin, sMax);
-      const o = fitProp(MODELS[url].clone(true), s, rand(0, 6.28));
-      o.position.set(x, groundH(x, z), z);
-      heroPropsGroup.add(o);
-      if (solid) { const r = s * (rMul || 0.30); addCollider(x, z, r, { h: s * 0.5, top: groundH(x, z) + s * 0.5, climb: false }); }
-      placed++;
+    for (let c = 0; c < clusters; c++) {
+      let cx = rand(-half + 14, half - 14), cz = rand(-half + 14, half - 14);
+      if (Math.hypot(cx, cz) < 18) { c--; continue; }
+      const n = perCluster + Math.round(rand(-1, 1));
+      for (let i = 0; i < n; i++) {
+        const x = clamp(cx + rand(-6, 6), -half + 6, half - 6);
+        const z = clamp(cz + rand(-6, 6), -half + 6, half - 6);
+        const s = rand(sMin, sMax);
+        const o = fitProp(MODELS[url].clone(true), s, rand(0, 6.28));
+        o.position.set(x, groundH(x, z), z);
+        heroPropsGroup.add(o);
+        if (solid) { const r = s * (rMul || 0.30); addCollider(x, z, r, { h: s * 0.5, top: groundH(x, z) + s * 0.5, climb: false }); }
+      }
     }
   };
-  const d = GFX.tier === "high" ? 1.0 : 0.5;
-  place(PROPS3D.rock, Math.round(34 * d), 0.8, 2.6, true, 0.34);   // ALL boulders now real moss-textured geometry (procedural ones removed)
-  place(PROPS3D.fern, Math.round(30 * d), 0.7, 1.4, false);        // knee-to-waist ferns dressing the floor
-  place(PROPS3D.log,  Math.round(16 * d), 2.2, 3.6, true, 0.28);   // fallen logs ~human-length, solid cover
+  const d = GFX.tier === "high" ? 1.0 : 0.6;
+  place(PROPS3D.rock, Math.round(14 * d), 3, 0.8, 2.6, true, 0.34);   // ~42 boulders in mossy clusters
+  place(PROPS3D.fern, Math.round(18 * d), 4, 0.7, 1.5, false);        // ~72 ferns dressing the floor
+  place(PROPS3D.log,  Math.round(10 * d), 2, 2.2, 3.6, true, 0.28);   // ~20 fallen logs as cover
   scene.add(heroPropsGroup);
 }
 function buildFoliage() {
@@ -1676,7 +1687,7 @@ function initInput() {
   document.addEventListener("pointerlockchange", () => pointerLocked = (document.pointerLockElement === canvas));
   addEventListener("mousemove", e => {
     if (!pointerLocked) return;
-    if (S.player.driveVeh) { driveLookYaw = clamp(driveLookYaw - e.movementX * 0.0022, -2.4, 2.4); driveLookPitch = clamp(driveLookPitch - e.movementY * 0.0019, -0.6, 0.5); return; }
+    if (S.player.driveVeh) { driveLookYaw = clamp(driveLookYaw - e.movementX * 0.0022, -2.4, 2.4); driveLookPitch = clamp(driveLookPitch - e.movementY * 0.0019, -0.6, 0.5); driveLookT = performance.now(); return; }
     cam.yaw -= e.movementX * 0.0022; cam.pitch = clamp(cam.pitch - e.movementY * 0.0019, -0.95, 0.45);
   });
 
@@ -1743,7 +1754,7 @@ function setupTouch() {
   look.addEventListener("pointerdown", e => { lid = e.pointerId; lx = e.clientX; ly = e.clientY; look.setPointerCapture(e.pointerId); if (lookHint) lookHint.style.opacity = "0"; });
   look.addEventListener("pointermove", e => {
     if (e.pointerId !== lid) return;
-    if (S.player.driveVeh) { driveLookYaw = clamp(driveLookYaw - (e.clientX - lx) * 0.006, -2.4, 2.4); driveLookPitch = clamp(driveLookPitch - (e.clientY - ly) * 0.005, -0.6, 0.5); }
+    if (S.player.driveVeh) { driveLookYaw = clamp(driveLookYaw - (e.clientX - lx) * 0.006, -2.4, 2.4); driveLookPitch = clamp(driveLookPitch - (e.clientY - ly) * 0.005, -0.6, 0.5); driveLookT = performance.now(); }
     else { cam.yaw -= (e.clientX - lx) * 0.006; cam.pitch = clamp(cam.pitch - (e.clientY - ly) * 0.005, -0.95, 0.45); }
     lx = e.clientX; ly = e.clientY;
   });
@@ -3599,6 +3610,19 @@ function nearVehicle(P) {   // the parked drivable jeep, if you're standing next
   if (!j || !j.userData || !j.userData.drivable) return null;
   return dist2(P.x, P.z, j.position.x, j.position.z) < VEH.enterR * VEH.enterR ? j : null;
 }
+// When the real Defender model streams in, rebuild the parked drive-jeep in place (keeps position/heading/drive state).
+function swapDriveJeep() {
+  if (!worldJeep || !MODELS[JEEP_MODEL]) return;
+  if (worldJeep.userData.realModel) return;   // already the real one
+  const pos = worldJeep.position.clone(), ry = worldJeep.rotation.y, spd = worldJeep.userData.speed || 0;
+  const driving = S.player && S.player.driveVeh === worldJeep;
+  scene.remove(worldJeep);
+  const j = buildJeep();
+  j.position.copy(pos); j.rotation.y = ry;
+  j.userData.drivable = true; j.userData.speed = spd; j.userData.realModel = true;
+  scene.add(j); worldJeep = j;
+  if (driving) S.player.driveVeh = j;
+}
 function ensureDriveJeep() {   // make sure a drivable jeep is parked near the player in EVERY mission (spawns once)
   if (worldJeep || S.phase !== "playing") return;
   const P = S.player;
@@ -3667,8 +3691,8 @@ function updateDriving(dt) {
   // ride the jeep: keep the player anchored to it, noise rises with speed, camera trails the heading
   P.x = e.x; P.z = e.z; P.yaw = P.driveYaw; P.gait = "idle"; P.air = 0; P.onProp = null;
   P.noise = lerp(P.noise, Math.min(1, 0.35 + Math.abs(v) / VEH.maxFwd * 0.65), 0.1);
-  // ease the free-look offset back toward centre when the player isn't actively looking around
-  driveLookYaw = lerp(driveLookYaw, 0, 0.04); driveLookPitch = lerp(driveLookPitch, 0, 0.04);
+  // ease the free-look offset back toward centre ONLY after the player stops looking for ~1.6s
+  if (performance.now() - driveLookT > 1600) { driveLookYaw = lerp(driveLookYaw, 0, 0.03); driveLookPitch = lerp(driveLookPitch, 0, 0.03); }
   if (j.userData.lights) for (const b of j.userData.lights) if (b.intensity != null) b.intensity = 5;   // headlights on while driving
 }
 
