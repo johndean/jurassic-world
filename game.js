@@ -731,18 +731,25 @@ function buildWorld() {
   buildSky();
 
   // ground: rolling valley floor ringed by mountains, carved by a winding river (shaped by groundH)
-  const seg = 110;
+  const seg = GFX.tier === "high" ? 260 : 150;   // TRACK A: higher-res so micro-relief reads
   const gGeo = new THREE.PlaneGeometry(m.size, m.size, seg, seg);
   gGeo.rotateX(-Math.PI / 2);
   const pos = gGeo.attributes.position;
-  for (let i = 0; i < pos.count; i++) pos.setY(i, groundH(pos.getX(i), pos.getZ(i)));
+  // VISUAL micro-relief: small high-frequency bumps added to the RENDER mesh only. groundH (the
+  // gameplay/footing height, used in 92 places) is unchanged, so nothing stands wrong -- the eye
+  // gets an undulating jungle floor while physics stays on the smooth field.
+  const mr = (x, z) => (Math.sin(x * 0.9 + Math.cos(z * 0.7) * 1.7) * 0.5 + Math.sin(z * 1.1 + x * 0.3) * 0.5
+                        + Math.sin((x + z) * 2.3) * 0.22) * (GFX.tier === "off" ? 0 : 0.28);
+  for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), z = pos.getZ(i); pos.setY(i, groundH(x, z) + mr(x, z)); }
   gGeo.computeVertexNormals();
   const groundTex = _texLoader.load(GROUND_TEX);
   groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
   groundTex.repeat.set(36, 36);
   groundTex.colorSpace = THREE.SRGBColorSpace;
   groundTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, color: 0x93a487, roughness: 1, metalness: 0 });
+  // TRACK A: reuse the diffuse as a cheap normal map so light catches leaf-litter relief
+  const groundNrm = _texLoader.load(GROUND_TEX); groundNrm.wrapS = groundNrm.wrapT = THREE.RepeatWrapping; groundNrm.repeat.set(36, 36);
+  const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, normalMap: groundNrm, normalScale: new THREE.Vector2(0.8, 0.8), color: 0x93a487, roughness: 0.95, metalness: 0 });
   // TRACK A: break the obvious 36x36 tiling with an in-shader detail octave + slope/height terrain blend.
   groundMat.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader
@@ -1058,37 +1065,55 @@ function buildScatter() {
   if (GFX.tier === "off") return;
   const m = BIOME.map, half = m.size / 2;
   scatterGroup = new THREE.Group(); reseed(8821);
-  const dens = GFX.tier === "high" ? 1.0 : 0.6;
-  const barkMat = new THREE.MeshStandardMaterial({ color: 0x4a3b2a, roughness: 1, flatShading: true });
-  const mossMat = new THREE.MeshStandardMaterial({ color: 0x3c4a2c, roughness: 1, flatShading: true });
-  const rockMat = new THREE.MeshStandardMaterial({ color: 0x5b615f, roughness: 1, flatShading: true });
-  // fallen logs (solid, you vault/round them)
-  const NLOG = Math.round(26 * dens);
+  const dens = GFX.tier === "high" ? 1.0 : 0.5;
+
+  // ---- 3D GROUND COVER: dense low grass/leaf tufts that physically sit on the floor so it reads as
+  // a living jungle floor with depth, not a printed leaf texture. Decorative (no colliders).
+  const tuftGeo = (() => {
+    // a small 3-blade cross of thin tapered planes = a grass/fern tuft from any angle
+    const a = new THREE.PlaneGeometry(0.5, 0.7).translate(0, 0.35, 0);
+    const b = a.clone().rotateY(Math.PI / 3); const c = a.clone().rotateY((2 * Math.PI) / 3);
+    return mergeGeometries([a, b, c]);
+  })();
+  const tuftMat = new THREE.MeshStandardMaterial({ color: 0x4f6a39, roughness: 1, side: THREE.DoubleSide, alphaTest: 0.0, flatShading: false });
+  const NT = Math.round(5200 * dens);
+  const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, NT);
+  if (GFX.shadows) tufts.receiveShadow = true;
+  const dm = new THREE.Object3D();
+  for (let i = 0; i < NT; i++) {
+    const x = rand(-half + 3, half - 3), z = rand(-half + 3, half - 3);
+    const sc = rand(0.5, 1.5), tint = rand(0.8, 1.15);
+    dm.position.set(x, groundH(x, z), z); dm.rotation.set(0, rand(0, 6.28), rand(-0.1, 0.1));
+    dm.scale.set(sc * tint, sc * rand(0.8, 1.4), sc * tint); dm.updateMatrix();
+    tufts.setMatrixAt(i, dm.matrix);
+  }
+  tufts.instanceMatrix.needsUpdate = true; scatterGroup.add(tufts);
+
+  // ---- low leaf-litter clumps (flat discs hugging the ground, broken up) for floor variation ----
+  const litterGeo = new THREE.CircleGeometry(0.6, 6).rotateX(-Math.PI / 2);
+  const litterMat = new THREE.MeshStandardMaterial({ color: 0x6a5a36, roughness: 1 });
+  const NL = Math.round(2200 * dens);
+  const litter = new THREE.InstancedMesh(litterGeo, litterMat, NL);
+  if (GFX.shadows) litter.receiveShadow = true;
+  for (let i = 0; i < NL; i++) {
+    const x = rand(-half + 2, half - 2), z = rand(-half + 2, half - 2), sc = rand(0.6, 1.8);
+    dm.position.set(x, groundH(x, z) + 0.02, z); dm.rotation.set(0, rand(0, 6.28), 0); dm.scale.set(sc, 1, sc); dm.updateMatrix();
+    litter.setMatrixAt(i, dm.matrix);
+  }
+  litter.instanceMatrix.needsUpdate = true; scatterGroup.add(litter);
+
+  // ---- a FEW real mossy logs as solid cover (smaller, rounder than before; no big green boxes) ----
+  const barkMat = new THREE.MeshStandardMaterial({ color: 0x3f3423, roughness: 1 });
+  const NLOG = Math.round(12 * dens);
   for (let i = 0; i < NLOG; i++) {
-    let x = rand(-half + 8, half - 8), z = rand(-half + 8, half - 8); if (Math.hypot(x, z) < 14) continue;
-    const len = rand(3.5, 7), rad = rand(0.35, 0.7);
-    const log = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad * 0.85, len, 8), i % 2 ? mossMat : barkMat);
+    let x = rand(-half + 10, half - 10), z = rand(-half + 10, half - 10); if (Math.hypot(x, z) < 16) continue;
+    const len = rand(2.6, 4.2), rad = rand(0.3, 0.5);
+    const log = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad * 0.9, len, 10), barkMat);
     log.rotation.z = Math.PI / 2; log.rotation.y = rand(0, 6.28);
     log.position.set(x, groundH(x, z) + rad * 0.8, z);
     if (GFX.shadows) { log.castShadow = true; log.receiveShadow = true; }
-    scatterGroup.add(log); addCollider(x, z, rad + 0.3, { h: rad * 1.6, top: groundH(x, z) + rad * 1.6, climb: false });
+    scatterGroup.add(log); addCollider(x, z, rad + 0.25, { h: rad * 1.6, top: groundH(x, z) + rad * 1.6, climb: false });
   }
-  // rock clusters (instanced, a few solid anchors each)
-  const NRC = Math.round(40 * dens);
-  const rockGeo = new THREE.DodecahedronGeometry(1, 0);
-  const rocks = new THREE.InstancedMesh(rockGeo, rockMat, NRC * 3);
-  if (GFX.shadows) { rocks.castShadow = true; rocks.receiveShadow = true; }
-  const dm = new THREE.Object3D(); let ri = 0;
-  for (let i = 0; i < NRC; i++) {
-    const cx = rand(-half + 6, half - 6), cz = rand(-half + 6, half - 6); if (Math.hypot(cx, cz) < 12) { for (let k=0;k<3;k++){ dm.position.set(0,-999,0); dm.updateMatrix(); rocks.setMatrixAt(ri++, dm.matrix);} continue; }
-    for (let k = 0; k < 3; k++) {
-      const ox = cx + rand(-2.2, 2.2), oz = cz + rand(-2.2, 2.2), sc = rand(0.4, 1.3);
-      dm.position.set(ox, groundH(ox, oz) + sc * 0.3, oz); dm.rotation.set(rand(0,3), rand(0,6), rand(0,3)); dm.scale.set(sc, sc * 0.8, sc); dm.updateMatrix();
-      rocks.setMatrixAt(ri++, dm.matrix);
-    }
-    addCollider(cx, cz, 1.4, { h: 1.0, top: groundH(cx, cz) + 1.0, climb: false });
-  }
-  rocks.instanceMatrix.needsUpdate = true; scatterGroup.add(rocks);
   scene.add(scatterGroup);
 }
 function buildFoliage() {
