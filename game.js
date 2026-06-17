@@ -537,6 +537,8 @@ let beaconMesh, beaconRing, beaconGlow, playerMesh;
 
 // camera orbit
 const cam = { yaw: 0, pitch: -0.18, dist: 7.2, height: 2.4 };
+let driveCamFP = true;        // in-vehicle camera: true = first-person (driver seat), false = third-person chase
+let driveLookYaw = 0, driveLookPitch = 0;   // free-look offset from the drive heading (look around without steering)
 
 /* ---------------------------------------------------------------- boot ---- */
 // visible boot-failure banner — so a load/graphics failure is never a silent blank menu
@@ -903,35 +905,29 @@ function buildRuins() {
     for (const yo of [0, -1.6, -3.2]) { const v = []; for (const [x, y, z] of pts) v.push(x, y + yo + Math.sin(x) * 0.3, z); const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(v, 3)); g.add(new THREE.Line(lg, wireMat)); }
   })();
 
-  // ---- abandoned safari ranger truck (gap-free: parts overlap at every joint) ----
-  (function truck() {
-    const jx = 18, jz = 16, j = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x5b6b46, roughness: 0.82, metalness: 0.18 });   // weathered olive
-    const trimMat = new THREE.MeshStandardMaterial({ color: 0x2c2f28, roughness: 0.9, metalness: 0.2 });
-    const glassMat = new THREE.MeshStandardMaterial({ color: 0x1b2a2c, roughness: 0.25, metalness: 0.5, transparent: true, opacity: 0.66 });
-    const tyreMat = new THREE.MeshStandardMaterial({ color: 0x14140f, roughness: 1 });
-    const hubMat = new THREE.MeshStandardMaterial({ color: 0x6a6e6a, roughness: 0.5, metalness: 0.6 });
-    const chassis = new THREE.Mesh(new THREE.BoxGeometry(4.9, 0.5, 2.0), trimMat); chassis.position.y = 0.72; j.add(chassis);   // ties the wheels together
-    const body = new THREE.Mesh(new THREE.BoxGeometry(4.7, 1.05, 2.24), bodyMat); body.position.y = 1.18; j.add(body);          // tub overlaps chassis
-    const hood = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.66, 2.2), bodyMat); hood.position.set(1.75, 1.42, 0); j.add(hood);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.18, 2.2), bodyMat); roof.position.set(-0.45, 2.52, 0); j.add(roof);
-    for (const [px, pz] of [[0.55, 1.0], [0.55, -1.0], [-1.45, 1.0], [-1.45, -1.0]]) { const pil = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.3, 0.14), trimMat); pil.position.set(px, 1.92, pz); j.add(pil); }
-    const ws = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.15, 2.02), glassMat); ws.position.set(0.6, 1.98, 0); ws.rotation.z = 0.2; j.add(ws);
-    for (const sz of [1.04, -1.04]) { const sg = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.05, 0.05), glassMat); sg.position.set(-0.45, 1.98, sz); j.add(sg); }
-    const wgeo = new THREE.CylinderGeometry(0.72, 0.72, 0.56, 16);
-    for (const [dx, dz] of [[1.62, 1.04], [1.62, -1.04], [-1.62, 1.04], [-1.62, -1.04]]) {
-      const w = new THREE.Mesh(wgeo, tyreMat); w.rotation.x = Math.PI / 2; w.position.set(dx, 0.72, dz); j.add(w);
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.58, 8), hubMat); hub.rotation.x = Math.PI / 2; hub.position.set(dx, 0.72, dz); j.add(hub);
-      const fender = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.34, 0.42), bodyMat); fender.position.set(dx, 1.32, dz > 0 ? 0.98 : -0.98); j.add(fender);   // bridges body→wheel (no gap)
+  // ---- abandoned, half-wrecked Land Rover Defender (real .glb when loaded; tilted + weathered) ----
+  (function wreckTruck() {
+    const jx = 18, jz = 16;
+    if (MODELS[JEEP_MODEL]) {
+      const j = fitModel(MODELS[JEEP_MODEL].clone(true), 2.55, JEEP_YAW);
+      // desaturate + darken so it reads as a long-dead wreck, not the clean drivable one
+      j.traverse(o => { if (o.isMesh && o.material) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach(mm => { if (mm.color) mm.color.multiplyScalar(0.55); if ('metalness' in mm) mm.metalness = Math.min(1, (mm.metalness||0) + 0.15); if ('roughness' in mm) mm.roughness = 1; });
+      }});
+      j.position.set(jx, groundH(jx, jz) - 0.15, jz);
+      j.rotation.set(0.06, 0.6, 0.10);   // slumped, one side dug into the mud
+      g.add(j);
+      return;
     }
-    const bumper = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.4, 2.3), trimMat); bumper.position.set(2.6, 0.95, 0); j.add(bumper);
-    const grille = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 1.9), trimMat); grille.position.set(2.52, 1.4, 0); j.add(grille);
-    for (const lz of [0.72, -0.72]) { const hl = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 12), new THREE.MeshStandardMaterial({ color: 0xd8d2b0, roughness: 0.4, emissive: 0x201d12 })); hl.rotation.z = Math.PI / 2; hl.position.set(2.58, 1.48, lz); j.add(hl); }
-    // roll cage over the open bed, posts rooted in the body (connected, no floating bars)
-    for (const cx of [-1.5, 0.4]) for (const sz of [1, -1]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8), rust); post.position.set(cx, 2.05, sz * 0.98); j.add(post); }
-    for (const cx of [-1.5, 0.4]) { const cb = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.1, 8), rust); cb.rotation.x = Math.PI / 2; cb.position.set(cx, 2.78, 0); j.add(cb); }
-    for (const sz of [1, -1]) { const sr = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 8), rust); sr.rotation.z = Math.PI / 2; sr.position.set(-0.55, 2.78, sz * 0.98); j.add(sr); }
-    j.position.set(jx, groundH(jx, jz), jz); j.rotation.set(0, 0.6, 0.015); g.add(j);
+    // fallback: simple rusted box hulk if the model has not streamed yet
+    const j = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3a4030, roughness: 1, metalness: 0.2 });
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.6, 2.1), bodyMat); hull.position.y = 1.1; j.add(hull);
+    const tyreMat = new THREE.MeshStandardMaterial({ color: 0x14140f, roughness: 1 });
+    const wgeo = new THREE.CylinderGeometry(0.7, 0.7, 0.5, 14);
+    for (const [dx, dz] of [[1.5, 1.0], [1.5, -1.0], [-1.5, 1.0], [-1.5, -1.0]]) { const w = new THREE.Mesh(wgeo, tyreMat); w.rotation.x = Math.PI / 2; w.position.set(dx, 0.7, dz); j.add(w); }
+    j.position.set(jx, groundH(jx, jz), jz); j.rotation.set(0.06, 0.6, 0.10); g.add(j);
   })();
 
   // ---- scattered ruins across the valley: broken columns, wall fragments, rubble ----
@@ -1082,29 +1078,33 @@ function buildHeroProps() {
   // triggers exactly ONE rebuild when it lands. No shared stuck-flag, no all-or-nothing Promise.all —
   // if one prop fails the others still place.
   const urls = [PROPS3D.rock, PROPS3D.fern, PROPS3D.log].filter(Boolean);
+  // Kick off any not-yet-loaded prop; when EACH lands, rebuild once so every prop ends up placed.
   urls.forEach(u => {
     if (MODELS[u] || _propLoading[u]) return;
     _propLoading[u] = true;
-    loadModelOnce(u).then(m => { if (m && !_propRebuildQueued) { _propRebuildQueued = true; requestAnimationFrame(() => { _propRebuildQueued = false; try { buildHeroProps(); } catch (e) { console.error("heroProps reload", e); } }); } });
+    loadModelOnce(u).then(() => { requestAnimationFrame(() => { try { buildHeroProps(); } catch (e) { console.error("heroProps reload", e); } }); });
   });
   const m = BIOME.map, half = m.size / 2; heroPropsGroup = new THREE.Group(); reseed(4242);
   // sMin/sMax = target LARGEST-dimension in metres (human ~1.8m tall for scale reference).
   const place = (url, count, sMin, sMax, solid, rMul) => {
     if (!MODELS[url]) return;
-    for (let i = 0; i < count; i++) {
+    let placed = 0, guard = 0;
+    while (placed < count && guard < count * 8) {     // retry skipped spots so the FULL count always lands
+      guard++;
       let x = rand(-half + 8, half - 8), z = rand(-half + 8, half - 8);
-      if (Math.hypot(x, z) < 16) continue;          // keep props off the spawn pad
+      if (Math.hypot(x, z) < 16) continue;            // keep props off the spawn pad (retried, not lost)
       const s = rand(sMin, sMax);
       const o = fitProp(MODELS[url].clone(true), s, rand(0, 6.28));
       o.position.set(x, groundH(x, z), z);
       heroPropsGroup.add(o);
       if (solid) { const r = s * (rMul || 0.30); addCollider(x, z, r, { h: s * 0.5, top: groundH(x, z) + s * 0.5, climb: false }); }
+      placed++;
     }
   };
   const d = GFX.tier === "high" ? 1.0 : 0.5;
-  place(PROPS3D.rock, Math.round(24 * d), 0.8, 2.6, true, 0.34);   // ALL boulders now real moss-textured geometry (procedural ones removed)
+  place(PROPS3D.rock, Math.round(34 * d), 0.8, 2.6, true, 0.34);   // ALL boulders now real moss-textured geometry (procedural ones removed)
   place(PROPS3D.fern, Math.round(30 * d), 0.7, 1.4, false);        // knee-to-waist ferns dressing the floor
-  place(PROPS3D.log,  Math.round(8 * d),  2.2, 3.6, true, 0.28);   // fallen logs ~human-length, solid cover
+  place(PROPS3D.log,  Math.round(16 * d), 2.2, 3.6, true, 0.28);   // fallen logs ~human-length, solid cover
   scene.add(heroPropsGroup);
 }
 function buildFoliage() {
@@ -1658,6 +1658,7 @@ function initInput() {
     if (e.code === "Digit5") selectTool(4);
     if (e.code === "Digit6") selectTool(5);
     if (e.code === "KeyB") toggleBinoc();   // binoculars (zoom + species ID)
+    if (e.code === "KeyV" && S.player.driveVeh) { driveCamFP = !driveCamFP; toast(driveCamFP ? "VIEW · FIRST PERSON" : "VIEW · THIRD PERSON"); }   // in-vehicle camera toggle
     if (binoc && (e.code === "Equal" || e.code === "NumpadAdd")) binocZoom(1);
     if (binoc && (e.code === "Minus" || e.code === "NumpadSubtract")) binocZoom(-1);
     if (e.code === "KeyH" || e.code === "Slash") toggleKeyHelp();          // controls reference (desktop)
@@ -1675,6 +1676,7 @@ function initInput() {
   document.addEventListener("pointerlockchange", () => pointerLocked = (document.pointerLockElement === canvas));
   addEventListener("mousemove", e => {
     if (!pointerLocked) return;
+    if (S.player.driveVeh) { driveLookYaw = clamp(driveLookYaw - e.movementX * 0.0022, -2.4, 2.4); driveLookPitch = clamp(driveLookPitch - e.movementY * 0.0019, -0.6, 0.5); return; }
     cam.yaw -= e.movementX * 0.0022; cam.pitch = clamp(cam.pitch - e.movementY * 0.0019, -0.95, 0.45);
   });
 
@@ -1741,7 +1743,8 @@ function setupTouch() {
   look.addEventListener("pointerdown", e => { lid = e.pointerId; lx = e.clientX; ly = e.clientY; look.setPointerCapture(e.pointerId); if (lookHint) lookHint.style.opacity = "0"; });
   look.addEventListener("pointermove", e => {
     if (e.pointerId !== lid) return;
-    cam.yaw -= (e.clientX - lx) * 0.006; cam.pitch = clamp(cam.pitch - (e.clientY - ly) * 0.005, -0.95, 0.45);
+    if (S.player.driveVeh) { driveLookYaw = clamp(driveLookYaw - (e.clientX - lx) * 0.006, -2.4, 2.4); driveLookPitch = clamp(driveLookPitch - (e.clientY - ly) * 0.005, -0.6, 0.5); }
+    else { cam.yaw -= (e.clientX - lx) * 0.006; cam.pitch = clamp(cam.pitch - (e.clientY - ly) * 0.005, -0.95, 0.45); }
     lx = e.clientX; ly = e.clientY;
   });
   const endLook = e => { if (e.pointerId === lid) lid = null; };
@@ -1754,6 +1757,7 @@ function setupTouch() {
   { const ba = $("btnCall");   // ACTION button: hold for hold-to-act objectives, tap for press actions (zip/call)
     ba.addEventListener("pointerdown", e => { e.preventDefault(); input.action = true; interact(); });
     ["pointerup", "pointercancel", "pointerleave"].forEach(ev => ba.addEventListener(ev, () => input.action = false)); }
+  { const bc = $("btnCam"); if (bc) bc.addEventListener("pointerdown", e => { e.preventDefault(); if (S.player.driveVeh) { driveCamFP = !driveCamFP; toast(driveCamFP ? "VIEW · FIRST PERSON" : "VIEW · THIRD PERSON"); } }); }
 }
 
 const _pad = {};   // edge-trigger state for gamepad buttons
@@ -3623,7 +3627,9 @@ function enterVehicle(j) {
   P.driveYaw = Math.atan2(Math.cos(j.rotation.y), -Math.sin(j.rotation.y));   // adopt the jeep's current facing (model +x = forward)
   cam.yaw = P.driveYaw; cam.pitch = -0.12;
   if (playerMesh) playerMesh.visible = false;
-  Audio.step("run"); toast("DRIVING · W/S throttle · A/D steer · " + (isTouch ? "ACTION" : "E") + " to exit");
+  driveCamFP = true; driveLookYaw = 0; driveLookPitch = 0;
+  { const bc = $("btnCam"); if (bc) bc.style.display = isTouch ? "flex" : "none"; }
+  Audio.step("run"); toast("DRIVING · W/S throttle · A/D steer · " + (isTouch ? "VIEW toggles camera · ACTION" : "V toggles camera · E") + " to exit");
 }
 function exitVehicle() {
   const P = S.player, j = P.driveVeh; P.driveVeh = null;
@@ -3633,6 +3639,7 @@ function exitVehicle() {
   const half = BIOME.map.size / 2 - 4; P.x = clamp(e.x, -half, half); P.z = clamp(e.z, -half, half); P.yaw = P.driveYaw;
   cam.pitch = -0.18;
   if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); }
+  { const bc = $("btnCam"); if (bc) bc.style.display = "none"; }
   toast("ON FOOT");
 }
 function updateDriving(dt) {
@@ -3660,7 +3667,8 @@ function updateDriving(dt) {
   // ride the jeep: keep the player anchored to it, noise rises with speed, camera trails the heading
   P.x = e.x; P.z = e.z; P.yaw = P.driveYaw; P.gait = "idle"; P.air = 0; P.onProp = null;
   P.noise = lerp(P.noise, Math.min(1, 0.35 + Math.abs(v) / VEH.maxFwd * 0.65), 0.1);
-  cam.yaw = lerp2angle(cam.yaw, P.driveYaw, 0.1);
+  // ease the free-look offset back toward centre when the player isn't actively looking around
+  driveLookYaw = lerp(driveLookYaw, 0, 0.04); driveLookPitch = lerp(driveLookPitch, 0, 0.04);
   if (j.userData.lights) for (const b of j.userData.lights) if (b.intensity != null) b.intensity = 5;   // headlights on while driving
 }
 
@@ -4874,10 +4882,23 @@ function updateCamera() {
     if (beaconRing) beaconRing.rotation.z += (S.extraction.called ? 0.08 : 0.02);
     return;
   }
-  if (P.driveVeh) {   // chase cam behind/above the jeep, looking down the road
-    const j = P.driveVeh, s = Math.sin(P.driveYaw), c = Math.cos(P.driveYaw), hy = j.position.y;
-    camera.position.lerp(tmp.set(j.position.x - s * 9.5, hy + 4.8, j.position.z - c * 9.5), 0.12);
-    camera.lookAt(j.position.x + s * 5, hy + 1.7, j.position.z + c * 5);
+  if (P.driveVeh) {
+    const j = P.driveVeh, hy = j.position.y;
+    // free-look: cam.yaw/pitch drift (from mouse/touch/stick) become an OFFSET on the drive heading,
+    // so you can look around the cabin/jungle without changing where the truck steers.
+    const lookYaw = P.driveYaw + driveLookYaw, ls = Math.sin(lookYaw), lc = Math.cos(lookYaw);
+    const lookPitch = clamp(driveLookPitch, -0.6, 0.5), lp = Math.cos(lookPitch);
+    if (driveCamFP) {
+      // FIRST PERSON — from the driver's seat, slightly right-of-centre, looking out the windscreen
+      const s = Math.sin(P.driveYaw), c = Math.cos(P.driveYaw);
+      const ex = j.position.x + s * 0.2 - c * 0.45, ez = j.position.z + c * 0.2 + s * 0.45, ey = hy + 1.95;
+      camera.position.set(ex, ey, ez);
+      camera.lookAt(ex + ls * lp * 12, ey + Math.sin(lookPitch) * 12, ez + lc * lp * 12);
+    } else {
+      // THIRD PERSON — chase cam behind/above, orbitable via free-look
+      camera.position.lerp(tmp.set(j.position.x - ls * 9.5, hy + 4.8 - Math.sin(lookPitch) * 6, j.position.z - lc * 9.5), 0.18);
+      camera.lookAt(j.position.x + Math.sin(P.driveYaw) * 5, hy + 1.7, j.position.z + Math.cos(P.driveYaw) * 5);
+    }
     if (beaconRing) beaconRing.rotation.z += (S.extraction.called ? 0.08 : 0.02);
     return;
   }
