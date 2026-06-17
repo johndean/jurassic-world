@@ -1240,7 +1240,7 @@ function buildBeacon() {
   const half = BIOME.map.size / 2;
   // FIXED canonical EVAC complex location — a permanent landmark, never random.
   // North shelf of the valley, pulled in from the edge; the iconic facility lives here every mission.
-  const FX = -(half - 40), FZ = -(half - 30);   // deep NW corner — isolated landmark, far from towers/wreck
+  const FX = -55, FZ = -30;   // FLAT valley-floor shelf (slope ~1.7) — was on a 28m mountain causing tilt/clip; isolated from towers
   const bx = FX, bz = FZ;
   S.extraction.beacon.x = bx; S.extraction.beacon.z = bz;
   S.extraction.facility = { x: bx, z: bz };
@@ -1694,14 +1694,21 @@ function buildFacility(bx, bz) {
     box = new THREE.Box3().setFromObject(mdl);
     const c = new THREE.Vector3(); box.getCenter(c);
     mdl.position.x -= c.x; mdl.position.z -= c.z;
-    mdl.position.y -= box.min.y;          // lowest point of the mesh now at y=0
-    mdl.position.y -= 1.2;                 // bed it INTO the ground so the base never floats
+    mdl.position.y -= box.min.y;          // lowest point of the mesh now at y=0 (base on ground)
+    mdl.position.y -= 0.5;                  // small bed-in so the base never floats
     mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
     g.add(mdl);
     console.log("[EVAC] seated at facility-group y", g.position.y.toFixed(2), "model base offset", mdl.position.y.toFixed(2), "bounds", box.min.y.toFixed(2), box.max.y.toFixed(2));
     return true;
   }
   if (!placeEvacModel()) loadModelOnce(EVAC_MODEL).then(m => { if (m) placeEvacModel(); });
+
+  // prominent external service ladder on the facility (always visible) — every structure has a ladder
+  const ladMat = new THREE.MeshStandardMaterial({ color: 0x7a7f78, roughness: 0.5, metalness: 0.7 });
+  const ladH = FOOT * 0.26, ladX = -FOOT * 0.30, ladZ = -FOOT * 0.10;
+  for (const sx of [-0.55, 0.55]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(0.12, ladH, 0.12), ladMat); rail.position.set(ladX, ladH / 2, ladZ + sx); g.add(rail); }
+  const rungN = Math.floor(ladH / 0.85);
+  for (let r = 0; r < rungN; r++) { const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.2, 6), ladMat); rung.rotation.x = Math.PI / 2; rung.position.set(ladX, 0.6 + r * 0.85, ladZ); g.add(rung); }
 
   // --- walkable deck collider footprint registered for floor sampling (facilityFloorAt) ---
   // --- perimeter buttress + inner-hub WALL colliders: real chase geometry, you weave around them ---
@@ -1914,7 +1921,7 @@ function facilityFloorAt(x, z) {
   return null;
 }
 // max(terrain, facility) — the surface things actually stand on.
-function walkH(x, z) { const f = facilityFloorAt(x, z); const g = groundH(x, z); return f != null && f > g ? f : g; }
+function walkH(x, z) { return groundH(x, z); }   // deck-walk disabled: facility is a solid ground landmark (navigate around it via wall colliders); kills the fall-through-world bug
 function dist2(ax, az, bx, bz) { const dx = ax - bx, dz = az - bz; return dx * dx + dz * dz; }
 function bearingTo(ax, az, bx, bz) {
   const ang = Math.atan2(bx - ax, -(bz - az)) / DEG; const d = (ang + 360) % 360;
