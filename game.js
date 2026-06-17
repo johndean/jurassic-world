@@ -711,7 +711,7 @@ function initRenderer() {
   // image-based lighting: procedural neutral studio env so PBR materials get real ambient + reflections
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
-  camera = new THREE.PerspectiveCamera(64, innerWidth / innerHeight, 0.1, 400);
+  camera = new THREE.PerspectiveCamera(64, innerWidth / innerHeight, 0.35, 400);
   // post-processing: subtle cinematic bloom on bright/foggy areas; OutputPass does tone-map + sRGB
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -3664,6 +3664,7 @@ function exitVehicle() {
   cam.pitch = -0.18;
   if (playerMesh) { playerMesh.visible = true; playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9, P.z); }
   { const bc = $("btnCam"); if (bc) bc.style.display = "none"; }
+  if (j) j.visible = true; showCockpit(false);
   toast("ON FOOT");
 }
 function updateDriving(dt) {
@@ -4877,6 +4878,34 @@ function updateCineUniforms(now) {
     cinePass.uniforms.uSunVis.value = cur + (want - cur) * 0.1;
   } else { cinePass.uniforms.uSunVis.value *= 0.9; }
 }
+let _cockpit = null;
+function showCockpit(on) {
+  if (on && !_cockpit) {
+    const g = new THREE.Group();
+    const dashMat = new THREE.MeshStandardMaterial({ color: 0x1c1f1a, roughness: 0.85, metalness: 0.2 });
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0x2a2d26, roughness: 0.7, metalness: 0.3 });
+    // dashboard slab across the bottom of the view
+    const dash = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.42, 0.5), dashMat); dash.position.set(0, -0.62, -0.95); g.add(dash);
+    // steering wheel (rim + spokes) right-of-centre
+    const wheel = new THREE.Group();
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.028, 10, 24), trimMat); wheel.add(rim);
+    for (let i = 0; i < 3; i++) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.02, 0.02), trimMat); sp.rotation.z = i * (Math.PI / 1.5); wheel.add(sp); }
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 10), trimMat); hub.rotation.x = Math.PI / 2; wheel.add(hub);
+    wheel.position.set(0.34, -0.48, -0.82); wheel.rotation.x = -1.15; g.add(wheel);
+    // A-pillars framing the windscreen
+    for (const sx of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.0, 0.07), trimMat); p.position.set(sx * 0.95, 0.05, -0.9); p.rotation.z = sx * 0.18; g.add(p); }
+    // rear-view mirror nub up top
+    const mir = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.09, 0.05), trimMat); mir.position.set(0, 0.62, -0.9); g.add(mir);
+    g.renderOrder = 5; g.traverse(o => { if (o.isMesh) o.frustumCulled = false; });
+    _cockpit = g; scene.add(g);
+  }
+  if (_cockpit) _cockpit.visible = !!on;
+}
+function updateCockpit(ex, ey, ez, yaw, pitch) {
+  if (!_cockpit) return;
+  _cockpit.position.set(ex, ey, ez);
+  _cockpit.rotation.set(0, yaw, 0);   // ride with the look direction so the dash stays in front
+}
 /* ====================================================== camera =========== */
 function updateCamera() {
   const P = S.player;
@@ -4908,20 +4937,28 @@ function updateCamera() {
   }
   if (P.driveVeh) {
     const j = P.driveVeh, hy = j.position.y;
-    // free-look: cam.yaw/pitch drift (from mouse/touch/stick) become an OFFSET on the drive heading,
-    // so you can look around the cabin/jungle without changing where the truck steers.
+    const s = Math.sin(P.driveYaw), c = Math.cos(P.driveYaw);   // truck heading
+    // free-look = OFFSET on the heading, so you can look around 360deg without changing steering.
     const lookYaw = P.driveYaw + driveLookYaw, ls = Math.sin(lookYaw), lc = Math.cos(lookYaw);
-    const lookPitch = clamp(driveLookPitch, -0.6, 0.5), lp = Math.cos(lookPitch);
+    const lookPitch = clamp(driveLookPitch, -0.5, 0.45), lp = Math.cos(lookPitch);
     if (driveCamFP) {
-      // FIRST PERSON — from the driver's seat, slightly right-of-centre, looking out the windscreen
-      const s = Math.sin(P.driveYaw), c = Math.cos(P.driveYaw);
-      const ex = j.position.x + s * 0.2 - c * 0.45, ez = j.position.z + c * 0.2 + s * 0.45, ey = hy + 1.95;
-      camera.position.set(ex, ey, ez);
-      camera.lookAt(ex + ls * lp * 12, ey + Math.sin(lookPitch) * 12, ez + lc * lp * 12);
+      // FIRST PERSON — driver-eye height at the cabin; the truck shell is HIDDEN so the view out is
+      // clear 360deg (the closed photogrammetry shell has no real interior to look through). A light
+      // cockpit overlay (dash + wheel) rides with the camera for the in-cab feel.
+      j.visible = false; showCockpit(true);
+      const ex = j.position.x - c * 0.3, ez = j.position.z + s * 0.3, ey = hy + 1.7;   // at the driver seat
+      const cy = Math.max(ey, groundH(ex, ez) + 1.3);
+      camera.position.set(ex, cy, ez);
+      camera.lookAt(ex + ls * lp * 14, cy + Math.sin(lookPitch) * 14, ez + lc * lp * 14);
+      updateCockpit(ex, cy, ez, lookYaw, lookPitch);
     } else {
-      // THIRD PERSON — chase cam behind/above, orbitable via free-look
-      camera.position.lerp(tmp.set(j.position.x - ls * 9.5, hy + 4.8 - Math.sin(lookPitch) * 6, j.position.z - lc * 9.5), 0.18);
-      camera.lookAt(j.position.x + Math.sin(P.driveYaw) * 5, hy + 1.7, j.position.z + Math.cos(P.driveYaw) * 5);
+      j.visible = true; showCockpit(false);
+      // THIRD PERSON — chase cam behind/above, orbitable via free-look, clamped above the ground.
+      let cx = j.position.x - ls * 9.5, cz = j.position.z - lc * 9.5;
+      let cy = hy + 4.8 - Math.sin(lookPitch) * 6;
+      cy = Math.max(cy, groundH(cx, cz) + 1.4);
+      camera.position.lerp(tmp.set(cx, cy, cz), 0.18);
+      camera.lookAt(j.position.x + s * 5, hy + 1.7, j.position.z + c * 5);
     }
     if (beaconRing) beaconRing.rotation.z += (S.extraction.called ? 0.08 : 0.02);
     return;
@@ -4931,7 +4968,7 @@ function updateCamera() {
   const cp = Math.cos(cam.pitch), d = cam.dist * cp;
   let cx = tx - Math.sin(cam.yaw) * d, cz = tz - Math.cos(cam.yaw) * d, cy = ty + cam.height + Math.sin(cam.pitch) * cam.dist * -1 + cam.dist * cp * 0.0;
   cy = ty + cam.height - Math.sin(cam.pitch) * cam.dist;
-  const gh = (P.onTower ? P.onTower.platformY : groundH(cx, cz)) + 0.6; if (cy < gh) cy = gh;
+  const gh = (P.onTower ? P.onTower.platformY : groundH(cx, cz)) + 1.0; if (cy < gh) cy = gh;
   if (camShake > 0) { cx += (Math.random() - 0.5) * camShake; cy += (Math.random() - 0.5) * camShake; cz += (Math.random() - 0.5) * camShake; camShake = Math.max(0, camShake - 0.045); }
   camera.position.set(cx, cy, cz);
   camera.lookAt(tx, ty, tz);
