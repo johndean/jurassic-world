@@ -3186,12 +3186,18 @@ function buildHeli() {
 function startEvac() {
   if (evac) return;
   const bx = S.extraction.beacon.x, bz = S.extraction.beacon.z;
-  const lx = bx + 4.5, lz = bz + 2.5;                      // clear landing pad, inside the beacon safe zone
-  const groundY = groundH(lx, lz);
+  // LAND ON THE HELIPAD: target the facility's elevated pad, not bare ground beside the beacon.
+  let lx, lz, landY;
+  if (FACILITY) {
+    lx = FACILITY.padX; lz = FACILITY.padZ;
+    landY = groundH(FACILITY.x, FACILITY.z) + FACILITY.padH + 0.15;   // skids rest on the pad deck
+  } else {
+    lx = bx + 4.5; lz = bz + 2.5; landY = groundH(lx, lz);            // fallback (no facility)
+  }
   const heli = buildHeli();
-  heli.group.position.set(lx + 50, groundY + 120, lz + 50);   // enters high + far
-  heli.group.rotation.y = Math.atan2(bx - lx, bz - lz);       // nose roughly toward the beacon
-  evac = { phase: "incoming", t: 0, heli, hx: bx, hz: bz, lx, lz, groundY, hoverY: groundY + 12, done: false };
+  heli.group.position.set(lx + 50, landY + 120, lz + 50);   // enters high + far
+  heli.group.rotation.y = Math.atan2(bx - lx, bz - lz);      // nose roughly toward the pad
+  evac = { phase: "incoming", t: 0, heli, hx: bx, hz: bz, lx, lz, groundY: landY, hoverY: landY + 14, done: false };
 }
 function updateEvac(dt) {
   if (!evac) return;
@@ -3219,7 +3225,7 @@ function updateEvac(dt) {
     g.position.y = evac.groundY;
     const P = S.player;
     P.x += (lx - P.x) * Math.min(1, dt * 4); P.z += (lz - P.z) * Math.min(1, dt * 4); P.gait = "walk";
-    if (playerMesh) playerMesh.position.set(P.x, groundH(P.x, P.z) + 0.9 + Math.min(1, evac.t) * 0.9, P.z);
+    if (playerMesh) playerMesh.position.set(P.x, evac.groundY + 0.9 + Math.min(1, evac.t) * 0.9, P.z);
     if (evac.t > 1.2) { if (playerMesh) playerMesh.visible = false; evac.phase = "liftoff"; evac.t = 0; Audio.beacon(true); }
   } else if (evac.phase === "liftoff") {                    // spool up, climb + bank away
     g.position.y += dt * 9; g.position.x += dt * 5; g.position.z -= dt * 2;
