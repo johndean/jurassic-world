@@ -106,6 +106,7 @@ const PROPS3D = {
 const HELI_MODEL = "./assets/models/helicopter.glb";   // realistic evac chopper (streams in; procedural fallback)
 const JEEP_MODEL = "./assets/models/defender.glb";   // real Land Rover Defender 110 (streams in; procedural fallback)
 const BOAT_MODEL = "./assets/models/gunboat.glb";   // AAA military riverine gunboat (replaces procedural box-boat)
+const C130_MODEL = "./assets/models/c130.glb";   // realistic C-130 Hercules (replaces procedural cyl+box plane)
 const EVAC_MODEL = "./assets/models/evac_facility.glb";   // iconic EVAC complex (visual shell; analytic collision/walk volumes overlaid)
 let FACILITY = null;   // {x,z,r,deck,padH,padX,padZ,padR,rampA} — traversal descriptor for facilityFloorAt()
 const JEEP_YAW = Math.PI;   // model-front -> local +x. At yaw=0 it drove rear-first (W=back, steer mirrored) => model front is at -x, so +180deg.
@@ -501,6 +502,7 @@ async function preloadModels() {
   if (JEEP_MODEL) loadModelOnce(JEEP_MODEL);
   if (EVAC_MODEL) loadModelOnce(EVAC_MODEL);
   if (BOAT_MODEL) loadModelOnce(BOAT_MODEL);
+  if (C130_MODEL) loadModelOnce(C130_MODEL);
   const tier1 = [...new Set([PLAYER_MODEL, ...ROLES.map(r => r.model)].filter(Boolean))];
   await loadWave(tier1, 4);                                // the ONLY wait before the game is playable
   if (!playerMixer) buildPlayer();
@@ -2381,7 +2383,7 @@ function spawnAirdropCrate(x, z) {
   g.position.set(x, gy + 64, z);   // starts high; descends under the parachute
   const crate = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.2, 1.4), new THREE.MeshStandardMaterial({ color: 0x6a5a32, roughness: 0.85 })); crate.position.y = 0.6; g.add(crate);
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.46, 0.2, 0.34), new THREE.MeshStandardMaterial({ color: 0xe0772f, emissive: 0xe0772f, emissiveIntensity: 0.6 })); stripe.position.y = 0.9; g.add(stripe);
-  const chute = new THREE.Mesh(new THREE.SphereGeometry(2.1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xd8d2c2, side: THREE.DoubleSide, roughness: 1 })); chute.position.y = 3.6; g.add(chute); g.userData.chute = chute;
+  const chute = buildParachute(); chute.position.y = 1.2; chute.scale.setScalar(0.9); g.add(chute); g.userData.chute = chute;   // proper military canopy on the supply drop too
   // findability: a green signal beam + light + slow-rotating marker ring (matches the map objective colour)
   const beam = new THREE.Group(); const col = 0x6fae6b;
   const ray = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 26, 8), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.22, depthWrite: false })); ray.position.y = 13; beam.add(ray);
@@ -4231,6 +4233,21 @@ function strut(ax, ay, az, bx, by, bz, r, mat) {
 // upswept tail with the cargo ramp, gear sponsons. Nose points +x. Used for the HALO intro
 // establishing shot and the resupply flyover.
 function buildHercules() {
+  if (MODELS[C130_MODEL]) {
+    const g = new THREE.Group();
+    const mdl = MODELS[C130_MODEL].clone(true);
+    mdl.scale.setScalar(1); mdl.rotation.set(0, 0, 0); mdl.updateMatrixWorld(true);
+    let box = new THREE.Box3().setFromObject(mdl), size = new THREE.Vector3(); box.getSize(size);
+    mdl.scale.setScalar(28 / (Math.max(size.x, size.z) || 1));   // ~28 m across the larger axis (wingspan)
+    mdl.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(mdl); const c = new THREE.Vector3(); box.getCenter(c);
+    mdl.position.x -= c.x; mdl.position.y -= c.y; mdl.position.z -= c.z;   // center on origin (flies/banks about its centroid)
+    // Generated nose faces -x (fuselage long axis); rotate so nose = +x (the flight/jump convention used by the intro)
+    mdl.rotation.y = Math.PI;
+    mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    g.add(mdl);
+    return g;
+  }
   const g = new THREE.Group();
   const body = _mm(0x6b7169, 0.7, 0.3), dark = _mm(0x3a3f39, 0.8, 0.3), trim = _mm(0x23271f, 0.85, 0.2);
   const glass = new THREE.MeshStandardMaterial({ color: 0x16202a, emissive: 0x0a1418, metalness: 0.6, roughness: 0.3 });
