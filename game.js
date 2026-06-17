@@ -1112,20 +1112,23 @@ function buildFoliage() {
   reseed(1337);
   // TRACK A: density scales with the graphics tier (mobile stays light; high = lush key-art canopy)
   const fol = GFX.tier === "high" ? 1.6 : GFX.tier === "low" ? 1.0 : 0.7;
-  if (BILLBOARDS.grass) foliageGroup.add(billboardLayer(BILLBOARDS.grass, Math.round(2600 * fol), 0.4, 1.1, { minR: 5 }));
+  if (BILLBOARDS.grass) {
+    foliageGroup.add(billboardLayer(BILLBOARDS.grass, Math.round(5200 * fol), 0.35, 0.9, { minR: 3 }));   // dense short ground grass
+    foliageGroup.add(billboardLayer(BILLBOARDS.grass, Math.round(2200 * fol), 1.0, 2.0, { minR: 4, color: 0x7d9166 }));   // taller grass tufts for height variety
+  }
   if (BILLBOARDS.bush) {
-    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(900 * fol), 1.2, 2.6, { minR: 10 }));                   // understory ferns, knee-to-chest
-    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(300 * fol), 4, 7, { minR: 22, color: 0xb9cdb6 }));      // mid canopy, set back
-    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(520 * fol), 8, 15, { edge: true, minR: 16, color: 0xacc2ac })); // perimeter jungle wall, far
+    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(1800 * fol), 1.2, 2.8, { minR: 6 }));                   // dense understory ferns, knee-to-chest
+    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(650 * fol), 4, 8, { minR: 16, color: 0xb9cdb6 }));      // mid canopy, denser
+    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(900 * fol), 8, 16, { edge: true, minR: 14, color: 0xacc2ac })); // thick perimeter jungle wall
   }
   // TRACK A: scattered ferns hugging the camera for the dense-foreground key-art read
-  if (MODELS[FOLIAGE.fern]) { const NF = Math.round(46 * fol); for (let i = 0; i < NF; i++) {
+  if (MODELS[FOLIAGE.fern]) { const NF = Math.round(90 * fol); for (let i = 0; i < NF; i++) {
     let x, z, ok = 0;
     do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); } while (Math.hypot(x, z) < 8 && ++ok < 8);
     const fr = fitProp(MODELS[FOLIAGE.fern].clone(true), rand(0.6, 1.3), rand(0, 6.28));
     fr.position.set(x, groundH(x, z), z); foliageGroup.add(fr);
   } }
-  if (MODELS[FOLIAGE.tree]) { const NT = Math.round(30 * fol); for (let i = 0; i < NT; i++) {   // solid 3D trees for close-up variety
+  if (MODELS[FOLIAGE.tree]) { const NT = Math.round(60 * fol); for (let i = 0; i < NT; i++) {   // solid 3D trees for a fuller canopy
     let x, z, ok = 0;
     do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); } while (Math.hypot(x, z) < 12 && ++ok < 8);
     const t = fitModel(MODELS[FOLIAGE.tree].clone(true), rand(9, 15), rand(0, 6.28));
@@ -1219,13 +1222,28 @@ function buildBeacon() {
   const safe = new THREE.Mesh(new THREE.RingGeometry(18 - 0.6, 18, 48),
     new THREE.MeshBasicMaterial({ color: 0x6fae6b, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
   safe.rotation.x = -Math.PI / 2; safe.position.y = 0.12; g.add(safe);
-  const pylon = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 4.2, 8),
-    new THREE.MeshStandardMaterial({ color: 0x3a4a3a, roughness: 1, emissive: 0x123512, emissiveIntensity: 0.5, flatShading: true }));
-  pylon.position.y = 2.1; g.add(pylon);
-  beaconGlow = new THREE.Mesh(new THREE.SphereGeometry(0.7, 12, 12),
+  // --- real emergency signal beacon: weathered metal mast on a tripod base, strobe lamp on top ---
+  const metalMat = new THREE.MeshStandardMaterial({ color: 0x6b6f63, roughness: 0.7, metalness: 0.6 });
+  const hazMat   = new THREE.MeshStandardMaterial({ color: 0xd6a020, roughness: 0.6, metalness: 0.4, emissive: 0x6a4a00, emissiveIntensity: 0.3 });
+  // three splayed tripod legs
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.10, 2.6, 6), metalMat);
+    leg.position.set(Math.cos(a) * 0.7, 1.1, Math.sin(a) * 0.7); leg.rotation.z = Math.cos(a) * 0.28; leg.rotation.x = -Math.sin(a) * 0.28; g.add(leg);
+  }
+  // central mast
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.20, 4.0, 10), metalMat);
+  mast.position.y = 2.3; g.add(mast);
+  // hazard collar
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, 0.6, 12), hazMat);
+  collar.position.y = 1.2; g.add(collar);
+  // lamp housing on top
+  const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.30, 0.5, 12), metalMat);
+  housing.position.y = 4.45; g.add(housing);
+  beaconGlow = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 14),
     new THREE.MeshBasicMaterial({ color: 0x7CFC00 }));
-  beaconGlow.position.y = 4.5; g.add(beaconGlow);
-  const light = new THREE.PointLight(0x7CFC00, 2.2, 40); light.position.y = 4.5; g.add(light);
+  beaconGlow.position.y = 4.8; g.add(beaconGlow);
+  const light = new THREE.PointLight(0x7CFC00, 2.4, 44); light.position.y = 4.8; g.add(light);
   beaconRing = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.12, 8, 28),
     new THREE.MeshBasicMaterial({ color: 0x7CFC00, transparent: true, opacity: 0.8 }));
   beaconRing.rotation.x = -Math.PI / 2; beaconRing.position.y = 0.3; g.add(beaconRing);
