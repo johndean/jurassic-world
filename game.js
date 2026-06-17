@@ -3649,7 +3649,7 @@ function enterVehicle(j) {
   const P = S.player;
   P.driveVeh = j; if (j.userData.speed == null) j.userData.speed = 0;
   P.driveYaw = Math.atan2(Math.cos(j.rotation.y), -Math.sin(j.rotation.y));   // adopt the jeep's current facing (model +x = forward)
-  cam.yaw = P.driveYaw; cam.pitch = -0.12;
+  cam.yaw = P.driveYaw; cam.pitch = -0.12; camera.up.set(0, 1, 0);
   if (playerMesh) playerMesh.visible = false;
   driveCamFP = false; driveLookYaw = 0; driveLookPitch = 0;
   { const bc = $("btnCam"); if (bc) bc.style.display = isTouch ? "flex" : "none"; }
@@ -4936,6 +4936,7 @@ function updateCamera() {
     return;
   }
   if (P.driveVeh) {
+    camera.up.set(0, 1, 0);   // FIX: clear any rolled 'up' left by an intro/evac cinematic (was tilting the world 45deg)
     const j = P.driveVeh, hy = j.position.y;
     const s = Math.sin(P.driveYaw), c = Math.cos(P.driveYaw);   // truck heading
     // free-look = OFFSET on the heading, so you can look around without changing steering.
@@ -4964,6 +4965,7 @@ function updateCamera() {
     return;
   }
   if (playerMesh && !playerMesh.visible && S.phase === "playing" && !P.driveVeh) playerMesh.visible = true;
+  camera.up.set(0, 1, 0);   // FIX: keep the on-foot horizon upright (intro crash-spin leaves a rolled up-vector)
   const tx = P.x, ty = (P.eyeY != null ? P.eyeY : playerFloorY(P.x, P.z)) + 1.5, tz = P.z;
   const cp = Math.cos(cam.pitch), d = cam.dist * cp;
   let cx = tx - Math.sin(cam.yaw) * d, cz = tz - Math.cos(cam.yaw) * d, cy = ty + cam.height + Math.sin(cam.pitch) * cam.dist * -1 + cam.dist * cp * 0.0;
