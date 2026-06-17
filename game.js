@@ -2071,7 +2071,7 @@ function spawnDino(speciesId, x, z) {
     x, z, yaw: rand(0, 6.28), vx: 0, vz: 0, hp: sp.combat.health,
     state: baseStateFor(sp),
     bb: { lastSeenX: 0, lastSeenZ: 0, hasTarget: false, threat: 0, role: "harry", scared: 0, homeX: x, homeZ: z, hue: 0 },
-    cd: 0, decideIn: rand(0, 0.25), lod: "full", anim: 0, alive: true, gaitPhase: rand(0, 6.28), roar: 0, roarCd: rand(2, 6),
+    cd: 0, decideIn: rand(0, 0.25), lod: "full", anim: 0, alive: true, gaitPhase: rand(0, 6.28), roar: 0, roarCd: rand(2, 6), eatPhase: rand(0, 6.28), roarShake: 0,
     sedation: 0, sedated: false, downT: 0, trapped: false, trappedT: 0, drawn: false,   // field-science (tranq/trap/sample)
   };
 }
@@ -2746,27 +2746,55 @@ function animateDino(a, dt) {
     if (a.footPhase > 1.5) { a.footPhase = 0; const dxp = a.x - P.x, dzp = a.z - P.z, dd = Math.hypot(dxp, dzp) || 1; if (dd < 45) Audio.thudAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw)); }
   }
   // ---- procedural action overlays (additive on top of the gait) ----
+  const head = a.mesh.userData.head, jaw = a.mesh.userData.jaw;
+  let jawOpen = 0, headPitch = 0, headYaw = 0;   // accumulate head/jaw drive, applied once at the end
   if (body) {
     if (a.anim > 0) {                                   // ATTACK: bite lunge — snap forward + head down
       const snap = Math.sin((1 - a.anim / 0.4) * Math.PI);
       if (!a.mixer) body.rotation.x += snap * 0.45;
       a.mesh.position.x += Math.sin(a.yaw) * snap * 0.5;
       a.mesh.position.z += Math.cos(a.yaw) * snap * 0.5;
+      headPitch += snap * 0.5;                           // head drives DOWN into the bite
+      jawOpen = Math.max(jawOpen, 0.7);
     }
-    // roar chest-swell pulses RELATIVE to the element's base scale. For a loaded model, children[0] is the
-    // fitModel-scaled model (scale ≈ standH/modelH); resetting it to 1 (as before) wiped that fit → the model
-    // rendered at its raw ~0.8 m size AND floated (feet offset was computed for the fitted scale). For a greybox,
-    // base scale is 1, so behaviour is unchanged.
     if (body.userData._baseScale == null) body.userData._baseScale = body.scale.x || 1;
     const bs = body.userData._baseScale;
-    if (a.roar > 0) {                                   // ROAR: rear up + chest swell
-      const rp = Math.sin((1 - a.roar / 1.1) * Math.PI);
-      if (!a.mixer) body.rotation.x -= rp * 0.3;
-      body.scale.setScalar(bs * (1 + rp * 0.06));
+    if (a.roar > 0) {
+      // ROAR — a real theropod bellow: rear the body UP & BACK, throw the head high, gape the jaw wide
+      // and HOLD it, with a side-to-side head shake at the peak + a tail-counter body roll. Reads on
+      // both the single-mesh loaded models (body motion) and the greybox (head/jaw articulation).
+      const t = 1 - a.roar / 1.1;                        // 0..1 across the roar
+      const env = Math.sin(t * Math.PI);                 // smooth rise+fall envelope
+      const peak = Math.pow(Math.sin(t * Math.PI), 1.6); // sharper, sustained at the apex
+      if (!a.mixer) { body.rotation.x -= env * 0.42; body.rotation.z += Math.sin(t * 34) * 0.05 * peak; }
+      body.scale.setScalar(bs * (1 + env * 0.08));       // chest swell
+      headPitch -= env * 0.85;                           // head/neck rears UP (negative = up)
+      headYaw += Math.sin(t * 26) * 0.22 * peak;         // side-to-side head shake at the bellow
+      jawOpen = Math.max(jawOpen, 0.55 + peak * 0.55);   // wide gape, held through the peak
     } else if (body.scale.x !== bs) body.scale.setScalar(bs);
+    // ---- EAT / FEED — carnivore tearing at a carcass: rhythmic head-down lunges + chomp ----
+    if (a.state === "Feed") {
+      a.eatPhase += dt * 5.2;                            // tearing cadence
+      const tear = Math.max(0, Math.sin(a.eatPhase));    // down-stroke = bite & pull
+      const pull = Math.pow(tear, 1.8);
+      if (!a.mixer) body.rotation.x += pull * 0.30;      // whole body dips into the carcass
+      headPitch += 0.55 + pull * 0.7;                    // head buried down, yanks up to tear
+      headYaw += Math.sin(a.eatPhase * 0.5) * 0.18;      // wrench side-to-side ripping flesh
+      jawOpen = Math.max(jawOpen, 0.25 + (1 - tear) * 0.6);  // chomp: open between pulls, clamp on the down-stroke
+    }
+    // ---- GRAZE — herbivore cropping vegetation: slow head-down bob + gentle chew ----
+    else if (a.state === "Graze") {
+      a.eatPhase += dt * 1.8;                            // calm cadence
+      const bob = (Math.sin(a.eatPhase) * 0.5 + 0.5);    // 0..1 head dips to the ground & lifts
+      headPitch += 0.45 + bob * 0.5;                     // head low, grazing
+      jawOpen = Math.max(jawOpen, 0.12 + Math.abs(Math.sin(a.eatPhase * 6)) * 0.18);  // steady chewing
+      if (!a.mixer) body.rotation.x += bob * 0.10;
+    }
     if (!a.mixer && a.state === "Flee") body.rotation.x += moveAmt * 0.12;   // FLEE: panic forward lean
   }
-  if (a.mesh.userData.jaw) a.mesh.userData.jaw.rotation.x = a.anim > 0 ? 0.6 : 0;
+  // apply accumulated head/neck/jaw drive (greybox dinos have articulated parts; loaded models don't)
+  if (head) { head.rotation.x = headPitch; head.rotation.y = headYaw; }
+  if (jaw) jaw.rotation.x = jawOpen;
 }
 
 function updateDinos(dt, P) {
