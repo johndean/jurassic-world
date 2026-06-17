@@ -496,10 +496,10 @@ async function preloadModels() {
   (async () => {                                           // everything else streams in the background, prioritised
     const all = [...new Set(Object.values(SPECIES).map(s => s.modelPath).filter(Boolean))].filter(p => !tier1.includes(p));
     await loadWave(all, 5);                                // creatures reskin as they land (all now ~1-2 MB)
+    const props = [...new Set([PROPS3D.rock, PROPS3D.fern, PROPS3D.log].filter(Boolean))];
+    await loadWave(props, 3); try { buildHeroProps(); } catch (e) { console.error("heroProps", e); }
     const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.fern].filter(Boolean))];
     await loadWave(foliage, 2); buildFoliage();
-    const props = [...new Set([PROPS3D.rock, PROPS3D.fern, PROPS3D.log].filter(Boolean))];
-    await loadWave(props, 2); try { buildHeroProps(); } catch (e) { console.error("heroProps", e); }
     const ruins = [...new Set([RUINS.gate.url, RUINS.centre.url].filter(Boolean))];
     await loadWave(ruins, 2); buildRuinModels();
   })();
@@ -777,6 +777,7 @@ function buildWorld() {
   });
 
   buildFoliage();
+  try { buildHeroProps(); } catch (e) { console.error("heroProps", e); }   // TRACK A: real 3D props every mission
 
   // INSTANCED rocks — boulders across the valley, clustered along the river, sitting on the terrain
   const dm = new THREE.Object3D();
