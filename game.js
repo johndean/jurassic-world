@@ -107,6 +107,7 @@ const HELI_MODEL = "./assets/models/helicopter.glb";   // realistic evac chopper
 const JEEP_MODEL = "./assets/models/defender.glb";   // real Land Rover Defender 110 (streams in; procedural fallback)
 const BOAT_MODEL = "./assets/models/gunboat.glb";   // AAA military riverine gunboat (replaces procedural box-boat)
 const C130_MODEL = "./assets/models/c130.glb";   // realistic C-130 Hercules (replaces procedural cyl+box plane)
+const MAYA_MODEL = "./assets/models/maya.glb";   // Maya — real scientist/ranger woman (replaces capsule survivor)
 const EVAC_MODEL = "./assets/models/evac_facility.glb";   // iconic EVAC complex (visual shell; analytic collision/walk volumes overlaid)
 let FACILITY = null;   // {x,z,r,deck,padH,padX,padZ,padR,rampA} — traversal descriptor for facilityFloorAt()
 const JEEP_YAW = Math.PI;   // model-front -> local +x. At yaw=0 it drove rear-first (W=back, steer mirrored) => model front is at -x, so +180deg.
@@ -503,6 +504,7 @@ async function preloadModels() {
   if (EVAC_MODEL) loadModelOnce(EVAC_MODEL);
   if (BOAT_MODEL) loadModelOnce(BOAT_MODEL);
   if (C130_MODEL) loadModelOnce(C130_MODEL);
+  if (MAYA_MODEL) loadModelOnce(MAYA_MODEL);
   const tier1 = [...new Set([PLAYER_MODEL, ...ROLES.map(r => r.model)].filter(Boolean))];
   await loadWave(tier1, 4);                                // the ONLY wait before the game is playable
   if (!playerMixer) buildPlayer();
@@ -1372,12 +1374,25 @@ function buildRangerStation(g) {                          // FALLEN OUTPOST — 
   g.userData.doorPivot = doorPivot;
   const wreck = new THREE.Group(); wreck.position.set(3.6, 0, 3.6); g.add(wreck); buildCollapsedTower(wreck);   // "the collapsed watchtower" beside the station
 }
-function buildSurvivor(x, z, col) {                       // a survivor — slumped/waving until reached, then follows
+function buildSurvivor(x, z, col) {                       // Maya — real scientist/ranger woman (capsule fallback until the model streams in)
   const g = new THREE.Group(); g.position.set(x, groundH(x, z), z);
   const cloth = _mm(col || 0x9a5a3c, 0.9), dark = _mm(0x2a2620, 0.8), skin = _mm(0xb98a6a, 0.7);
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.58, 5, 10), cloth); torso.position.y = 1.0; g.add(torso);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), skin); head.position.y = 1.52; g.add(head);
-  for (const sx of [-1, 1]) { const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.58, 4, 8), dark); leg.position.set(sx * 0.14, 0.4, 0); g.add(leg); const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.5, 4, 8), cloth); arm.position.set(sx * 0.34, 1.04, 0); g.add(arm); }
+  if (MODELS[MAYA_MODEL]) {
+    const mdl = MODELS[MAYA_MODEL].clone(true);
+    mdl.scale.setScalar(1); mdl.rotation.set(0, 0, 0); mdl.updateMatrixWorld(true);
+    let box = new THREE.Box3().setFromObject(mdl), size = new THREE.Vector3(); box.getSize(size);
+    mdl.scale.setScalar(1.78 / (size.y || 1));            // ~1.78 m tall
+    mdl.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(mdl); const c = new THREE.Vector3(); box.getCenter(c);
+    mdl.position.x -= c.x; mdl.position.z -= c.z; mdl.position.y -= box.min.y;   // feet on the ground
+    mdl.rotation.y = Math.PI;                              // face outward toward the player on approach
+    mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    g.add(mdl); g.userData.mdl = mdl;
+  } else {
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.58, 5, 10), cloth); torso.position.y = 1.0; g.add(torso);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), skin); head.position.y = 1.52; g.add(head);
+    for (const sx of [-1, 1]) { const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.58, 4, 8), dark); leg.position.set(sx * 0.14, 0.4, 0); g.add(leg); const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.5, 4, 8), cloth); arm.position.set(sx * 0.34, 1.04, 0); g.add(arm); }
+  }
   const wound = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshStandardMaterial({ color: 0xc23a2a, emissive: 0x5a1206, roughness: 0.6 })); wound.position.set(0.24, 1.0, 0.16); g.add(wound);
   const halo = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 20), new THREE.MeshBasicMaterial({ color: 0x6fae6b, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); halo.rotation.x = -Math.PI / 2; halo.position.y = 2.3; g.add(halo);
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 6, 6), new THREE.MeshBasicMaterial({ color: 0x6fae6b, transparent: true, opacity: 0.25, depthWrite: false })); beam.position.y = 3; g.add(beam);
