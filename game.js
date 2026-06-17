@@ -466,9 +466,9 @@ try { const _sd = localStorage.getItem("ja_diff"); if (_sd && DIFFICULTIES[_sd])
 const _gltfLoader = new GLTFLoader();
 function loadModel(path) {
   return new Promise(res => _gltfLoader.load(path,
-    gltf => { gltf.scene.traverse(o => { if (o.isMesh) o.frustumCulled = true; }); MODEL_ANIMS[path] = gltf.animations || []; res(gltf.scene); },
+    gltf => { gltf.scene.traverse(o => { if (o.isMesh) o.frustumCulled = true; }); MODEL_ANIMS[path] = gltf.animations || []; if (/prop_/.test(path)) console.log("[PROP-LOAD-OK]", path); res(gltf.scene); },
     undefined,
-    () => res(null)));            // missing/failed model -> null -> grey-box fallback
+    (err) => { console.error("[MODEL-LOAD-FAIL]", path, err && (err.message || err)); res(null); }));            // missing/failed model -> null -> grey-box fallback
 }
 // All .glb are WebP+1024 texture-compressed to ~1-2 MB (gltf-transform), so no model gates the rest.
 const _loadingModels = {};   // path -> in-flight Promise, so preload + the guide never double-fetch the same .glb
@@ -1086,6 +1086,7 @@ function buildHeroProps() {
     }
   };
   const d = GFX.tier === "high" ? 1.0 : 0.5;
+  console.log("[HEROPROPS] tier=" + GFX.tier + " rockLoaded=" + !!MODELS[PROPS3D.rock] + " fernLoaded=" + !!MODELS[PROPS3D.fern] + " logLoaded=" + !!MODELS[PROPS3D.log]);
   place(PROPS3D.rock, Math.round(14 * d), 1.6, 4.5, true, 0.40);   // hero boulders, solid
   place(PROPS3D.fern, Math.round(40 * d), 0.8, 1.8, false);        // real ferns dressing the floor
   place(PROPS3D.log,  Math.round(10 * d), 1.0, 1.7, true, 0.30);   // fallen logs, solid cover
