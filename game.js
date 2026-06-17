@@ -632,7 +632,7 @@ function setGfxTier(tier) {   // live re-apply from the OPTIONS toggle, no reloa
     o.castShadow = GFX.shadows; o.receiveShadow = GFX.shadows;
   } });
   if (cinePass) { cinePass.uniforms.uGrain.value = GFX.grain ? 1 : 0; cinePass.uniforms.uGrade.value = GFX.grade ? 1 : 0; cinePass.uniforms.uGodray.value = GFX.godrays ? 1 : 0; cinePass.uniforms.uDof.value = (GFX.tier === "high") ? 1 : 0; }
-  if (scene && scene.fog) scene.fog.density = (GFX.tier === "off") ? 0.009 : 0.0135;
+  if (scene && scene.fog) scene.fog.density = (GFX.tier === "off") ? 0.004 : 0.006;
   try { buildMist(); } catch (_) {}
   try { buildFoliage(); } catch (_) {}
 }
@@ -694,14 +694,14 @@ function initRenderer() {
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, DPR_CAP));
   renderer.setSize(innerWidth, innerHeight, false);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic response = more cinematic
-  renderer.toneMappingExposure = 1.28;   // TRACK A: lift for the misty key-art read
+  renderer.toneMappingExposure = 1.12;   // TRACK A: lift for the misty key-art read
   detectGfxTier();
   renderer.shadowMap.enabled = GFX.shadows; renderer.shadowMap.type = THREE.PCFSoftShadowMap;   // TRACK A soft sun shadows
   scene = new THREE.Scene();
   const m = BIOME.map;
-  scene.background = new THREE.Color(0xb7c3bf);   // brighter misty-valley sky (key-art match)
+  scene.background = new THREE.Color(0xc4cdc6);   // brighter misty-valley sky (key-art match)
   // TRACK A: denser, cooler teal-green valley haze — reads as the layered fog in the key art.
-  scene.fog = new THREE.FogExp2(new THREE.Color(0x9fb0ad), GFX.tier === "off" ? 0.009 : 0.0135);
+  scene.fog = new THREE.FogExp2(new THREE.Color(0xb9c4bd), GFX.tier === "off" ? 0.004 : 0.006);   // TRACK A: light atmospheric depth, NOT a wash-out filter
   // image-based lighting: procedural neutral studio env so PBR materials get real ambient + reflections
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
@@ -786,7 +786,7 @@ function buildWorld() {
   const dm = new THREE.Object3D();
   const NR = 70;   // TRACK A: fewer, smaller procedural pebbles -- hero rocks (buildHeroProps) carry the big boulders now
   clearColliders();
-  const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0x5b615f, roughness: 1 }), NR);
+  const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshStandardMaterial({ color: 0x57604a, roughness: 1, flatShading: true }), NR);   // mossy stone tone + more facets, flat-shaded so it reads as rock not a smooth egg
   for (let i = 0; i < NR; i++) {
     let x, z;
     if (i % 3 === 0) { x = rand(-half + 10, half - 10); z = 48 + Math.sin(x * 0.02) * 28 + rand(-13, 13); }  // riverside
@@ -1013,7 +1013,7 @@ function buildMist() {
   const pos = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) { pos[i*3] = rand(-R, R); pos[i*3+1] = rand(0.4, 14); pos[i*3+2] = rand(-R, R); }
   const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const mat = new THREE.PointsMaterial({ color: 0xcdd8d0, size: 0.13, transparent: true, opacity: 0.32, depthWrite: false, sizeAttenuation: true, fog: true });
+  const mat = new THREE.PointsMaterial({ color: 0xcdd8d0, size: 0.13, transparent: true, opacity: 0.16, depthWrite: false, sizeAttenuation: true, fog: true });
   mistField = new THREE.Points(geo, mat); mistField.frustumCulled = false; mistField.renderOrder = 2; scene.add(mistField);
 }
 function updateMist(dt, now) {
@@ -1044,7 +1044,7 @@ function billboardLayer(texUrl, count, hMin, hMax, opts) {
   const a = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
   const b = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0); b.rotateY(Math.PI / 2);
   const geo = mergeGeometries([a, b]);   // X-shaped cross-quad = volume from any angle
-  const mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1, metalness: 0, color: opts.color || 0xffffff });
+  const mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, transparent: true, side: THREE.DoubleSide, roughness: 1, metalness: 0, color: opts.color || 0x6f8a5c });   // green base so a loading/failed quad blends, never flashes white
   const mesh = new THREE.InstancedMesh(geo, mat, count);
   const dm = new THREE.Object3D();
   for (let i = 0; i < count; i++) {
@@ -1083,17 +1083,19 @@ function fitProp(model, targetSize, yawOffset) {
   return g;
 }
 let heroPropsGroup = null;
-let _heroPropsLoading = false;
+let _propLoading = {}, _propRebuildQueued = false;
 function buildHeroProps() {
   if (heroPropsGroup) { scene.remove(heroPropsGroup); heroPropsGroup = null; }
   if (GFX.tier === "off") return;
-  // ensure the prop models are loaded; if any is missing, load them then rebuild once (no silent no-op)
+  // Self-healing loader (mirrors the proven self-test path): each prop loads independently and
+  // triggers exactly ONE rebuild when it lands. No shared stuck-flag, no all-or-nothing Promise.all —
+  // if one prop fails the others still place.
   const urls = [PROPS3D.rock, PROPS3D.fern, PROPS3D.log].filter(Boolean);
-  const missing = urls.filter(u => !MODELS[u]);
-  if (missing.length && !_heroPropsLoading) {
-    _heroPropsLoading = true;
-    Promise.all(missing.map(u => loadModelOnce(u))).then(() => { _heroPropsLoading = false; try { buildHeroProps(); } catch (e) { console.error("heroProps reload", e); } });
-  }
+  urls.forEach(u => {
+    if (MODELS[u] || _propLoading[u]) return;
+    _propLoading[u] = true;
+    loadModelOnce(u).then(m => { if (m && !_propRebuildQueued) { _propRebuildQueued = true; requestAnimationFrame(() => { _propRebuildQueued = false; try { buildHeroProps(); } catch (e) { console.error("heroProps reload", e); } }); } });
+  });
   const m = BIOME.map, half = m.size / 2; heroPropsGroup = new THREE.Group(); reseed(4242);
   // sMin/sMax = target LARGEST-dimension in metres (human ~1.8m tall for scale reference).
   const place = (url, count, sMin, sMax, solid, rMul) => {
