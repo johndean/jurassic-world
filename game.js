@@ -104,6 +104,7 @@ const PROPS3D = {
   log:  "./assets/models/prop_log.glb?v=3",
 };
 const HELI_MODEL = "./assets/models/helicopter.glb";   // realistic evac chopper (streams in; procedural fallback)
+const JEEP_MODEL = "./assets/models/defender.glb";   // real Land Rover Defender 110 (streams in; procedural fallback)
 // photoreal hero ruin structures (streamed .glb); empty until generated. {url, x, z, targetH, yaw}
 const RUINS = {
   gate: { url: "./assets/models/ruin_gate.glb", x: 0, z: -56, h: 12, yaw: 0 },
@@ -493,6 +494,7 @@ async function loadWave(paths, conc = 5) {
 //   T2 all creatures · environment (foliage, ruins) — all background, grey-box until landed.
 async function preloadModels() {
   if (HELI_MODEL) loadModelOnce(HELI_MODEL);
+  if (JEEP_MODEL) loadModelOnce(JEEP_MODEL);
   const tier1 = [...new Set([PLAYER_MODEL, ...ROLES.map(r => r.model)].filter(Boolean))];
   await loadWave(tier1, 4);                                // the ONLY wait before the game is playable
   if (!playerMixer) buildPlayer();
@@ -3460,6 +3462,22 @@ function endIntroResearch() {                             // stand the player at
 
 /* ── GHOSTS OF SECTOR 9 · ranger jeep-convoy expedition (ride in, dismount on foot) ── */
 function buildJeep() {                                    // ranger Land Rover Defender (front = local +x), headlights for the reveal
+  // Real Defender .glb when streamed in — fitted to vehicle length, front aligned to local +x,
+  // with the same headlight spot-beams the intro reveal expects. Falls back to procedural boxes.
+  if (MODELS[JEEP_MODEL]) {
+    const j = new THREE.Group();
+    const model = fitModel(MODELS[JEEP_MODEL].clone(true), 2.55, 0);   // ~2.55 m tall Defender 110
+    // image-to-3d front faces -Z; rotate so the vehicle front = local +x (matches driving + lights)
+    model.rotation.y = -Math.PI / 2;
+    j.add(model);
+    const lights = [];
+    for (const lz of [0.62, -0.62]) {
+      const beam = new THREE.SpotLight(0xfff0c4, 6, 38, 0.5, 0.4, 1.4); beam.position.set(2.4, 1.3, lz);
+      beam.target.position.set(12, 0.6, lz); j.add(beam); j.add(beam.target); lights.push(beam);
+    }
+    j.userData.lights = lights;
+    return j;
+  }
   const j = new THREE.Group();
   const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a5a3c, roughness: 0.85, metalness: 0.15 });   // ranger olive
   const roofMat = new THREE.MeshStandardMaterial({ color: 0xd9ddd2, roughness: 0.82, metalness: 0.05 });   // classic white Defender roof
