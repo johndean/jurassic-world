@@ -783,21 +783,9 @@ function buildWorld() {
   try { buildHeroProps(); } catch (e) { console.error("heroProps", e); }   // TRACK A: real 3D props every mission
 
   // INSTANCED rocks — boulders across the valley, clustered along the river, sitting on the terrain
-  const dm = new THREE.Object3D();
-  const NR = 70;   // TRACK A: fewer, smaller procedural pebbles -- hero rocks (buildHeroProps) carry the big boulders now
   clearColliders();
-  const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshStandardMaterial({ color: 0x57604a, roughness: 1, flatShading: true }), NR);   // mossy stone tone + more facets, flat-shaded so it reads as rock not a smooth egg
-  for (let i = 0; i < NR; i++) {
-    let x, z;
-    if (i % 3 === 0) { x = rand(-half + 10, half - 10); z = 48 + Math.sin(x * 0.02) * 28 + rand(-13, 13); }  // riverside
-    else { x = rand(-half + 4, half - 4); z = rand(-half + 4, half - 4); }
-    const s = rand(0.5, 1.4) * (i % 3 === 0 ? 1.2 : 1);   // TRACK A: capped small
-    dm.position.set(x, groundH(x, z) + s * 0.25, z); dm.rotation.set(rand(0, 3), rand(0, 6), rand(0, 3)); dm.scale.set(s, s * 0.7, s); dm.updateMatrix();
-    rocks.setMatrixAt(i, dm.matrix);
-    if (s > 1.35) { const h = s * 0.95, top = groundH(x, z) + h; addCollider(x, z, s * 0.6, { h, top, climb: h >= 1.6 && h <= 4.2 }); }   // big boulders are solid; mid ones are climbable; small stay steppable
-  }
-  rocks.instanceMatrix.needsUpdate = true;
-  scene.add(rocks);
+  // TRACK A: procedural icosahedron rocks REMOVED — they read as ugly low-poly blobs next to the real
+  // textured prop_rock.glb. The hero rocks in buildHeroProps now carry ALL boulders (real moss geometry).
 
   buildRuins();
   addCollidersFromObject(ruinsGroup, { min: 0.9, minH: 1.1, scale: 0.78 });   // ruined masonry / columns / jeep are solid
@@ -1111,7 +1099,7 @@ function buildHeroProps() {
     }
   };
   const d = GFX.tier === "high" ? 1.0 : 0.5;
-  place(PROPS3D.rock, Math.round(10 * d), 1.0, 2.2, true, 0.34);   // boulders, human-scale, solid
+  place(PROPS3D.rock, Math.round(24 * d), 0.8, 2.6, true, 0.34);   // ALL boulders now real moss-textured geometry (procedural ones removed)
   place(PROPS3D.fern, Math.round(30 * d), 0.7, 1.4, false);        // knee-to-waist ferns dressing the floor
   place(PROPS3D.log,  Math.round(8 * d),  2.2, 3.6, true, 0.28);   // fallen logs ~human-length, solid cover
   scene.add(heroPropsGroup);
@@ -2136,8 +2124,8 @@ function buildModelMesh(sp, tmpl) {
 function buildDinoMesh(sp) {
   const tmpl = MODELS[sp.modelPath];
   if (tmpl) return buildModelMesh(sp, tmpl);
-  const gb = sp.greybox, col = new THREE.Color(gb.color);
-  const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 1, flatShading: true });
+  const gb = sp.greybox;
+  const mat = new THREE.MeshStandardMaterial({ color: 0x3a4236, roughness: 1, flatShading: true });   // dark neutral so a not-yet-loaded dino reads as foliage, not a bright cube
   const g = new THREE.Group();
   const scale = gb.standH;
   const body = new THREE.Mesh(new THREE.BoxGeometry(gb.bodyW, gb.bodyH, gb.bodyL), mat);
