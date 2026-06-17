@@ -680,10 +680,10 @@ const CINEGRADE = {
     "  }",
     "  if (uGrade > 0.5){",
     "    float l = dot(c, vec3(0.299,0.587,0.114));",
-    "    c = mix(vec3(l), c, 1.08);",
-    "    c = (c - 0.5) * 1.06 + 0.5;",
-    "    c += vec3(0.012,0.028,0.034) * (1.0 - smoothstep(0.0,0.5,l));",
-    "    c += vec3(0.070,0.045,0.005) * smoothstep(0.55,1.0,l);",
+    "    c = mix(vec3(l), c, 1.13);",                                  // TRACK C: richer saturation
+    "    c = (c - 0.5) * 1.085 + 0.5;",                                // a touch more contrast
+    "    c += vec3(0.010,0.030,0.040) * (1.0 - smoothstep(0.0,0.5,l));",  // teal shadows (key-art cool)
+    "    c += vec3(0.085,0.052,0.006) * smoothstep(0.52,1.0,l);",        // amber highlights (key-art warm)
     "  }",
     "  vec2 d = vUv - 0.5; float v = smoothstep(0.85, 0.18, dot(d,d)*uVig*2.0); c *= mix(0.74, 1.0, v);",
     "  if (uGrain > 0.5){ float g = hash(vUv * vec2(1920.0,1080.0) + fract(uTime)*97.0) - 0.5; c += g * 0.035; }",
@@ -747,6 +747,7 @@ function buildWorld() {
   sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.6;
   sun.castShadow = GFX.shadows;
   scene.add(new THREE.HemisphereLight(0xaab6bd, 0x35402f, 0.5));   // TRACK A: warmer sky / greener ground bounce
+  const rimLight = new THREE.DirectionalLight(0xffd9a8, 0.75); rimLight.position.set(70, 40, -85); scene.add(rimLight);   // TRACK C: warm back-rim separates silhouettes from the misty bg
   scene.add(new THREE.AmbientLight(0x5e676b, 0.22));   // TRACK A: lower flat fill so shadows + sun contrast read
   buildSky();
 
@@ -1012,11 +1013,11 @@ let mistField = null;
 function buildMist() {
   if (mistField) { scene.remove(mistField); if (mistField.geometry) mistField.geometry.dispose(); mistField = null; }
   if (!GFX.mist || !scene) return;
-  const N = GFX.tier === "high" ? 600 : 260, R = 60;
+  const N = GFX.tier === "high" ? 1100 : 420, R = 64;
   const pos = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) { pos[i*3] = rand(-R, R); pos[i*3+1] = rand(0.4, 14); pos[i*3+2] = rand(-R, R); }
   const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const mat = new THREE.PointsMaterial({ color: 0xcdd8d0, size: 0.13, transparent: true, opacity: 0.16, depthWrite: false, sizeAttenuation: true, fog: true });
+  const mat = new THREE.PointsMaterial({ color: 0xe8e4cf, size: 0.16, transparent: true, opacity: 0.22, depthWrite: false, sizeAttenuation: true, fog: true });   // warm sunlit spores/pollen
   mistField = new THREE.Points(geo, mat); mistField.frustumCulled = false; mistField.renderOrder = 2; scene.add(mistField);
 }
 function updateMist(dt, now) {
