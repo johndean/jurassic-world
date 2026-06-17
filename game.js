@@ -105,7 +105,7 @@ const PROPS3D = {
 };
 const HELI_MODEL = "./assets/models/helicopter.glb";   // realistic evac chopper (streams in; procedural fallback)
 const JEEP_MODEL = "./assets/models/defender.glb";   // real Land Rover Defender 110 (streams in; procedural fallback)
-const JEEP_YAW = 0;   // model-front -> local +x (drive-forward). Was -PI/2 (right side fwd); +90deg lands front on +x. Tune by +/- PI/2 if still wrong.
+const JEEP_YAW = Math.PI;   // model-front -> local +x. At yaw=0 it drove rear-first (W=back, steer mirrored) => model front is at -x, so +180deg.
 // photoreal hero ruin structures (streamed .glb); empty until generated. {url, x, z, targetH, yaw}
 const RUINS = {
   gate: { url: "./assets/models/ruin_gate.glb", x: 0, z: -56, h: 12, yaw: 0 },
