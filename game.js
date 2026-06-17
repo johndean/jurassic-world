@@ -611,7 +611,7 @@ function setGfxTier(tier) {   // live re-apply from the OPTIONS toggle, no reloa
   applyGfxTier(tier);
   if (sun) sun.castShadow = GFX.shadows;
   if (renderer) renderer.shadowMap.enabled = GFX.shadows;
-  if (cinePass) { cinePass.uniforms.uGrain.value = GFX.grain ? 1 : 0; cinePass.uniforms.uGrade.value = GFX.grade ? 1 : 0; cinePass.uniforms.uGodray.value = GFX.godrays ? 1 : 0; }
+  if (cinePass) { cinePass.uniforms.uGrain.value = GFX.grain ? 1 : 0; cinePass.uniforms.uGrade.value = GFX.grade ? 1 : 0; cinePass.uniforms.uGodray.value = GFX.godrays ? 1 : 0; cinePass.uniforms.uDof.value = (GFX.tier === "high") ? 1 : 0; }
   try { buildMist(); } catch (_) {}
 }
 
@@ -624,13 +624,23 @@ const CINEGRADE = {
     tDiffuse: { value: null }, uTime: { value: 0 }, uVig: { value: 0.85 },
     uGrain: { value: 1 }, uGrade: { value: 1 }, uGodray: { value: 1 },
     uSun: { value: new THREE.Vector2(0.5, 0.78) }, uSunVis: { value: 0.0 },
+    uDof: { value: 1 }, uAspect: { value: 1.0 },
   },
   vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
   fragmentShader: [
-    "uniform sampler2D tDiffuse; uniform float uTime,uVig,uGrain,uGrade,uGodray,uSunVis; uniform vec2 uSun; varying vec2 vUv;",
+    "uniform sampler2D tDiffuse; uniform float uTime,uVig,uGrain,uGrade,uGodray,uSunVis,uDof,uAspect; uniform vec2 uSun; varying vec2 vUv;",
     "float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }",
     "void main(){",
     "  vec3 c = texture2D(tDiffuse, vUv).rgb;",
+    "  if (uDof > 0.5){",
+    "    vec2 dd = vUv - 0.5; dd.x *= uAspect; float foc = smoothstep(0.16, 0.55, dot(dd,dd));",
+    "    if (foc > 0.01){",
+    "      vec2 px = vec2(0.0015, 0.0015) * foc;",
+    "      vec3 b = texture2D(tDiffuse, vUv + vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, vUv - vec2(px.x, 0.0)).rgb",
+    "            + texture2D(tDiffuse, vUv + vec2(0.0, px.y)).rgb + texture2D(tDiffuse, vUv - vec2(0.0, px.y)).rgb;",
+    "      c = mix(c, b * 0.25, foc * 0.7);",
+    "    }",
+    "  }",
     "  if (uGodray > 0.5 && uSunVis > 0.001){",
     "    vec2 dir = (uSun - vUv) * 0.45; vec3 acc = vec3(0.0); float w = 0.0;",
     "    for (int i=0;i<6;i++){ float t = float(i)/5.0; vec2 uv = vUv + dir*t; vec3 sm = texture2D(tDiffuse, uv).rgb;",
@@ -679,7 +689,7 @@ function initRenderer() {
   composer.addPass(new RenderPass(scene, camera));
   bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.7, 0.6, 0.72); // TRACK A: richer glow on facility lights / wet water / fog
   composer.addPass(bloomPass);
-  cinePass = new ShaderPass(CINEGRADE); cinePass.uniforms.uGrain.value = GFX.grain ? 1 : 0; cinePass.uniforms.uGrade.value = GFX.grade ? 1 : 0; cinePass.uniforms.uGodray.value = GFX.godrays ? 1 : 0; composer.addPass(cinePass);   // TRACK A grade+grain+godrays
+  cinePass = new ShaderPass(CINEGRADE); cinePass.uniforms.uGrain.value = GFX.grain ? 1 : 0; cinePass.uniforms.uGrade.value = GFX.grade ? 1 : 0; cinePass.uniforms.uGodray.value = GFX.godrays ? 1 : 0; cinePass.uniforms.uDof.value = (GFX.tier === "high") ? 1 : 0; cinePass.uniforms.uAspect.value = innerWidth / innerHeight; composer.addPass(cinePass);   // TRACK A grade+grain+godrays
   composer.addPass(new OutputPass());
   addEventListener("resize", onResize);
   onResize();
@@ -691,6 +701,7 @@ function onResize() {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   if (composer) { composer.setPixelRatio(Math.min(devicePixelRatio || 1, DPR_CAP)); composer.setSize(innerWidth, innerHeight); }
+  if (cinePass) cinePass.uniforms.uAspect.value = innerWidth / innerHeight;   // TRACK A
 }
 
 /* --------------------------------------------------------------- world ---- */
@@ -726,7 +737,7 @@ function buildWorld() {
 
   // river: one translucent water plane; the terrain occludes it everywhere except the carved channel
   const water = new THREE.Mesh(new THREE.PlaneGeometry(m.size, m.size),
-    new THREE.MeshStandardMaterial({ color: 0x274a50, roughness: 0.18, metalness: 0.3, transparent: true, opacity: 0.9 }));
+    new THREE.MeshStandardMaterial({ color: 0x223f47, roughness: 0.08, metalness: 0.55, transparent: true, opacity: 0.92 }));   // TRACK A: wetter, more reflective
   water.rotation.x = -Math.PI / 2; water.position.y = WATER_Y; scene.add(water);
 
   // boundary walls (charcoal slabs) — soft fence of the valley
@@ -1023,19 +1034,28 @@ function buildFoliage() {
   foliageGroup = new THREE.Group();
   trees = [];
   reseed(1337);
-  if (BILLBOARDS.grass) foliageGroup.add(billboardLayer(BILLBOARDS.grass, 2400, 0.5, 1.5, { minR: 6 }));
+  // TRACK A: density scales with the graphics tier (mobile stays light; high = lush key-art canopy)
+  const fol = GFX.tier === "high" ? 1.6 : GFX.tier === "low" ? 1.0 : 0.7;
+  if (BILLBOARDS.grass) foliageGroup.add(billboardLayer(BILLBOARDS.grass, Math.round(2400 * fol), 0.5, 1.5, { minR: 6 }));
   if (BILLBOARDS.bush) {
-    foliageGroup.add(billboardLayer(BILLBOARDS.bush, 1000, 1.6, 4.5, { minR: 8 }));                    // understory
-    foliageGroup.add(billboardLayer(BILLBOARDS.bush, 380, 7, 14, { minR: 14, color: 0xc2d2c2 }));      // tall canopy
-    foliageGroup.add(billboardLayer(BILLBOARDS.bush, 600, 10, 20, { edge: true, minR: 10, color: 0xb6c8b6 })); // perimeter jungle wall
+    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(1000 * fol), 1.6, 4.5, { minR: 8 }));                    // understory
+    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(380 * fol), 7, 14, { minR: 14, color: 0xb9cdb6 }));      // tall canopy
+    foliageGroup.add(billboardLayer(BILLBOARDS.bush, Math.round(600 * fol), 10, 20, { edge: true, minR: 10, color: 0xacc2ac })); // perimeter jungle wall
   }
-  if (MODELS[FOLIAGE.tree]) for (let i = 0; i < 30; i++) {   // solid 3D trees for close-up variety
+  // TRACK A: scattered ferns hugging the camera for the dense-foreground key-art read
+  if (MODELS[FOLIAGE.fern]) { const NF = Math.round(46 * fol); for (let i = 0; i < NF; i++) {
+    let x, z, ok = 0;
+    do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); } while (Math.hypot(x, z) < 8 && ++ok < 8);
+    const fr = fitModel(MODELS[FOLIAGE.fern].clone(true), rand(0.8, 2.0), rand(0, 6.28));
+    fr.position.set(x, groundH(x, z), z); foliageGroup.add(fr);
+  } }
+  if (MODELS[FOLIAGE.tree]) { const NT = Math.round(30 * fol); for (let i = 0; i < NT; i++) {   // solid 3D trees for close-up variety
     let x, z, ok = 0;
     do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); } while (Math.hypot(x, z) < 12 && ++ok < 8);
     const t = fitModel(MODELS[FOLIAGE.tree].clone(true), rand(9, 15), rand(0, 6.28));
     t.position.set(x, groundH(x, z), z); foliageGroup.add(t);
     trees.push({ x, z, r: 1.3 });
-  }
+  } }
   scene.add(foliageGroup);
 }
 function addBlob(parent, r) {

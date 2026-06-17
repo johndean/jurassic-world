@@ -551,6 +551,25 @@
   @media (prefers-reduced-motion:reduce){.contact{animation:none;}}
   /* P-12: on very narrow phones drop the contact alert below the compass row so they can't overlap */
   @media (max-width:400px){.contact{top:112px;right:8px;font-size:8px;}}
+
+  /* ===== TRACK A: cinematic HUD polish toward the key-art look (additive; respects --hud vars + zoom) ===== */
+  .obj{ border-left:3px solid var(--hud-warn); background:linear-gradient(90deg, rgba(201,162,58,.16), var(--hud-bg) 60%); box-shadow:0 2px 14px rgba(0,0,0,.45); }
+  .obj-head{ text-transform:uppercase; }
+  .obj-dot{ background:var(--hud-warn); box-shadow:0 0 8px var(--hud-warn); }
+  /* THREAT reads as a danger pill when hot */
+  .threat{ letter-spacing:.12em; }
+  .threat-meter span.hot{ box-shadow:0 0 6px var(--hud-alert); }
+  /* sharper, brighter corner brackets like the key art */
+  .frame{ width:42px; height:42px; opacity:.85; border-color:var(--hud-accent); }
+  .frame.tl,.frame.tr,.frame.bl,.frame.br{ filter:drop-shadow(0 0 4px rgba(0,0,0,.6)); }
+  /* GPS-map framing: brighter border + label affordance */
+  .minimap{ box-shadow:0 4px 18px rgba(0,0,0,.5); border:1px solid var(--hud-accent) !important; }
+  /* squad readout: tighter, key-art military tone */
+  .squad{ background:linear-gradient(180deg, rgba(10,14,13,.74), var(--hud-bg)); box-shadow:0 2px 14px rgba(0,0,0,.45); }
+  .sq-head{ text-transform:uppercase; }
+  /* exfil window gets an amber cinematic glow when active */
+  .exfil.on .exfil-time{ text-shadow:0 0 10px var(--hud-accent); }
+
 </style>
 </head>
 <body>
