@@ -4062,7 +4062,7 @@ function placeRiverDinos(startX) {                         // stage herbivores o
 function startIntroBoat() {
   const b = buildBoat(); const startX = -64;
   positionBoatOnRiver(b, startX, WATER_Y);
-  seatTroopers(b, [[-1.7, 1.32, 0.7], [-1.7, 1.32, -0.7], [0.3, 1.38, 0.6], [0.3, 1.38, -0.6]], Math.PI / 2, 0.82);
+  seatTroopers(b, [[-1.2, 1.05, 0.8], [-1.2, 1.05, -0.8], [0.8, 1.05, 0.7], [0.8, 1.05, -0.7]], 0, 0.9);   // crew standing on the gunboat deck, facing the bow (+x = travel)
   scene.add(b); introProp = b;
   intro = { kind: "boat", t: 0, phase: "river", boat: b, bx: startX, dockX: 6, line: -1, shake: 0.04, camActive: true };
   introOpen("Jurassic Survival · Power Restoration · River insertion");
@@ -4277,8 +4277,12 @@ function buildTransportBay() {                            // C-130-style fuselag
   for (let i = -1; i <= 1; i++) { const rib = new THREE.Mesh(new THREE.TorusGeometry(W * 0.52, 0.08, 6, 14, Math.PI), mat); rib.position.set(i * 3, 0.1, 0); rib.rotation.z = -Math.PI / 2; g.add(rib); }
   g.add(mk3(new THREE.PointLight(0x9fb0c0, 0.7, 13), { position: new THREE.Vector3(0, H - 0.4, 0) }));
   g.add(mk3(new THREE.PointLight(0xbcd0e6, 1.6, 22), { position: new THREE.Vector3(L / 2 + 2, 1, 0) }));   // storm light through the open ramp
-  const jl = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), new THREE.MeshStandardMaterial({ color: 0xd6562f, emissive: 0xd6562f, emissiveIntensity: 1.6 }));
-  jl.position.set(L / 2 - 0.7, H - 0.5, W / 2 - 0.3); g.add(jl); g.userData.jumpLight = jl;
+  // standard paratroop JUMP SIGNAL — three stacked lamps (RED hold · AMBER standby · GREEN go) beside the ramp
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(0.34, 1.15, 0.12), dark); panel.position.set(L / 2 - 0.6, H - 0.75, W / 2 - 0.25); g.add(panel);
+  const mkLamp = (yo, col, on) => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 12), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: on ? 2.2 : 0.04 })); m.position.set(L / 2 - 0.6, H - 0.4 + yo, W / 2 - 0.2); g.add(m); return m; };
+  const redL = mkLamp(0.0, 0xff2a1a, true), amberL = mkLamp(-0.34, 0xffb020, false), greenL = mkLamp(-0.68, 0x35e06a, false);
+  const redGlow = mk3(new THREE.PointLight(0xff2a1a, 1.4, 6), { position: new THREE.Vector3(L / 2 - 0.6, H - 0.4, W / 2 - 0.2) }); g.add(redGlow);
+  g.userData.jumpLight = redL; g.userData.lamps = { red: redL, amber: amberL, green: greenL, glow: redGlow };
   return g;
 }
 function buildAirshipDeck() {                             // open flight deck of the evac carrier (jump edge at +z)
@@ -4428,6 +4432,7 @@ function startIntroHalo() {
   introOpen("Jurassic Survival · Rescue · Ranger Outpost Echo");
   placeOnPlatform(bay);   // you, standing in the bay
 }
+function setLamp(m, on, col) { if (!m) return; const mt = m.material; if (col != null) { mt.color.setHex(col); mt.emissive.setHex(col); } mt.emissiveIntensity = on ? 2.2 : 0.04; }
 function updateIntroHalo(dt) {
   if (!intro) return;
   if (intro.phase === "canopy") return updateCanopyPhase(dt);
@@ -4442,15 +4447,22 @@ function updateIntroHalo(dt) {
     return;
   }
   if (intro.plane) { scene.remove(intro.plane); intro.plane = null; }   // cut inside the cargo bay — drop the exterior model
-  if (T < 7.6) { intro.phase = "bay"; cap.style.opacity = T > 6 ? "0" : "1"; placeOnPlatform(intro.bay); big.style.opacity = "0"; }
-  else {                                  // green light — ramp opens, walk the bay to the edge, step off
+  const lamps = intro.bay.userData.lamps;
+  if (T < 7.6) {                          // BAY · RED light — hold, seated/standing, ramp sealed
+    intro.phase = "bay"; cap.style.opacity = T > 6 ? "0" : "1"; placeOnPlatform(intro.bay); big.style.opacity = "0";
+    if (lamps) { setLamp(lamps.red, true, 0xff2a1a); setLamp(lamps.amber, false); setLamp(lamps.green, false); if (lamps.glow) { lamps.glow.color.setHex(0xff2a1a); lamps.glow.intensity = 1.4; } }
+  } else {                                // RAMP OPENS · AMBER standby → GREEN go ("GO GO GO")
     intro.phase = "walk";
-    if (intro.bay.userData.jumpLight) { const j = intro.bay.userData.jumpLight.material; j.color.setHex(0x6fae6b); j.emissive.setHex(0x6fae6b); }
     const b = intro.bay.userData;
     if (b.rampPivot) { b.rampProg = Math.min(1, (b.rampProg || 0) + dt * 0.8); const p = b.rampProg; b.rampPivot.rotation.z = lerp(-1.45, 0.5, p); b.upperPivot.rotation.z = lerp(-1.45, 1.3, p); }
     const rampReady = (b.rampProg || 0) > 0.7;
+    if (lamps) {
+      if (!rampReady) { setLamp(lamps.red, false); setLamp(lamps.amber, true, 0xffb020); setLamp(lamps.green, false); if (lamps.glow) { lamps.glow.color.setHex(0xffb020); lamps.glow.intensity = 1.6; } }   // AMBER · standby
+      else { setLamp(lamps.amber, false); setLamp(lamps.green, true, 0x35e06a); if (lamps.glow) { lamps.glow.color.setHex(0x35e06a); lamps.glow.intensity = 2.2; }   // GREEN · GO
+        if (!intro._goCalled) { intro._goCalled = true; speakRadio("Go! Go! Go!", { rate: 1.25, pitch: 1.05 }); toast("⬇ GREEN LIGHT — GO GO GO"); } }
+    }
     const atRamp = platformWalk(dt, intro.bay, { xmin: -4.7, xmax: 5.0, zmin: -1.3, zmax: 1.3 }, "x");
-    big.textContent = !rampReady ? "RAMP OPENING…" : (atRamp ? "▼ STEP OFF — JUMP" : (isTouch ? "MOVE TO THE OPEN RAMP" : "WALK TO THE RAMP · W A S D")); big.style.opacity = "1";
+    big.textContent = !rampReady ? "● STANDBY — RAMP OPENING" : (atRamp ? "▼ GO — JUMP" : (isTouch ? "GREEN LIGHT · MOVE TO THE RAMP" : "GREEN LIGHT · GO GO GO · W A S D")); big.style.opacity = "1";
     if (rampReady && (intro.px >= 4.9 || (atRamp && jumpPressed()) || T >= 26)) { big.style.opacity = "0"; intro.descent = "chute"; beginCanopy(70, -70); }
   }
 }
