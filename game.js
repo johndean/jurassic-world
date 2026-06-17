@@ -98,9 +98,9 @@ const FOLIAGE = {
 };
 // TRACK A: real textured 3D environment props (Higgsfield image->3D, streamed from CDN, CORS *).
 const PROPS3D = {
-  rock: "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/40a5832e-7980-4162-b250-d9b548b0017b.glb",
-  fern: "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/543c77b4-b6f4-41dc-9474-3b42d7533c54.glb",
-  log:  "https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/e5f01b57-8ec9-471f-9ff4-465e449201d2.glb",
+  rock: "./assets/models/prop_rock.glb",
+  fern: "./assets/models/prop_fern.glb",
+  log:  "./assets/models/prop_log.glb",
 };
 const HELI_MODEL = "./assets/models/helicopter.glb";   // realistic evac chopper (streams in; procedural fallback)
 // photoreal hero ruin structures (streamed .glb); empty until generated. {url, x, z, targetH, yaw}
