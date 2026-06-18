@@ -108,6 +108,7 @@ const JEEP_MODEL = "./assets/models/defender.glb";   // real Land Rover Defender
 const BOAT_MODEL = "./assets/models/gunboat.glb";   // AAA military riverine gunboat (replaces procedural box-boat)
 const C130_MODEL = "./assets/models/c130.glb";   // realistic C-130 Hercules (replaces procedural cyl+box plane)
 const CARCASS_MODEL = "./assets/models/carcass.glb";   // dedicated dead-hadrosaur model (lying on its side) — the carcass body
+const CARCASS_DECAL = "./assets/textures/carcass_decal.webp";   // photoreal opened-carcass image, ground decal (3D filter blocks an opened-body GLB)
 const MAYA_MODEL = "./assets/models/maya.glb";   // Maya — real scientist/ranger woman (replaces capsule survivor)
 const EVAC_MODEL = "./assets/models/evac_facility.glb";   // iconic EVAC complex (visual shell; analytic collision/walk volumes overlaid)
 let FACILITY = null;   // {x,z,r,deck,padH,padX,padZ,padR,rampA} — traversal descriptor for facilityFloorAt()
@@ -771,36 +772,22 @@ function buildCarcass(x, z) {
     // fallback torso (model not streamed yet) — a big rotting hide mass; rebuildCarcass() swaps the real one in
     const torso = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 12), _mm(0x4a3a2c, 1)); torso.scale.set(2.4, 1.1, 1.4); torso.position.y = 1.4; g.add(torso); g.userData.fallbackTorso = torso;
   }
-  // ---- OPEN WOUND on the up-facing flank (the 3D filter blocks an opened-body GLB, so build it cleanly here) ----
-  // Matches the renders: a recessed dark cavity, clean curved bone-white ribs, a glistening organ mass.
-  const wound = new THREE.Group();
-  wound.position.set(rand(-0.4, 0.6), 1.7, 0.1); wound.rotation.x = -0.32; g.add(wound);
-  const cavityMat = new THREE.MeshStandardMaterial({ color: 0x2a0d0a, roughness: 0.5, metalness: 0.1 });
-  const ribMat = new THREE.MeshStandardMaterial({ color: 0xd8cdb2, roughness: 0.6 });
-  const organMat = new THREE.MeshStandardMaterial({ color: 0x7a2a24, roughness: 0.35, metalness: 0.2 });
-  const fleshRim = new THREE.MeshStandardMaterial({ color: 0x5a1a14, roughness: 0.6 });
-  // dark recessed cavity (an inset ellipse hole)
-  const cav = new THREE.Mesh(new THREE.SphereGeometry(1.05, 16, 12), cavityMat); cav.scale.set(1.4, 0.55, 1.0); cav.position.set(0, -0.35, 0); wound.add(cav);
-  // organ mass sitting in the cavity
-  const organ = new THREE.Mesh(new THREE.SphereGeometry(0.6, 14, 12), organMat); organ.scale.set(1.3, 0.7, 0.9); organ.position.set(0.2, -0.3, 0); wound.add(organ);
-  const organ2 = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), organMat); organ2.position.set(-0.5, -0.25, 0.2); wound.add(organ2);
-  // curved ribs arcing over the cavity (clean, evenly spaced, half-arcs)
-  for (let i = 0; i < 6; i++) {
-    const t = i / 5;
-    const rib = new THREE.Mesh(new THREE.TorusGeometry(0.5 + Math.sin(t * Math.PI) * 0.16, 0.045, 6, 12, Math.PI), ribMat);
-    rib.position.set(-1.0 + i * 0.4, -0.05, 0); rib.rotation.set(Math.PI / 2, 0, 0);
-    wound.add(rib);
+  // ---- PHOTOREAL DECAL: the reference carcass image, laid as a large slightly-tilted ground plane.
+  // The 3D content filter blocks an opened-body GLB, so the photoreal opened anatomy comes from this image.
+  // From the game's angled-overhead camera this reads as a real, detailed carcass (the source is a 3/4 top view).
+  {
+    const tex = _texLoader.load(CARCASS_DECAL); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 4;
+    const W = 11, D = 9;   // big footprint
+    const decal = new THREE.Mesh(new THREE.PlaneGeometry(W, D), new THREE.MeshStandardMaterial({ map: tex, transparent: true, alphaTest: 0.35, roughness: 0.7, metalness: 0.05, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, depthWrite: false }));
+    decal.rotation.x = -Math.PI / 2;          // flat on the ground
+    decal.rotation.z = rand(0, Math.PI * 2);
+    decal.position.y = 0.06;                   // just above the terrain
+    g.add(decal); g.userData.decal = decal;
+    // hide the 3D body model + any leftover overlay — the decal IS the carcass now (photoreal)
+    if (g.userData.body) g.userData.body.visible = false;
+    if (g.userData.fallbackTorso) g.userData.fallbackTorso.visible = false;
   }
-  // torn flesh rim around the opening (a flattened ring)
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(1.25, 0.16, 8, 24), fleshRim); rim.scale.set(1.15, 0.5, 0.85); rim.rotation.x = Math.PI / 2; rim.position.y = -0.05; wound.add(rim);
-  wound.traverse(o => { if (o.isMesh) { o.castShadow = false; o.renderOrder = 2; } });
-  // pooling blood — layered soft-edged irregular patches that read as soaked-in, not a flat disc
-  for (const [pr, py, op, col] of [[4.4, 0.02, 0.55, 0x2a0805], [3.1, 0.03, 0.8, 0x4a120a], [1.9, 0.04, 0.95, 0x5e1810]]) {
-    const blob = new THREE.Mesh(new THREE.CircleGeometry(pr, 22), new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.15, transparent: true, opacity: op, polygonOffset: true, polygonOffsetFactor: -1 }));
-    blob.rotation.x = -Math.PI / 2; blob.rotation.z = rand(0, 6); blob.position.set(rand(-0.6, 0.6), py, rand(0.4, 1.4)); blob.scale.set(rand(0.85, 1.15), 1, rand(0.6, 0.9)); g.add(blob);
-  }
-  // a few trickle streaks running off the pool
-  for (let i = 0; i < 4; i++) { const tr = new THREE.Mesh(new THREE.PlaneGeometry(rand(0.15, 0.3), rand(1.2, 2.4)), new THREE.MeshStandardMaterial({ color: 0x3a0d07, roughness: 0.4, transparent: true, opacity: 0.7 })); tr.rotation.x = -Math.PI / 2; tr.rotation.z = rand(0, 6); tr.position.set(rand(-3, 3), 0.025, rand(-1, 3)); g.add(tr); }
+  // (blood is baked into the photoreal decal)
 
 
   // a swarm of flies (tiny dark sprites orbiting) — life/decay signal
