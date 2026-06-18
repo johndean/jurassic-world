@@ -771,7 +771,29 @@ function buildCarcass(x, z) {
     // fallback torso (model not streamed yet) — a big rotting hide mass; rebuildCarcass() swaps the real one in
     const torso = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 12), _mm(0x4a3a2c, 1)); torso.scale.set(2.4, 1.1, 1.4); torso.position.y = 1.4; g.add(torso); g.userData.fallbackTorso = torso;
   }
-  // The realistic model IS the carcass — no geometric overlay. Just blood on the ground.
+  // ---- OPEN WOUND on the up-facing flank (the 3D filter blocks an opened-body GLB, so build it cleanly here) ----
+  // Matches the renders: a recessed dark cavity, clean curved bone-white ribs, a glistening organ mass.
+  const wound = new THREE.Group();
+  wound.position.set(rand(-0.4, 0.6), 1.7, 0.1); wound.rotation.x = -0.32; g.add(wound);
+  const cavityMat = new THREE.MeshStandardMaterial({ color: 0x2a0d0a, roughness: 0.5, metalness: 0.1 });
+  const ribMat = new THREE.MeshStandardMaterial({ color: 0xd8cdb2, roughness: 0.6 });
+  const organMat = new THREE.MeshStandardMaterial({ color: 0x7a2a24, roughness: 0.35, metalness: 0.2 });
+  const fleshRim = new THREE.MeshStandardMaterial({ color: 0x5a1a14, roughness: 0.6 });
+  // dark recessed cavity (an inset ellipse hole)
+  const cav = new THREE.Mesh(new THREE.SphereGeometry(1.05, 16, 12), cavityMat); cav.scale.set(1.4, 0.55, 1.0); cav.position.set(0, -0.35, 0); wound.add(cav);
+  // organ mass sitting in the cavity
+  const organ = new THREE.Mesh(new THREE.SphereGeometry(0.6, 14, 12), organMat); organ.scale.set(1.3, 0.7, 0.9); organ.position.set(0.2, -0.3, 0); wound.add(organ);
+  const organ2 = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), organMat); organ2.position.set(-0.5, -0.25, 0.2); wound.add(organ2);
+  // curved ribs arcing over the cavity (clean, evenly spaced, half-arcs)
+  for (let i = 0; i < 6; i++) {
+    const t = i / 5;
+    const rib = new THREE.Mesh(new THREE.TorusGeometry(0.5 + Math.sin(t * Math.PI) * 0.16, 0.045, 6, 12, Math.PI), ribMat);
+    rib.position.set(-1.0 + i * 0.4, -0.05, 0); rib.rotation.set(Math.PI / 2, 0, 0);
+    wound.add(rib);
+  }
+  // torn flesh rim around the opening (a flattened ring)
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(1.25, 0.16, 8, 24), fleshRim); rim.scale.set(1.15, 0.5, 0.85); rim.rotation.x = Math.PI / 2; rim.position.y = -0.05; wound.add(rim);
+  wound.traverse(o => { if (o.isMesh) { o.castShadow = false; o.renderOrder = 2; } });
   // pooling blood — layered soft-edged irregular patches that read as soaked-in, not a flat disc
   for (const [pr, py, op, col] of [[4.4, 0.02, 0.55, 0x2a0805], [3.1, 0.03, 0.8, 0x4a120a], [1.9, 0.04, 0.95, 0x5e1810]]) {
     const blob = new THREE.Mesh(new THREE.CircleGeometry(pr, 22), new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.15, transparent: true, opacity: op, polygonOffset: true, polygonOffsetFactor: -1 }));
@@ -897,9 +919,15 @@ function buildWorld() {
   try {
     const cx = 30, cz = -22; _carcass = buildCarcass(cx, cz);
     if (!Net.on || Net.isHost) {
-      const feeder = spawnDino(rand(0,1) < 0.5 ? "carnotaurus" : "allosaurus", cx + 3.0, cz + 1.5);
-      feeder.state = "Feed"; feeder.feedT = 9999; feeder.bb.homeX = cx; feeder.bb.homeZ = cz; feeder.hunger = 1; dinos.push(feeder);
-      _carcass.userData.feeder = feeder; _lastFeeder = feeder;
+      // a pack of SMALL scavengers tearing at the carcass — some feeding, some skittering around it
+      const small = ["deinonychus", "pyroraptor"];
+      for (let i = 0; i < 3; i++) {
+        const ang = i / 3 * Math.PI * 2, r = 2.6 + rand(0, 1.2);
+        const f = spawnDino(small[i % small.length], cx + Math.cos(ang) * r, cz + Math.sin(ang) * r);
+        f.state = "Feed"; f.feedT = 9999; f.bb.homeX = cx; f.bb.homeZ = cz; f.hunger = 1;
+        f.scavenger = { cx, cz, roamT: rand(2, 7) };   // tether to the carcass; AI alternates feed/skitter
+        dinos.push(f); if (i === 0) { _carcass.userData.feeder = f; _lastFeeder = f; }
+      }
     }
   } catch (e) { console.error("carcass", e); }
 
@@ -2956,6 +2984,28 @@ function steer(a, dt, P) {
     return;
   }
   if (bb.scared > 0) bb.scared = Math.max(0, bb.scared - dt);   // flare/melee fear wears off (Flee/Graze re-set it as needed)
+  // ---- CARCASS SCAVENGER: small dinos tear at the kill, then occasionally skitter a few metres and dart back ----
+  if (a.scavenger && a.state !== "Flee" && a.state !== "Chase" && (!bb.scared || bb.scared <= 0)) {
+    const sc = a.scavenger; sc.roamT -= dt;
+    const dC = Math.hypot(a.x - sc.cx, a.z - sc.cz);
+    if (sc.skitter) {
+      // darting to a spot near the carcass
+      const dx = sc.tx - a.x, dz = sc.tz - a.z, d = Math.hypot(dx, dz) || 1;
+      a.yaw = lerp2angle(a.yaw, Math.atan2(dx, dz), Math.min(1, dt * 8));
+      const sp2 = (sp.move.run || 7) * 0.8;
+      a.vx = (dx / d) * sp2; a.vz = (dz / d) * sp2; a.x += a.vx * dt; a.z += a.vz * dt;
+      a.anim = 0.4; a.state = "Patrol";
+      if (d < 1.2 || sc.roamT < -2) { sc.skitter = false; sc.roamT = rand(3, 8); a.state = "Feed"; a.feedT = 9999; }
+      a.mesh.position.set(a.x, dinoY(a), a.z); a.mesh.rotation.y = a.yaw; animateDino(a, dt, 0, sp2);
+      return;
+    } else if (sc.roamT <= 0 && dC < 5) {
+      // start a quick skitter to a random point around the carcass
+      const ang = rand(0, Math.PI * 2), r = 3 + rand(0, 3);
+      sc.tx = sc.cx + Math.cos(ang) * r; sc.tz = sc.cz + Math.sin(ang) * r; sc.skitter = true; sc.roamT = rand(1, 2.5);
+    } else {
+      a.state = "Feed"; a.feedT = 9999;   // otherwise: keep feeding at the carcass
+    }
+  }
   if (a.feedT > 0) a.feedT -= dt; if (a.restT > 0) a.restT -= dt;   // ecosystem timers (feeding/resting)
   // ---- Phase 12: ECOSYSTEM DRIVES — hunger/thirst/fatigue rise over time and are relieved by the
   // matching activity. They bias decide() so a dino's behaviour follows real needs, not infinite wander. ----
@@ -4491,20 +4541,24 @@ function buildHercules() {
     mdl.rotation.y = Math.PI;
     mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     g.add(mdl);
-    // ---- SPINNING PROPELLERS: the model is one static mesh, so add 4 animated turboprops at the wing engines ----
-    // After the nose->+x rotation, the wing spans Z and engines hang forward (+x) of the leading edge.
+    // ---- SPINNING PROPELLERS: positioned from the model's MEASURED bounds so they sit ON the wing leading edge ----
+    const fb = new THREE.Box3().setFromObject(mdl); const fc = new THREE.Vector3(); fb.getCenter(fc);
+    const span = fb.max.z - fb.min.z;               // wingspan (Z after nose->+x)
+    const noseX = fb.max.x;                          // front of the fuselage
+    const wingFrontX = fc.x + (noseX - fc.x) * 0.28; // engines sit forward on the wing, NOT out past the nose
+    const wingY = fc.y + (fb.max.y - fc.y) * 0.35;   // a touch above centre (high wing)
+    const bladeLen = span * 0.075;                   // prop radius scales with the plane
     const propHub = _mm(0x1a1d18, 0.5, 0.4), bladeMat = _mm(0x121512, 0.6, 0.3);
     const props = [];
-    const engZ = [-9.0, -4.6, 4.6, 9.0];   // four engines along the wingspan (model is ~28m, scaled)
+    const engZ = [-span * 0.34, -span * 0.17, span * 0.17, span * 0.34];   // 4 engines spaced along the wing
     for (const ez of engZ) {
       const prop = new THREE.Group();
-      prop.position.set(13.2, 1.4, ez);     // forward of the wing leading edge, at engine height
-      prop.rotation.y = Math.PI / 2;        // disc faces along flight (+x)
-      const hub = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.7, 12), propHub); hub.rotation.x = -Math.PI / 2; prop.add(hub);
-      for (let b = 0; b < 4; b++) { const bl = new THREE.Mesh(new THREE.BoxGeometry(0.12, 3.2, 0.28), bladeMat); bl.position.y = 0; bl.rotation.z = b * Math.PI / 2; bl.geometry.translate(0, 1.6, 0); prop.add(bl); }
-      // faint motion-blur disc that appears at speed
-      const disc = new THREE.Mesh(new THREE.CircleGeometry(1.7, 24), new THREE.MeshBasicMaterial({ color: 0x141712, transparent: true, opacity: 0.0, side: THREE.DoubleSide, depthWrite: false }));
-      disc.position.z = 0.15; prop.add(disc); prop.userData.blurDisc = disc;
+      prop.position.set(wingFrontX, wingY, fc.z + ez);
+      prop.rotation.y = Math.PI / 2;                 // disc faces along flight (+x)
+      const hub = new THREE.Mesh(new THREE.ConeGeometry(bladeLen * 0.16, bladeLen * 0.5, 12), propHub); hub.rotation.x = -Math.PI / 2; prop.add(hub);
+      for (let b = 0; b < 4; b++) { const bl = new THREE.Mesh(new THREE.BoxGeometry(bladeLen * 0.08, bladeLen * 2, bladeLen * 0.2), bladeMat); bl.rotation.z = b * Math.PI / 2; bl.geometry.translate(0, bladeLen, 0); prop.add(bl); }
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(bladeLen * 1.05, 24), new THREE.MeshBasicMaterial({ color: 0x141712, transparent: true, opacity: 0.0, side: THREE.DoubleSide, depthWrite: false }));
+      disc.position.z = 0.1; prop.add(disc); prop.userData.blurDisc = disc;
       g.add(prop); props.push(prop);
     }
     g.userData.props = props;
@@ -4702,7 +4756,7 @@ function landCanopy(hard) {
 }
 /* HALO parachute — FALLEN OUTPOST */
 function startIntroHalo() {
-  const bay = buildTransportBay(); bay.position.set(0, 100, 0);
+  const bay = buildTransportBay(); bay.position.set(0, 100, 0); bay.visible = false;   // hidden until the fade fully covers (no box-pop)
   seatTroopers(bay, [[-3.6, 0.1, 1.3], [-3.6, 0.1, -1.3], [-1.6, 0.1, 1.3]], Math.PI / 2, 0.85);   // paratroopers along the wall
   scene.add(bay); introProp = bay;
   const plane = buildHercules(); plane.position.set(-34, 118, 42); plane.rotation.y = -0.42;   // exterior C-130 for the establishing shot
@@ -4726,14 +4780,19 @@ function updateIntroHalo(dt) {
     cap.style.opacity = "1"; big.style.opacity = "0";
     return;
   }
-  // ── PHASE 2 (6.5-8.5s): FADE through — push toward the C-130's tail, fade to black, no box-pop ──
-  if (T < 8.5) {
+  // ── PHASE 2 (6.5-9.5s): FADE to full black, swap exterior->interior under cover, fade back in ──
+  if (T < 9.5) {
     intro.phase = "approach";
     if (intro.plane) { intro.plane.position.x += 3.2 * dt; spinProps(intro.plane, dt); }
-    const f = (T - 6.5) / 2.0;            // 0..1 fade out then in
-    tint.style.background = "#0a0d10"; tint.style.opacity = (f < 0.5 ? f * 2 : (1 - f) * 2).toFixed(2);
+    const f = (T - 6.5) / 3.0;            // 0..1 over 3s
+    // fade OUT 0->0.4 (full black), HOLD black 0.4->0.6, fade IN 0.6->1
+    let op = f < 0.4 ? f / 0.4 : f < 0.6 ? 1 : (1 - f) / 0.4;
+    tint.style.background = "#05070a"; tint.style.opacity = Math.min(1, op).toFixed(2);
     cap.style.opacity = "0"; big.style.opacity = "0";
-    if (f >= 0.5 && intro.plane) { scene.remove(intro.plane); intro.plane = null; }   // swap to interior at the darkest point
+    if (f >= 0.4) {   // under full black: remove the plane, reveal the interior bay
+      if (intro.plane) { scene.remove(intro.plane); intro.plane = null; }
+      if (intro.bay) intro.bay.visible = true;
+    }
     return;
   }
   if (intro.plane) { scene.remove(intro.plane); intro.plane = null; }
