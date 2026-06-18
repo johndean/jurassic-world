@@ -107,7 +107,7 @@ const HELI_MODEL = "./assets/models/helicopter.glb";   // realistic evac chopper
 const JEEP_MODEL = "./assets/models/defender.glb";   // real Land Rover Defender 110 (streams in; procedural fallback)
 const BOAT_MODEL = "./assets/models/gunboat.glb";   // AAA military riverine gunboat (replaces procedural box-boat)
 const C130_MODEL = "./assets/models/c130.glb";   // realistic C-130 Hercules (replaces procedural cyl+box plane)
-const CARCASS_MODEL = "./assets/models/parasaurolophus.glb";   // real dino mesh used as the rotting-carcass base
+const CARCASS_MODEL = "./assets/models/carcass.glb";   // dedicated dead-hadrosaur model (lying on its side) — the carcass body
 const MAYA_MODEL = "./assets/models/maya.glb";   // Maya — real scientist/ranger woman (replaces capsule survivor)
 const EVAC_MODEL = "./assets/models/evac_facility.glb";   // iconic EVAC complex (visual shell; analytic collision/walk volumes overlaid)
 let FACILITY = null;   // {x,z,r,deck,padH,padX,padZ,padR,rampA} — traversal descriptor for facilityFloorAt()
@@ -506,6 +506,7 @@ async function preloadModels() {
   if (BOAT_MODEL) loadModelOnce(BOAT_MODEL);
   if (C130_MODEL) loadModelOnce(C130_MODEL);
   if (MAYA_MODEL) loadModelOnce(MAYA_MODEL);
+  if (CARCASS_MODEL) loadModelOnce(CARCASS_MODEL);
   const tier1 = [...new Set([PLAYER_MODEL, ...ROLES.map(r => r.model)].filter(Boolean))];
   await loadWave(tier1, 4);                                // the ONLY wait before the game is playable
   if (!playerMixer) buildPlayer();
@@ -758,21 +759,20 @@ function buildCarcass(x, z) {
     let bb = new THREE.Box3().setFromObject(body), sz = new THREE.Vector3(); bb.getSize(sz);
     const L = Math.max(sz.x, sz.z) || 6; const s = 8.5 / L;   // a big animal (~8.5m) — reads as a major kill
     body.scale.setScalar(s);
-    body.rotation.z = Math.PI / 2 * 0.96;            // toppled onto its side
-    body.rotation.x = 0.06; body.rotation.y = rand(-0.3, 0.3);
+    body.rotation.y = rand(0, Math.PI * 2);          // model is already side-lying — just vary the facing
     body.updateMatrixWorld(true);
     bb = new THREE.Box3().setFromObject(body); const c = new THREE.Vector3(); bb.getCenter(c);
     body.position.x -= c.x; body.position.z -= c.z; body.position.y -= bb.min.y;   // lay it flat on the ground
     bodyLen = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z);
     // rotting-carcass tint: desaturate + darken the hide, kill any emissive
-    body.traverse(o => { if (o.isMesh && o.material) { const mats = Array.isArray(o.material) ? o.material : [o.material]; mats.forEach(mt => { mt = mt; if (mt.color) mt.color.multiplyScalar(0.45); if (mt.color) mt.color.lerp(new THREE.Color(0x5a4a3a), 0.4); if (mt.emissive) mt.emissive.setRGB(0,0,0); mt.roughness = 1; mt.metalness = 0; }); o.castShadow = true; o.frustumCulled = false; } });
+    body.traverse(o => { if (o.isMesh && o.material) { const mats = Array.isArray(o.material) ? o.material : [o.material]; mats.forEach(mt => { if (mt.color) mt.color.multiplyScalar(0.82); if (mt.emissive) mt.emissive.setRGB(0,0,0); mt.roughness = 1; mt.metalness = 0; }); o.castShadow = true; o.frustumCulled = false; } });
     g.add(body); g.userData.body = body;
   } else {
     // fallback torso (model not streamed yet) — a big rotting hide mass; rebuildCarcass() swaps the real one in
     const torso = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 12), _mm(0x4a3a2c, 1)); torso.scale.set(2.4, 1.1, 1.4); torso.position.y = 1.4; g.add(torso); g.userData.fallbackTorso = torso;
   }
   // ---- THE EATEN FLANK: belly torn open on the up-facing side — exposed ribcage + gut, freshly worked ----
-  const eat = new THREE.Group(); eat.position.set(0, 1.5, 0.3); g.add(eat);   // sits on the upper flank of the toppled body
+  const eat = new THREE.Group(); eat.position.set(0, 1.35, 0.15); eat.rotation.x = -0.25; g.add(eat);   // sits on the up-facing flank of the side-lying body
   // exposed ribs arcing up out of the torn hide (the part scavengers have opened)
   for (let i = 0; i < 7; i++) { const rx = -bodyLen * 0.18 + i * (bodyLen * 0.06); const broken = i === 2 || i === 5; const rib = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.055, 6, 10, broken ? Math.PI * 0.5 : Math.PI * 0.85), i % 2 ? bone : boneOld); rib.position.set(rx, 0.1, 0); rib.rotation.set(0.2, 0.1, Math.PI * 0.05); eat.add(rib); }
   // exposed spine ridge along the open cavity
@@ -781,13 +781,17 @@ function buildCarcass(x, z) {
   for (let i = 0; i < 5; i++) { const gut = new THREE.Mesh(new THREE.SphereGeometry(rand(0.28, 0.42), 10, 8), flesh); gut.position.set(rand(-1.2, 1.2), rand(-0.25, 0.1), rand(-0.2, 0.35)); gut.scale.y = 0.7; eat.add(gut); }
   // torn hide flaps peeled back around the opening
   for (let i = 0; i < 4; i++) { const flap = new THREE.Mesh(new THREE.PlaneGeometry(rand(0.6, 1.0), rand(0.5, 0.8)), new THREE.MeshStandardMaterial({ color: 0x3a2a20, roughness: 1, side: THREE.DoubleSide })); flap.position.set(rand(-1.5, 1.5), rand(-0.1, 0.3), rand(-0.6, 0.6)); flap.rotation.set(rand(-1, 1), rand(0, 6), rand(-1, 1)); eat.add(flap); }
-  // a couple of ribs dragged off + a cracked-open long bone near the body
-  for (let i = 0; i < 3; i++) { const lb = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, rand(0.7, 1.2), 6), bone); lb.position.set(rand(-bodyLen * 0.3, bodyLen * 0.3), 0.08, rand(1.5, 3)); lb.rotation.set(Math.PI / 2, rand(0, 6), rand(0, 1)); g.add(lb); }
+  // (no loose floating bones — keeps the scene clean; gore stays on the body)
   // blood pool + gore smears
-  const pool = new THREE.Mesh(new THREE.CircleGeometry(4.2, 20), gore); pool.rotation.x = -Math.PI / 2; pool.position.y = 0.03; pool.scale.z = 0.7; g.add(pool);
+  // pooling blood — layered soft-edged irregular patches that read as soaked-in, not a flat disc
+  for (const [pr, py, op, col] of [[4.4, 0.02, 0.55, 0x2a0805], [3.1, 0.03, 0.8, 0x4a120a], [1.9, 0.04, 0.95, 0x5e1810]]) {
+    const blob = new THREE.Mesh(new THREE.CircleGeometry(pr, 22), new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.15, transparent: true, opacity: op, polygonOffset: true, polygonOffsetFactor: -1 }));
+    blob.rotation.x = -Math.PI / 2; blob.rotation.z = rand(0, 6); blob.position.set(rand(-0.6, 0.6), py, rand(0.4, 1.4)); blob.scale.set(rand(0.85, 1.15), 1, rand(0.6, 0.9)); g.add(blob);
+  }
+  // a few trickle streaks running off the pool
+  for (let i = 0; i < 4; i++) { const tr = new THREE.Mesh(new THREE.PlaneGeometry(rand(0.15, 0.3), rand(1.2, 2.4)), new THREE.MeshStandardMaterial({ color: 0x3a0d07, roughness: 0.4, transparent: true, opacity: 0.7 })); tr.rotation.x = -Math.PI / 2; tr.rotation.z = rand(0, 6); tr.position.set(rand(-3, 3), 0.025, rand(-1, 3)); g.add(tr); }
   for (let i = 0; i < 5; i++) { const sm = new THREE.Mesh(new THREE.CircleGeometry(rand(0.3, 0.7), 10), new THREE.MeshStandardMaterial({ color: 0x4a160e, roughness: 0.7 })); sm.rotation.x = -Math.PI / 2; sm.position.set(rand(-3, 3), 0.035, rand(-2, 2)); g.add(sm); }
-  // scattered ribs/bones pulled away by scavengers
-  for (let i = 0; i < 4; i++) { const lb = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, rand(0.6, 1.1), 6), bone); lb.position.set(rand(-4, 4), 0.08, rand(-2.5, 2.5)); lb.rotation.set(Math.PI / 2, rand(0, 6), rand(0, 1)); g.add(lb); }
+
   // a swarm of flies (tiny dark sprites orbiting) — life/decay signal
   const flies = []; for (let i = 0; i < 14; i++) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.03, 4, 4), _mm(0x0a0a08, 1)); g.add(f); flies.push(f); }
   g.userData.flies = flies;
