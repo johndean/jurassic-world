@@ -771,18 +771,7 @@ function buildCarcass(x, z) {
     // fallback torso (model not streamed yet) — a big rotting hide mass; rebuildCarcass() swaps the real one in
     const torso = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 12), _mm(0x4a3a2c, 1)); torso.scale.set(2.4, 1.1, 1.4); torso.position.y = 1.4; g.add(torso); g.userData.fallbackTorso = torso;
   }
-  // ---- THE EATEN FLANK: belly torn open on the up-facing side — exposed ribcage + gut, freshly worked ----
-  const eat = new THREE.Group(); eat.position.set(0, 1.35, 0.15); eat.rotation.x = -0.25; g.add(eat);   // sits on the up-facing flank of the side-lying body
-  // exposed ribs arcing up out of the torn hide (the part scavengers have opened)
-  for (let i = 0; i < 7; i++) { const rx = -bodyLen * 0.18 + i * (bodyLen * 0.06); const broken = i === 2 || i === 5; const rib = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.055, 6, 10, broken ? Math.PI * 0.5 : Math.PI * 0.85), i % 2 ? bone : boneOld); rib.position.set(rx, 0.1, 0); rib.rotation.set(0.2, 0.1, Math.PI * 0.05); eat.add(rib); }
-  // exposed spine ridge along the open cavity
-  for (let i = 0; i < 8; i++) { const v = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), bone); v.position.set(-bodyLen * 0.18 + i * (bodyLen * 0.05), -0.2, -0.45); eat.add(v); }
-  // glistening exposed gut/meat inside the cavity (fresh, dark red)
-  for (let i = 0; i < 5; i++) { const gut = new THREE.Mesh(new THREE.SphereGeometry(rand(0.28, 0.42), 10, 8), flesh); gut.position.set(rand(-1.2, 1.2), rand(-0.25, 0.1), rand(-0.2, 0.35)); gut.scale.y = 0.7; eat.add(gut); }
-  // torn hide flaps peeled back around the opening
-  for (let i = 0; i < 4; i++) { const flap = new THREE.Mesh(new THREE.PlaneGeometry(rand(0.6, 1.0), rand(0.5, 0.8)), new THREE.MeshStandardMaterial({ color: 0x3a2a20, roughness: 1, side: THREE.DoubleSide })); flap.position.set(rand(-1.5, 1.5), rand(-0.1, 0.3), rand(-0.6, 0.6)); flap.rotation.set(rand(-1, 1), rand(0, 6), rand(-1, 1)); eat.add(flap); }
-  // (no loose floating bones — keeps the scene clean; gore stays on the body)
-  // blood pool + gore smears
+  // The realistic model IS the carcass — no geometric overlay. Just blood on the ground.
   // pooling blood — layered soft-edged irregular patches that read as soaked-in, not a flat disc
   for (const [pr, py, op, col] of [[4.4, 0.02, 0.55, 0x2a0805], [3.1, 0.03, 0.8, 0x4a120a], [1.9, 0.04, 0.95, 0x5e1810]]) {
     const blob = new THREE.Mesh(new THREE.CircleGeometry(pr, 22), new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.15, transparent: true, opacity: op, polygonOffset: true, polygonOffsetFactor: -1 }));
@@ -790,7 +779,7 @@ function buildCarcass(x, z) {
   }
   // a few trickle streaks running off the pool
   for (let i = 0; i < 4; i++) { const tr = new THREE.Mesh(new THREE.PlaneGeometry(rand(0.15, 0.3), rand(1.2, 2.4)), new THREE.MeshStandardMaterial({ color: 0x3a0d07, roughness: 0.4, transparent: true, opacity: 0.7 })); tr.rotation.x = -Math.PI / 2; tr.rotation.z = rand(0, 6); tr.position.set(rand(-3, 3), 0.025, rand(-1, 3)); g.add(tr); }
-  for (let i = 0; i < 5; i++) { const sm = new THREE.Mesh(new THREE.CircleGeometry(rand(0.3, 0.7), 10), new THREE.MeshStandardMaterial({ color: 0x4a160e, roughness: 0.7 })); sm.rotation.x = -Math.PI / 2; sm.position.set(rand(-3, 3), 0.035, rand(-2, 2)); g.add(sm); }
+
 
   // a swarm of flies (tiny dark sprites orbiting) — life/decay signal
   const flies = []; for (let i = 0; i < 14; i++) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.03, 4, 4), _mm(0x0a0a08, 1)); g.add(f); flies.push(f); }
@@ -900,11 +889,13 @@ function buildWorld() {
     const w = new THREE.Mesh(wGeo, wallMat); w.position.set(x, 3, z); w.rotation.y = ry * DEG; scene.add(w);
   });
 
+  // carcass sits in an OPEN clearing — suppress foliage in a radius so it's visible 360 degrees
+  CLEARINGS = [{ x: 30, z: -22, r: 13 }];
   buildFoliage();
   try { buildHeroProps(); } catch (e) { console.error("heroProps", e); }   // TRACK A: real 3D props every mission
   // ROTTING CARCASS being eaten — a living-ecosystem set-piece (carcass + a scavenger locked to feed on it)
   try {
-    const cx = 34, cz = -18; _carcass = buildCarcass(cx, cz);
+    const cx = 30, cz = -22; _carcass = buildCarcass(cx, cz);
     if (!Net.on || Net.isHost) {
       const feeder = spawnDino(rand(0,1) < 0.5 ? "carnotaurus" : "allosaurus", cx + 3.0, cz + 1.5);
       feeder.state = "Feed"; feeder.feedT = 9999; feeder.bb.homeX = cx; feeder.bb.homeZ = cz; feeder.hunger = 1; dinos.push(feeder);
@@ -1153,6 +1144,8 @@ function buildSky() {
   sky.frustumCulled = false; sky.renderOrder = -1; scene.add(sky);
 }
 // one dense layer of alpha-cutout cross-quad billboards (the standard cheap way to do thick vegetation)
+let CLEARINGS = [];   // open spaces where foliage is suppressed (e.g. around the carcass) for a clean 360 view
+function inClearing(x, z) { for (const c of CLEARINGS) { const dx = x - c.x, dz = z - c.z; if (dx * dx + dz * dz < c.r * c.r) return true; } return false; }
 function billboardLayer(texUrl, count, hMin, hMax, opts) {
   opts = opts || {};
   const half = BIOME.map.size / 2;
@@ -1168,7 +1161,7 @@ function billboardLayer(texUrl, count, hMin, hMax, opts) {
     do {
       if (opts.edge) { const ang = rand(0, 6.28), rr = rand(half * 0.62, half - 4); x = Math.cos(ang) * rr; z = Math.sin(ang) * rr; }
       else { x = rand(-half + 4, half - 4); z = rand(-half + 4, half - 4); }
-    } while (Math.hypot(x, z) < (opts.minR || 8) && ++ok < 6);
+    } while ((Math.hypot(x, z) < (opts.minR || 8) || inClearing(x, z)) && ++ok < 10);
     const h = rand(hMin, hMax), w = h * rand(0.7, 1.05);
     dm.position.set(x, groundH(x, z), z); dm.scale.set(w, h, w); dm.rotation.set(0, rand(0, 6.28), 0); dm.updateMatrix();
     mesh.setMatrixAt(i, dm.matrix);
@@ -1223,7 +1216,7 @@ function buildHeroProps() {
     if (!MODELS[url]) return;
     for (let c = 0; c < clusters; c++) {
       let cx = rand(-half + 14, half - 14), cz = rand(-half + 14, half - 14);
-      if (Math.hypot(cx, cz) < 18) { c--; continue; }
+      if (Math.hypot(cx, cz) < 18 || inClearing(cx, cz)) { c--; continue; }
       const n = perCluster + Math.round(rand(-1, 1));
       for (let i = 0; i < n; i++) {
         const x = clamp(cx + rand(-6, 6), -half + 6, half - 6);
@@ -1262,13 +1255,13 @@ function buildFoliage() {
   // TRACK A: scattered ferns hugging the camera for the dense-foreground key-art read
   if (MODELS[FOLIAGE.fern]) { const NF = Math.round(90 * fol); for (let i = 0; i < NF; i++) {
     let x, z, ok = 0;
-    do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); } while (Math.hypot(x, z) < 8 && ++ok < 8);
+    do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); } while ((Math.hypot(x, z) < 8 || inClearing(x, z)) && ++ok < 12);
     const fr = fitProp(MODELS[FOLIAGE.fern].clone(true), rand(0.6, 1.3), rand(0, 6.28));
     fr.position.set(x, groundH(x, z), z); foliageGroup.add(fr);
   } }
   if (MODELS[FOLIAGE.tree]) { const NT = Math.round(60 * fol); for (let i = 0; i < NT; i++) {   // solid 3D trees for a fuller canopy
     let x, z, ok = 0;
-    do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); } while (Math.hypot(x, z) < 12 && ++ok < 8);
+    do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); } while ((Math.hypot(x, z) < 12 || inClearing(x, z)) && ++ok < 12);
     const t = fitModel(MODELS[FOLIAGE.tree].clone(true), rand(9, 15), rand(0, 6.28));
     t.position.set(x, groundH(x, z), z); foliageGroup.add(t);
     trees.push({ x, z, r: 1.3 });
