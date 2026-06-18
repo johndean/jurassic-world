@@ -89,8 +89,8 @@ const GROUND_TEX = "./assets/textures/jungle_floor.jpg";   // photoreal seamless
 const _texLoader = new THREE.TextureLoader();
 // alpha-cutout billboard textures (transparent PNGs) for dense instanced jungle foliage
 const BILLBOARDS = {
-  bush: "https://d8j0ntlcm91z4.cloudfront.net/user_3F4NGeiRVgVtbKFFkoeC4vFwa2f/hf_20260614_004601_9bbfa90f-b025-45fd-8a5e-c2b5601b0e93.png",
-  grass: "https://d8j0ntlcm91z4.cloudfront.net/user_3F4NGeiRVgVtbKFFkoeC4vFwa2f/hf_20260614_004607_4167c467-a11a-4419-9fda-2cf0f04ac6dd.png",
+  bush: "./assets/textures/bush.webp",   // local — was a cross-user CDN URL that failed to load -> coloured boxes
+  grass: "./assets/textures/grass.webp",
 };
 // foliage models (CDN .glb) used to replace grey-box trees; filled with URLs once generated
 const FOLIAGE = {
@@ -772,25 +772,14 @@ function buildCarcass(x, z) {
     // fallback torso (model not streamed yet) — a big rotting hide mass; rebuildCarcass() swaps the real one in
     const torso = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 12), _mm(0x4a3a2c, 1)); torso.scale.set(2.4, 1.1, 1.4); torso.position.y = 1.4; g.add(torso); g.userData.fallbackTorso = torso;
   }
-  // ---- WOUND on the 3D model: the photoreal opened-anatomy image projected onto the body's UP-FACING flank,
-  // recessed with a dark torn rim so it reads as an opening IN the real 3D carcass (not a flat ground image). ----
-  if (MODELS[CARCASS_MODEL]) {   // only when the real body is showing
-    const wtex = _texLoader.load(CARCASS_WOUND); wtex.colorSpace = THREE.SRGBColorSpace;
-    // slight downward bowl so the patch sits inside the body silhouette, not floating flat
-    const wgeo = new THREE.SphereGeometry(1.7, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.42);
-    const patch = new THREE.Mesh(wgeo, new THREE.MeshStandardMaterial({ map: wtex, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide }));
-    patch.scale.set(1.25, -0.8, 1.0);          // negative Y = concave (cavity sinks IN)
-    patch.position.set(0.2, bodyLen * 0.0 + 1.9, 0.1);   // on the upper flank of the side-lying body
-    g.add(patch); g.userData.wound = patch;
-    // dark torn rim around the opening so the patch edge blends into the hide
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(1.55, 0.28, 10, 28), new THREE.MeshStandardMaterial({ color: 0x3a1410, roughness: 0.7 }));
-    rim.rotation.x = Math.PI / 2; rim.scale.set(1.2, 0.9, 0.5); rim.position.set(0.2, 1.78, 0.1); g.add(rim);
-    // a small blood pool seeping to the ground from the wound side
-    const pool = new THREE.Mesh(new THREE.CircleGeometry(3.0, 24), new THREE.MeshStandardMaterial({ color: 0x4a120a, roughness: 0.3, metalness: 0.15, transparent: true, opacity: 0.9 }));
-    pool.rotation.x = -Math.PI / 2; pool.position.set(0.6, 0.05, 1.6); pool.scale.set(1, 1, 0.7); g.add(pool);
+  // ---- CLEAN realistic carcass: the 3D body model + a ground blood pool. No wound overlay (every attempt at
+  // an opened cavity read as broken primitives; a clean realistic dead dinosaur is the right AAA call). ----
+  if (MODELS[CARCASS_MODEL]) {
+    for (const [pr, py, op, col] of [[3.6, 0.02, 0.5, 0x2a0805], [2.4, 0.03, 0.8, 0x4a120a]]) {
+      const blob = new THREE.Mesh(new THREE.CircleGeometry(pr, 22), new THREE.MeshStandardMaterial({ color: col, roughness: 0.3, metalness: 0.15, transparent: true, opacity: op, polygonOffset: true, polygonOffsetFactor: -1, depthWrite: false }));
+      blob.rotation.x = -Math.PI / 2; blob.rotation.z = rand(0, 6); blob.position.set(rand(-0.5, 0.8), py, rand(0.3, 1.3)); blob.scale.set(rand(0.9, 1.1), 1, rand(0.7, 0.9)); g.add(blob);
+    }
   }
-
-
   // a swarm of flies (tiny dark sprites orbiting) — life/decay signal
   const flies = []; for (let i = 0; i < 14; i++) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.03, 4, 4), _mm(0x0a0a08, 1)); g.add(f); flies.push(f); }
   g.userData.flies = flies;
@@ -1165,11 +1154,12 @@ function inClearing(x, z) { for (const c of CLEARINGS) { const dx = x - c.x, dz 
 function billboardLayer(texUrl, count, hMin, hMax, opts) {
   opts = opts || {};
   const half = BIOME.map.size / 2;
-  const tex = _texLoader.load(texUrl); tex.colorSpace = THREE.SRGBColorSpace;
+  // start INVISIBLE; only show once the texture actually decodes (a failed/loading texture must never render as a coloured box)
+  const mat = new THREE.MeshStandardMaterial({ alphaTest: 0.5, transparent: true, opacity: 0, side: THREE.DoubleSide, roughness: 1, metalness: 0, color: opts.color || 0x6f8a5c, depthWrite: false });
+  const tex = _texLoader.load(texUrl, t => { t.colorSpace = THREE.SRGBColorSpace; mat.map = t; mat.opacity = 1; mat.depthWrite = true; mat.needsUpdate = true; }, undefined, () => { mat.visible = false; });
   const a = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
   const b = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0); b.rotateY(Math.PI / 2);
   const geo = mergeGeometries([a, b]);   // X-shaped cross-quad = volume from any angle
-  const mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, transparent: true, side: THREE.DoubleSide, roughness: 1, metalness: 0, color: opts.color || 0x6f8a5c });   // green base so a loading/failed quad blends, never flashes white
   const mesh = new THREE.InstancedMesh(geo, mat, count);
   const dm = new THREE.Object3D();
   for (let i = 0; i < count; i++) {
