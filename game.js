@@ -771,6 +771,7 @@ function buildCarcass(x, z) {
 let _carcass = null, _carcassFlyT = 0;
 function buildWorld() {
   const m = BIOME.map, half = m.size / 2;
+  MAP_HALF = half;   // keep groundH's skirt boundary in sync with the actual map
 
   // lighting: low directional "moonlight" + dim ambient (formula blocks 3-4)
   sun = new THREE.DirectionalLight(0xe6ead8, 1.45); sun.position.set(-60, 95, 38); scene.add(sun);   // TRACK A: brighter warm key for shadow contrast
@@ -793,10 +794,7 @@ function buildWorld() {
   const pos = gGeo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const gx = pos.getX(i), gz = pos.getZ(i);
-    let h = groundH(gx, gz);
-    const rr = Math.hypot(gx, gz);
-    if (rr > m.size / 2) h += (rr - m.size / 2) * 0.9;   // skirt climbs steeply past the border → solid wall of land
-    pos.setY(i, h);
+    pos.setY(i, groundH(gx, gz));   // groundH now bakes the edge skirt in — single source of truth, no double-add
   }
   gGeo.computeVertexNormals();
   const groundTex = _texLoader.load(GROUND_TEX);
@@ -2092,6 +2090,7 @@ function bridgeDeckY(x, z) {
   return null;
 }
 function riverSlope(x) { return Math.cos(x * 0.02) * 28 * 0.02; }  // d(riverCenter)/dx — used to align the boat to the current
+let MAP_HALF = 120;   // BIOME.map.size/2 — the play-area border (kept in sync; groundH is called before BIOME may be ready)
 function groundH(x, z) {
   const r = Math.hypot(x, z);
   let h = 1.8 + Math.sin(x * 0.05) * Math.cos(z * 0.045) * 1.3 + Math.sin(x * 0.13 + z * 0.09) * 0.5;  // rolling hills
@@ -2099,6 +2098,10 @@ function groundH(x, z) {
   h += e * e * 32 * (0.75 + 0.25 * Math.sin(x * 0.07) * Math.cos(z * 0.06));   // mountains ring the valley
   const dRiver = Math.abs(z - riverCenter(x));
   if (dRiver < RIVER_HALF) { const t = dRiver / RIVER_HALF; h -= (1 - t * t) * 6.0; }   // wide, smooth-banked navigable channel
+  // EDGE SKIRT — baked in here so the ground mesh AND the camera/player/object clamps all use the SAME surface.
+  // (Previously the mesh added this but groundH didn't, so at the edges the camera sat below the visible terrain
+  //  and you saw under/behind the world. One source of truth = zero-gap.)
+  if (r > MAP_HALF) h += (r - MAP_HALF) * 0.9;
   return h;
 }
 // Walkable surface height: terrain PLUS the EVAC facility deck/helipad where applicable.
@@ -5465,7 +5468,8 @@ function updateCamera() {
       // THIRD PERSON — chase cam behind/above, orbitable via free-look, hard-clamped above terrain.
       let cx = j.position.x - ls * 10, cz = j.position.z - lc * 10;
       let cy = hy + 5.0 - Math.sin(lookPitch) * 5;
-      const floor = Math.max(groundH(cx, cz), WATER_Y) + 1.6;
+      const mfx = (cx + j.position.x) * 0.5, mfz = (cz + j.position.z) * 0.5;
+      const floor = Math.max(groundH(cx, cz), groundH(mfx, mfz), WATER_Y) + 1.8;
       if (cy < floor) cy = floor;
       camera.position.lerp(tmp.set(cx, cy, cz), 0.2);
       camera.lookAt(j.position.x + s * 5, hy + 1.7, j.position.z + c * 5);
@@ -5479,7 +5483,11 @@ function updateCamera() {
   const cp = Math.cos(cam.pitch), d = cam.dist * cp;
   let cx = tx - Math.sin(cam.yaw) * d, cz = tz - Math.cos(cam.yaw) * d, cy = ty + cam.height + Math.sin(cam.pitch) * cam.dist * -1 + cam.dist * cp * 0.0;
   cy = ty + cam.height - Math.sin(cam.pitch) * cam.dist;
-  const gh = (P.onTower ? P.onTower.platformY : groundH(cx, cz)) + 1.0; if (cy < gh) cy = gh;
+  // robust ground clamp: never let the camera sink below terrain at the cam point OR the mid-point to the player
+  const midX = (cx + tx) * 0.5, midZ = (cz + tz) * 0.5;
+  const ghCam = (P.onTower ? P.onTower.platformY : groundH(cx, cz)) + 1.3;
+  const ghMid = groundH(midX, midZ) + 1.3;
+  const gh = Math.max(ghCam, ghMid, WATER_Y + 1.2); if (cy < gh) cy = gh;
   if (camShake > 0) { cx += (Math.random() - 0.5) * camShake; cy += (Math.random() - 0.5) * camShake; cz += (Math.random() - 0.5) * camShake; camShake = Math.max(0, camShake - 0.045); }
   camera.position.set(cx, cy, cz);
   camera.lookAt(tx, ty, tz);
