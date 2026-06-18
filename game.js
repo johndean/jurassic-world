@@ -4508,7 +4508,7 @@ function strut(ax, ay, az, bx, by, bz, r, mat) {
 // establishing shot and the resupply flyover.
 function spinProps(plane, dt, rpmFrac) {   // rotate the 4 turboprops (and fade in the motion-blur disc at speed)
   if (!plane || !plane.userData.props) return;
-  const spd = (rpmFrac == null ? 1 : rpmFrac) * 42;   // rad/s — fast enough to read as a running engine
+  const spd = (rpmFrac == null ? 1 : rpmFrac) * 55;   // rad/s — running-engine blur
   for (const p of plane.userData.props) {
     p.rotation.z += spd * dt;
     if (p.userData.blurDisc) p.userData.blurDisc.material.opacity = Math.min(0.32, (p.userData.blurDisc.material.opacity || 0) + dt * 1.5);
@@ -4528,24 +4528,25 @@ function buildHercules() {
     mdl.rotation.y = Math.PI;
     mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     g.add(mdl);
-    // ---- SPINNING PROPELLERS: positioned from the model's MEASURED bounds so they sit ON the wing leading edge ----
+    // ---- PROP DISCS: the model is ONE fused mesh (props are baked in, not separable nodes), so we can't
+    // rotate the actual prop geometry. AAA-correct compromise: a running turboprop reads as a translucent
+    // SPINNING DISC. Place a thin blur disc precisely over each of the model's 4 nacelles. No fake blades.
     const fb = new THREE.Box3().setFromObject(mdl); const fc = new THREE.Vector3(); fb.getCenter(fc);
-    const span = fb.max.z - fb.min.z;               // wingspan (Z after nose->+x)
-    const noseX = fb.max.x;                          // front of the fuselage
-    const wingFrontX = fc.x + (noseX - fc.x) * 0.28; // engines sit forward on the wing, NOT out past the nose
-    const wingY = fc.y + (fb.max.y - fc.y) * 0.35;   // a touch above centre (high wing)
-    const bladeLen = span * 0.075;                   // prop radius scales with the plane
-    const propHub = _mm(0x1a1d18, 0.5, 0.4), bladeMat = _mm(0x121512, 0.6, 0.3);
+    const span = fb.max.z - fb.min.z;                 // wingspan (Z after nose->+x rotation)
+    const noseX = fb.max.x;                            // front of fuselage
+    const discX = fc.x + (noseX - fc.x) * 0.42;        // nacelle/prop plane sits forward on the wing
+    const discY = fc.y + (fb.max.y - fc.y) * 0.28;     // high wing engine height
+    const discR = span * 0.052;                        // matches the model's actual prop radius
     const props = [];
-    const engZ = [-span * 0.34, -span * 0.17, span * 0.17, span * 0.34];   // 4 engines spaced along the wing
-    for (const ez of engZ) {
+    for (const ez of [-span * 0.33, -span * 0.16, span * 0.16, span * 0.33]) {
       const prop = new THREE.Group();
-      prop.position.set(wingFrontX, wingY, fc.z + ez);
-      prop.rotation.y = Math.PI / 2;                 // disc faces along flight (+x)
-      const hub = new THREE.Mesh(new THREE.ConeGeometry(bladeLen * 0.16, bladeLen * 0.5, 12), propHub); hub.rotation.x = -Math.PI / 2; prop.add(hub);
-      for (let b = 0; b < 4; b++) { const bl = new THREE.Mesh(new THREE.BoxGeometry(bladeLen * 0.08, bladeLen * 2, bladeLen * 0.2), bladeMat); bl.rotation.z = b * Math.PI / 2; bl.geometry.translate(0, bladeLen, 0); prop.add(bl); }
-      const disc = new THREE.Mesh(new THREE.CircleGeometry(bladeLen * 1.05, 24), new THREE.MeshBasicMaterial({ color: 0x141712, transparent: true, opacity: 0.0, side: THREE.DoubleSide, depthWrite: false }));
-      disc.position.z = 0.1; prop.add(disc); prop.userData.blurDisc = disc;
+      prop.position.set(discX, discY, fc.z + ez);
+      prop.rotation.y = Math.PI / 2;                   // disc faces flight (+x)
+      // two crossed faint blades + a soft disc — reads as motion blur, sits tight on the nacelle
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(discR, 20), new THREE.MeshBasicMaterial({ color: 0x0c0e0b, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
+      prop.add(disc);
+      for (let b = 0; b < 3; b++) { const bl = new THREE.Mesh(new THREE.BoxGeometry(discR * 0.05, discR * 1.9, discR * 0.12), new THREE.MeshStandardMaterial({ color: 0x14160f, roughness: 0.6, transparent: true, opacity: 0.55 })); bl.rotation.z = b * (Math.PI * 2 / 3); bl.geometry.translate(0, discR * 0.95, 0); prop.add(bl); }
+      const hub = new THREE.Mesh(new THREE.SphereGeometry(discR * 0.14, 8, 8), _mm(0x1a1d18, 0.5, 0.4)); prop.add(hub);
       g.add(prop); props.push(prop);
     }
     g.userData.props = props;
