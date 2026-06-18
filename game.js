@@ -847,8 +847,13 @@ function buildWorld() {
     for (const pz of [-BRIDGE.halfLen + 3, 0, BRIDGE.halfLen - 3]) for (const px of [-BRIDGE.halfW + 0.5, BRIDGE.halfW - 0.5]) {
       const py = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, BRIDGE.deckY + 6, 8), _mm(0x4a443a, 0.9)); py.position.set(px, (BRIDGE.deckY - 6) / 2, pz); bg.add(py);
     }
-    // approach ramps (earthen) at both ends so the truck can drive up onto the deck
-    for (const sz of [-1, 1]) { const ramp = new THREE.Mesh(new THREE.BoxGeometry(BRIDGE.halfW * 2, 0.3, 6), deckMat); ramp.position.set(0, BRIDGE.deckY * 0.5, sz * (BRIDGE.halfLen + 2.5)); ramp.rotation.x = sz * 0.18; bg.add(ramp); }
+    // approach ramps (earthen) at both ends — match BRIDGE.rampLen so the visible surface == the walkable ramp
+    for (const sz of [-1, 1]) {
+      const ramp = new THREE.Mesh(new THREE.BoxGeometry(BRIDGE.halfW * 2 + 1.0, 0.4, BRIDGE.rampLen + 1.5), deckMat);
+      ramp.position.set(0, BRIDGE.deckY * 0.45, sz * (BRIDGE.halfLen + BRIDGE.rampLen * 0.5));
+      ramp.rotation.x = sz * (BRIDGE.deckY / BRIDGE.rampLen);   // slope matches the deckY drop over rampLen
+      ramp.receiveShadow = true; bg.add(ramp);
+    }
     bg.traverse(o => { if (o.isMesh) o.castShadow = true; });
     scene.add(bg);
   })();
@@ -2068,10 +2073,24 @@ function terrainPitch(x, z, yaw) {
 }
 function riverCenter(x) { return 48 + Math.sin(x * 0.02) * 28; }   // river centerline z(x)
 // ---- BRIDGE: the one place the truck (and player) can cross the river ----
-const BRIDGE = { x: -18, deckY: 1.4, halfLen: 22, halfW: 4.2 };   // spans the channel at x=-18; deck above the water
+const BRIDGE = { x: -18, deckY: 1.4, halfLen: 22, halfW: 4.2, rampLen: 7 };   // spans the channel at x=-18; deck above the water
 BRIDGE.z = 48 + Math.sin(BRIDGE.x * 0.02) * 28;                   // centred on the river at that x
-function onBridge(x, z) { return Math.abs(x - BRIDGE.x) < BRIDGE.halfW && Math.abs(z - BRIDGE.z) < BRIDGE.halfLen; }
-function bridgeDeckY(x, z) { return onBridge(x, z) ? BRIDGE.deckY : null; }
+// onBridge covers the deck PLUS both approach ramps (so the truck is never water-blocked while entering/exiting),
+// with extra lateral margin so the body never clips an invisible edge.
+function onBridge(x, z) { return Math.abs(x - BRIDGE.x) < (BRIDGE.halfW + 1.6) && Math.abs(z - BRIDGE.z) < (BRIDGE.halfLen + BRIDGE.rampLen); }
+// deck height: flat across the span, then ramps DOWN to ground level over the approach so on/off is seamless (no step/wall).
+function bridgeDeckY(x, z) {
+  if (Math.abs(x - BRIDGE.x) >= (BRIDGE.halfW + 1.6)) return null;
+  const dz = Math.abs(z - BRIDGE.z);
+  if (dz < BRIDGE.halfLen) return BRIDGE.deckY;                                   // flat deck
+  if (dz < BRIDGE.halfLen + BRIDGE.rampLen) {                                     // approach ramp: lerp deck->ground
+    const t = (dz - BRIDGE.halfLen) / BRIDGE.rampLen;                             // 0 at deck edge, 1 at ramp foot
+    const endX = x, endZ = BRIDGE.z + Math.sign(z - BRIDGE.z) * (BRIDGE.halfLen + BRIDGE.rampLen);
+    const gnd = groundH(endX, endZ);
+    return BRIDGE.deckY * (1 - t) + gnd * t;
+  }
+  return null;
+}
 function riverSlope(x) { return Math.cos(x * 0.02) * 28 * 0.02; }  // d(riverCenter)/dx — used to align the boat to the current
 function groundH(x, z) {
   const r = Math.hypot(x, z);
