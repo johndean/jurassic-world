@@ -1414,8 +1414,9 @@ function spawnDrawn(species, P) {   // a predator pulled toward the player by no
   if (Net.on && !Net.isHost) return null;   // co-op: only the host spawns; clients receive dinos via sync
   if (!SPECIES[species]) return null;
   if (dinos.filter(d => d.alive).length >= BIOME.spawnDirector.maxActiveAI + 6) return null;   // hard cap (no runaway)
-  const half = BIOME.map.size / 2 - 6, ang = rand(0, Math.PI * 2), d = rand(40, 60);
-  const x = clamp(P.x + Math.cos(ang) * d, -half, half), z = clamp(P.z + Math.sin(ang) * d, -half, half);
+  const ang = rand(0, Math.PI * 2), d = rand(40, 60);
+  let x = P.x + Math.cos(ang) * d, z = P.z + Math.sin(ang) * d;
+  const rr = Math.hypot(x, z); if (rr > 104) { x *= 104 / rr; z *= 104 / rr; }   // keep inside the valley floor, not up the mountain skirt
   const a = spawnDino(species, x, z);
   a.bb.homeX = P.x; a.bb.homeZ = P.z; a.bb.hasTarget = true; a.bb.lastSeenX = P.x; a.bb.lastSeenZ = P.z;
   dinos.push(a); return a;
@@ -3280,9 +3281,12 @@ function updateSpawnDirector(dt, P) {
 }
 function spawnAtEdge(species, P) {
   if (Net.on && !Net.isHost) return;   // co-op: extract waves are host-authoritative (sync to clients)
-  const half = BIOME.map.size / 2 - 6;
+  const RING = 104;   // valley-floor radius — past this the mountain skirt rises steeply; spawning there hides dinos up the wall
   let x, z, tries = 0;
-  do { x = rand(-half, half); z = rand(-half, half); tries++; } while (dist2(x, z, P.x, P.z) < 35 * 35 && tries < 12);
+  do {
+    const ang = rand(0, Math.PI * 2), rad = Math.sqrt(rand(0, 1)) * RING;   // uniform over the disc, never in the corner skirt
+    x = Math.cos(ang) * rad; z = Math.sin(ang) * rad; tries++;
+  } while (dist2(x, z, P.x, P.z) < 35 * 35 && tries < 12);
   // T-rex prefers spawning toward the player's far side; deino pack clusters
   const a = spawnDino(species, x, z);
   if (species === "deinonychus") { a.bb.homeX = P.x + rand(-30, 30); a.bb.homeZ = P.z + rand(-30, 30); }
