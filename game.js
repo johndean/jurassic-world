@@ -2629,7 +2629,7 @@ function spawnAirdropCrate(x, z) {
 function updateAirdrop(dt) {
   if (airdrop.state === "idle") return;
   airdrop.t += dt;
-  if (airdrop.plane) { const g = airdrop.plane; g.position.x += 64 * dt; if (g.position.x > airdrop.x + 260) { scene.remove(g); airdrop.plane = null; } }
+  if (airdrop.plane) { const g = airdrop.plane; g.position.x += 64 * dt; spinProps(g, dt); if (g.position.x > airdrop.x + 260) { scene.remove(g); airdrop.plane = null; } }
   if (airdrop.state === "inbound") {
     if (airdrop.t > 1.8 && !airdrop.mesh) spawnAirdropCrate(airdrop.x, airdrop.z);
     if (airdrop.mesh) {
@@ -4472,6 +4472,14 @@ function strut(ax, ay, az, bx, by, bz, r, mat) {
 // Procedural C-130 Hercules — high straight wing, 4 turboprops, tall fin + low stabiliser,
 // upswept tail with the cargo ramp, gear sponsons. Nose points +x. Used for the HALO intro
 // establishing shot and the resupply flyover.
+function spinProps(plane, dt, rpmFrac) {   // rotate the 4 turboprops (and fade in the motion-blur disc at speed)
+  if (!plane || !plane.userData.props) return;
+  const spd = (rpmFrac == null ? 1 : rpmFrac) * 42;   // rad/s — fast enough to read as a running engine
+  for (const p of plane.userData.props) {
+    p.rotation.z += spd * dt;
+    if (p.userData.blurDisc) p.userData.blurDisc.material.opacity = Math.min(0.32, (p.userData.blurDisc.material.opacity || 0) + dt * 1.5);
+  }
+}
 function buildHercules() {
   if (MODELS[C130_MODEL]) {
     const g = new THREE.Group();
@@ -4486,6 +4494,23 @@ function buildHercules() {
     mdl.rotation.y = Math.PI;
     mdl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     g.add(mdl);
+    // ---- SPINNING PROPELLERS: the model is one static mesh, so add 4 animated turboprops at the wing engines ----
+    // After the nose->+x rotation, the wing spans Z and engines hang forward (+x) of the leading edge.
+    const propHub = _mm(0x1a1d18, 0.5, 0.4), bladeMat = _mm(0x121512, 0.6, 0.3);
+    const props = [];
+    const engZ = [-9.0, -4.6, 4.6, 9.0];   // four engines along the wingspan (model is ~28m, scaled)
+    for (const ez of engZ) {
+      const prop = new THREE.Group();
+      prop.position.set(13.2, 1.4, ez);     // forward of the wing leading edge, at engine height
+      prop.rotation.y = Math.PI / 2;        // disc faces along flight (+x)
+      const hub = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.7, 12), propHub); hub.rotation.x = -Math.PI / 2; prop.add(hub);
+      for (let b = 0; b < 4; b++) { const bl = new THREE.Mesh(new THREE.BoxGeometry(0.12, 3.2, 0.28), bladeMat); bl.position.y = 0; bl.rotation.z = b * Math.PI / 2; bl.geometry.translate(0, 1.6, 0); prop.add(bl); }
+      // faint motion-blur disc that appears at speed
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(1.7, 24), new THREE.MeshBasicMaterial({ color: 0x141712, transparent: true, opacity: 0.0, side: THREE.DoubleSide, depthWrite: false }));
+      disc.position.z = 0.15; prop.add(disc); prop.userData.blurDisc = disc;
+      g.add(prop); props.push(prop);
+    }
+    g.userData.props = props;
     return g;
   }
   const g = new THREE.Group();
@@ -4699,7 +4724,7 @@ function updateIntroHalo(dt) {
   // ── PHASE 1 (0-6.5s): cinematic establishing shot — the C-130 cruising the storm front ──
   if (T < 6.5) {
     intro.phase = "approach";
-    if (intro.plane) { intro.plane.position.x += 3.2 * dt; intro.plane.position.z -= 0.6 * dt; intro.plane.rotation.z = Math.sin(T * 0.5) * 0.03; }
+    if (intro.plane) { intro.plane.position.x += 3.2 * dt; intro.plane.position.z -= 0.6 * dt; intro.plane.rotation.z = Math.sin(T * 0.5) * 0.03; spinProps(intro.plane, dt); }
     if (playerMesh) playerMesh.visible = false;
     cap.style.opacity = "1"; big.style.opacity = "0";
     return;
@@ -4707,7 +4732,7 @@ function updateIntroHalo(dt) {
   // ── PHASE 2 (6.5-8.5s): FADE through — push toward the C-130's tail, fade to black, no box-pop ──
   if (T < 8.5) {
     intro.phase = "approach";
-    if (intro.plane) { intro.plane.position.x += 3.2 * dt; }
+    if (intro.plane) { intro.plane.position.x += 3.2 * dt; spinProps(intro.plane, dt); }
     const f = (T - 6.5) / 2.0;            // 0..1 fade out then in
     tint.style.background = "#0a0d10"; tint.style.opacity = (f < 0.5 ? f * 2 : (1 - f) * 2).toFixed(2);
     cap.style.opacity = "0"; big.style.opacity = "0";
