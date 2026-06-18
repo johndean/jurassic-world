@@ -4519,10 +4519,10 @@ function buildHercules() {
     // We add ONLY thin translucent blur DISCS (no blade boxes — those read as floating bars) tight over
     // each nacelle, sized to the model's real prop radius. A faint spinning disc = a running turboprop.
     const fb = new THREE.Box3().setFromObject(mdl); const fc = new THREE.Vector3(); fb.getCenter(fc);
-    const span = fb.max.z - fb.min.z, discX = fc.x + (fb.max.x - fc.x) * 0.40, discY = fc.y + (fb.max.y - fc.y) * 0.22, discR = span * 0.045;
+    const span = fb.max.z - fb.min.z, discX = fc.x + (fb.max.x - fc.x) * 0.30, discY = fc.y + (fb.max.y - fc.y) * 0.02, discR = span * 0.055;
     const props = [];
     for (const ez of [-span * 0.31, -span * 0.15, span * 0.15, span * 0.31]) {
-      const disc = new THREE.Mesh(new THREE.CircleGeometry(discR, 24), new THREE.MeshBasicMaterial({ color: 0x0e100c, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }));
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(discR, 24), new THREE.MeshBasicMaterial({ color: 0x0e100c, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }));
       disc.position.set(discX, discY, fc.z + ez); disc.rotation.y = Math.PI / 2;
       g.add(disc); props.push(disc);
     }
