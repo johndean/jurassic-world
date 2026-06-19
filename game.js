@@ -1991,7 +1991,11 @@ function playerFloorY(x, z) {   // player's floor: tower platform / zipline cabl
   return P.onTower ? P.onTower.platformY : groundH(x, z);
 }
 function nearTowerBase(P) {
-  for (const t of TOWERS) { const lz = t.ladderZ != null ? t.ladderZ : t.z + t.half; if (dist2(P.x, P.z, t.x, lz) < 18) return t; }   // within ~4.2m of the ladder
+  for (const t of TOWERS) {
+    const lx = t.ladderX != null ? t.ladderX : t.x;
+    const lz = t.ladderZ != null ? t.ladderZ : t.z + t.half;
+    if (dist2(P.x, P.z, lx, lz) < 25) return t;        // within ~5m of the ladder foot, from any approach side
+  }
   return null;
 }
 function climbTower(t) {
@@ -2050,6 +2054,8 @@ function buildFacility(bx, bz) {
   for (let r = 0; r < 17; r++) { const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.0, 6), rungMat); rung.rotation.x = Math.PI / 2; rung.position.set(14.55, 0.8 + r * 1.0, -21); g.add(rung); }
   // a small railed lookout deck at the top so the ladder leads somewhere
   const deck = new THREE.Mesh(new THREE.BoxGeometry(4, 0.3, 4), dark); deck.position.set(13, 18.1, -21); g.add(deck);
+  // make the service ladder actually CLIMBABLE (register as a TOWER) — base at the +x face of the comms tower
+  TOWERS.push({ x: bx + 13, z: bz - 21, platformY: groundH(bx, bz) + 18.1, half: 1.6, zipX: bx + 13, zipZ: bz - 13, ladderZ: bz - 21, ladderX: bx + 14.55 });
   for (const [dx, dz] of [[-1.8, -1.8], [1.8, -1.8], [-1.8, 1.8], [1.8, 1.8]]) { const rp = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.1, 0.1), rungMat); rp.position.set(13 + dx, 18.7, -21 + dz); g.add(rp); }
   for (const [px, pz] of [[-11, -3], [11, -3], [-11, -29], [11, -29]]) {
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.32, 12, 6), dark); pole.position.set(px, 6, pz); g.add(pole);
@@ -2116,7 +2122,7 @@ function buildFacility(bx, bz) {
     addCollider(bx + Math.cos(a) * HUB, bz + Math.sin(a) * HUB, 1.3, { tall: true });
   }
   // helipad support pylon collider (walk around its base)
-  addCollider(FACILITY.padX, FACILITY.padZ, 3.4, { tall: true });
+  addCollider(FACILITY.padX, FACILITY.padZ, 2.0, { tall: false });   // low pylon only — the ramp/floor lets you walk ONTO the pad to board
 
   scene.add(g);
 }
@@ -2499,7 +2505,8 @@ function updatePlayer(dt) {
     else P.z = Math.max(P.z, t.z - b);
   } else if (!P.zip) {   // watchtowers: step onto the ladder to auto-climb; otherwise you can't walk through the structure
     for (const t of TOWERS) {
-      if (dist2(P.x, P.z, t.x, t.ladderZ != null ? t.ladderZ : t.z + t.half) < 2.4 * 2.4) { climbTower(t); break; }   // at the ladder → go up
+      const _lx = t.ladderX != null ? t.ladderX : t.x, _lz = t.ladderZ != null ? t.ladderZ : t.z + t.half;
+      if (dist2(P.x, P.z, _lx, _lz) < 3.2 * 3.2) { climbTower(t); break; }   // at the ladder → go up (climb from any side)
       const dx = P.x - t.x, dz = P.z - t.z, d = Math.hypot(dx, dz) || 1, rr = t.half + 0.15;
       if (d < rr) { P.x = t.x + dx / d * rr; P.z = t.z + dz / d * rr; }               // solid: push out of the legs
     }
@@ -3724,7 +3731,7 @@ function updateEvac(dt) {
     g.position.y = evac.groundY;
   } else if (evac.phase === "boarding") {                   // YOU keep control — walk to the door to climb in
     g.position.y = evac.groundY;
-    if (dist2(S.player.x, S.player.z, lx, lz) < 5.0 * 5.0) { evac.phase = "climbing"; evac.t = 0; }
+    if (dist2(S.player.x, S.player.z, lx, lz) < 8.5 * 8.5) { evac.phase = "climbing"; evac.t = 0; }   // board from ground-adjacent — no hard climb-to-deck gate
   } else if (evac.phase === "climbing") {                   // brief auto climb-aboard, then hide
     g.position.y = evac.groundY;
     const P = S.player;
