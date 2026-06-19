@@ -796,6 +796,65 @@ function rebuildCarcass() {
   if (_carcass.userData.feeder == null && _lastFeeder) _carcass.userData.feeder = _lastFeeder;
 }
 let _lastFeeder = null;
+// ---- Environmental storytelling: discoverable vignettes that tell a story with NO text. ----
+// Each is a small staged scene the player stumbles on; the arrangement implies what happened here.
+function buildTableaus() {
+  const grp = new THREE.Group(); scene.add(grp);
+  const rust = _mm(0x6b4327, 0.95), metal = _mm(0x44483f, 0.7), bone = _mm(0xcfc6ad, 0.9), cloth = _mm(0x6a6347, 0.9), blood = _mm(0x300a06, 1);
+  const cone = (col, x, y, z, h, r, p) => { const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7), col); m.position.set(x, y, z); if (p) m.rotation.set(p[0], p[1], p[2]); grp.add(m); return m; };
+  const box = (col, x, y, z, w, h, d, ry) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), col); m.position.set(x, y, z); m.rotation.y = ry || 0; grp.add(m); return m; };
+  const cyl = (col, x, y, z, r1, r2, h, rot) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, 8), col); m.position.set(x, y, z); if (rot) m.rotation.set(rot[0], rot[1], rot[2]); grp.add(m); return m; };
+  // pick 4 flat, clear-ish spots around the valley
+  const spots = [];
+  let guard = 0;
+  while (spots.length < 4 && guard < 80) { guard++;
+    const ang = rand(0, 6.283), rad = 40 + Math.sqrt(rand(0, 1)) * 55;
+    const x = Math.cos(ang) * rad, z = Math.sin(ang) * rad;
+    const h0 = groundH(x, z);
+    if (Math.abs(groundH(x + 7, z) - h0) > 3 || Math.abs(groundH(x, z + 7) - h0) > 3) continue;
+    if (spots.some(s => Math.hypot(s.x - x, s.z - z) < 50)) continue;
+    spots.push({ x, z });
+  }
+  const SCENES = [
+    // 1. The last camp — a ranger's final stand: dead campfire, dropped rifle, a torn tent, claw-raked crate, blood trail leading away
+    (cx, cz) => { const gy = groundH(cx, cz);
+      cyl(_mm(0x2a2622,1), cx, gy+0.05, cz, 0.9, 1.0, 0.1);                                  // fire ring char
+      for (let i=0;i<5;i++){ const a=i/5*6.28; cyl(_mm(0x4a3a2a,1), cx+Math.cos(a)*0.8, gy+0.1, cz+Math.sin(a)*0.8, 0.07,0.07,0.7,[1.3,a,0]); }  // stones
+      cyl(_mm(0x1a140e,1), cx+0.1, gy+0.25, cz, 0.05,0.08,0.9,[0.2,0.6,1.4]);                 // charred log
+      box(cloth, cx-2.2, gy+0.4, cz+1.4, 1.8,0.05,1.4, 0.5); cone(cloth, cx-2.2, gy+0.7, cz+1.4, 1.0,1.1);  // collapsed tent
+      cyl(metal, cx+1.6, gy+0.15, cz-0.7, 0.04,0.04,1.3,[0,0.4,1.4]);                          // dropped rifle barrel
+      box(rust, cx+2.2, gy+0.35, cz+0.6, 0.8,0.7,0.8, 0.3);                                    // claw-raked crate
+      for (let i=0;i<5;i++){ const m=new THREE.Mesh(new THREE.CircleGeometry(0.5-i*0.06,12), blood); m.rotation.x=-Math.PI/2; m.position.set(cx+0.4+i*0.9, gy+0.02, cz-0.4-i*0.5); grp.add(m); }  // blood trail leading off
+    },
+    // 2. Crashed supply jeep, doors flung, spilled crates + scattered medical supplies
+    (cx, cz) => { const gy = groundH(cx, cz);
+      box(_mm(0x2e3327,1), cx, gy+0.7, cz, 2.6,1.4,1.5, 0.6); box(_mm(0x23271d,1), cx-0.3, gy+1.5, cz+0.2, 2.2,0.9,1.4, 0.6);  // tilted hull+cab
+      cyl(_mm(0x111,1), cx+1.4, gy+0.5, cz+0.9, 0.5,0.5,0.3,[0,0,1.5]);                         // thrown wheel
+      for (let i=0;i<4;i++){ box(rust, cx-1.8-i*0.6, gy+0.3, cz-1.2+i*0.5, 0.7,0.6,0.7, rand(0,3)); }   // spilled crates
+      box(_mm(0xb83020,1), cx-1.2, gy+0.2, cz+1.6, 0.4,0.3,0.5, 0.8);                           // red medkit
+      box(cloth, cx+0.8, gy+0.1, cz-1.8, 0.9,0.05,0.6, 1.1);                                    // dropped tarp
+    },
+    // 3. Failed experiment — a shattered containment pod, broken glass, scorch, a half-buried skeleton
+    (cx, cz) => { const gy = groundH(cx, cz);
+      cyl(_mm(0x3a3f42,1), cx, gy+1.0, cz, 1.0,1.2,2.0,[0.15,0,0.1]);                           // cracked pod cylinder
+      cyl(_mm(0x223f47,0.5), cx, gy+1.4, cz, 0.85,0.85,1.2);                                    // glass remnant (tinted)
+      const sm=()=>_mm([0x8a8d83,0x7c8377][rand(0,2)|0],1);
+      for (let i=0;i<8;i++){ const a=rand(0,6.28),d=rand(1.2,3); cyl(_mm(0x1a1510,1), cx+Math.cos(a)*d, gy+0.04, cz+Math.sin(a)*d, 0.3,0.3,0.04); } // scorch discs
+      box(sm(), cx+2.4, gy+0.5, cz-1, 1.6,1.0,0.5, 0.4);                                        // toppled console
+      for (let i=0;i<6;i++){ cyl(bone, cx-2+i*0.3, gy+0.08, cz+2+Math.sin(i)*0.3, 0.05,0.05,0.6,[1.4,i,0.2]); }  // ribcage half-buried
+      cyl(bone, cx-1.4, gy+0.1, cz+2.3, 0.18,0.2,0.3);                                          // skull
+    },
+    // 4. Nest raid — a clutch of broken eggs, shell fragments, a clawed-up nest mound, tracks
+    (cx, cz) => { const gy = groundH(cx, cz);
+      cyl(_mm(0x4a4030,1), cx, gy+0.15, cz, 2.6,2.9,0.3);                                       // nest mound (dirt ring)
+      for (let i=0;i<7;i++){ const a=i/7*6.28,d=rand(0.4,1.6); const e=new THREE.Mesh(new THREE.SphereGeometry(rand(0.18,0.26),8,6), _mm(0xcfc3a2,1)); e.scale.y=1.3; e.position.set(cx+Math.cos(a)*d, gy+0.2, cz+Math.sin(a)*d); e.rotation.set(rand(0,1),rand(0,6),rand(0,1)); grp.add(e); }  // eggs, some broken
+      for (let i=0;i<10;i++){ const a=rand(0,6.28),d=rand(0.3,2.4); box(_mm(0xe8ddc0,1), cx+Math.cos(a)*d, gy+0.06, cz+Math.sin(a)*d, 0.12,0.03,0.1, rand(0,3)); }  // shell shards
+      for (let i=0;i<4;i++){ box(_mm(0x2a241c,1), cx+1.5+i*0.7, gy+0.03, cz-2-i*0.6, 0.35,0.02,0.5, 0.3); }   // three-toe tracks leading away
+    },
+  ];
+  spots.forEach((s, i) => SCENES[i % SCENES.length](s.x, s.z));
+  return grp;
+}
 function buildWorld() {
   const m = BIOME.map, half = m.size / 2;
   MAP_HALF = half;   // keep groundH's skirt boundary in sync with the actual map
@@ -918,6 +977,7 @@ function buildWorld() {
   try { buildRuins(); } catch(e) { console.error('buildRuins failed:', e); }
   if (ruinsGroup) addCollidersFromObject(ruinsGroup, { min: 0.9, minH: 1.1, scale: 0.78 });   // ruined masonry / columns / jeep are solid
   buildTowers();
+  try { buildTableaus(); } catch(e) { console.error('buildTableaus failed:', e); }
   buildPlayer();
 
 
@@ -1468,9 +1528,11 @@ const ZIP_LEN = 24;
 function buildTower(x, z, dir) {
   const baseY = groundH(x, z), H = 7.0, half = 2.4, platformY = baseY + H, c = half - 0.15;
   const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
-  const wood = new THREE.MeshStandardMaterial({ color: 0x6f5a3c, roughness: 0.92, metalness: 0.05 });
-  const wood2 = new THREE.MeshStandardMaterial({ color: 0x574631, roughness: 0.95 });
-  const metal = new THREE.MeshStandardMaterial({ color: 0x7e837f, roughness: 0.55, metalness: 0.6 });
+  const _wt = _texLoader.load("./assets/textures/wood.webp?v=1"); _wt.wrapS = _wt.wrapT = THREE.RepeatWrapping; _wt.repeat.set(1, 3); _wt.colorSpace = THREE.SRGBColorSpace;
+  const _ct = _texLoader.load("./assets/textures/concrete.webp?v=1"); _ct.wrapS = _ct.wrapT = THREE.RepeatWrapping; _ct.colorSpace = THREE.SRGBColorSpace;
+  const wood = new THREE.MeshStandardMaterial({ map: _wt, color: 0x8a7250, roughness: 0.92, metalness: 0.05 });
+  const wood2 = new THREE.MeshStandardMaterial({ map: _wt, color: 0x6e5840, roughness: 0.95 });
+  const metal = new THREE.MeshStandardMaterial({ map: _ct, color: 0x949891, roughness: 0.55, metalness: 0.5 });
   // 4 box legs — tops meet the deck (overlap, no gap)
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.26, H, 0.26), wood); leg.position.set(sx * c, baseY + H / 2, sz * c); g.add(leg); }
   // X cross-braces spanning corner-to-corner on 3 faces (skip +Z = ladder face) — exact fit, no floating bars
@@ -1924,8 +1986,9 @@ function interact() {   // context action shared by E / the ACTION button (press
 
 // extraction facility around the beacon: helipad, bunker, comms tower, floodlights, red warning beacons
 function buildFacility(bx, bz) {
-  const concrete = new THREE.MeshStandardMaterial({ color: 0x8a8f8c, roughness: 0.9, metalness: 0.05 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x55595a, roughness: 0.9 });
+  const _fct = _texLoader.load("./assets/textures/concrete.webp?v=1"); _fct.wrapS = _fct.wrapT = THREE.RepeatWrapping; _fct.repeat.set(2, 2); _fct.colorSpace = THREE.SRGBColorSpace;
+  const concrete = new THREE.MeshStandardMaterial({ map: _fct, color: 0x9a9f9c, roughness: 0.9, metalness: 0.05 });
+  const dark = new THREE.MeshStandardMaterial({ map: _fct, color: 0x60646a, roughness: 0.9 });
   const lamp = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2c0, emissiveIntensity: 2.4 });
   const red = new THREE.MeshStandardMaterial({ color: 0xff3a2a, emissive: 0xff2a1a, emissiveIntensity: 2.6 });
   const g = new THREE.Group(); g.position.set(bx, groundH(bx, bz), bz);
