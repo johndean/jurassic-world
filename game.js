@@ -95,6 +95,8 @@ const BILLBOARDS = {
 // foliage models (CDN .glb) used to replace grey-box trees; filled with URLs once generated
 const FOLIAGE = {
   tree: "./assets/models/tree.glb",
+  tree2: "./assets/models/tree2.glb",
+  palm: "./assets/models/palm.glb",
   fern: "./assets/models/fern.glb",
 };
 // TRACK A: real textured 3D environment props (Higgsfield image->3D, streamed from CDN, CORS *).
@@ -516,7 +518,7 @@ async function preloadModels() {
     await loadWave(all, 5);                                // creatures reskin as they land (all now ~1-2 MB)
     const props = [...new Set([PROPS3D.rock, PROPS3D.fern, PROPS3D.log].filter(Boolean))];
     await loadWave(props, 3); try { buildHeroProps(); } catch (e) { console.error("heroProps", e); }
-    const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.fern].filter(Boolean))];
+    const foliage = [...new Set([FOLIAGE.tree, FOLIAGE.tree2, FOLIAGE.palm, FOLIAGE.fern].filter(Boolean))];
     await loadWave(foliage, 2); buildFoliage();
     const ruins = [...new Set([RUINS.gate.url, RUINS.centre.url].filter(Boolean))];
     await loadWave(ruins, 2); buildRuinModels();
@@ -1308,13 +1310,37 @@ function buildFoliage() {
     const fr = fitProp(MODELS[FOLIAGE.fern].clone(true), rand(0.6, 1.3), rand(0, 6.28));
     fr.position.set(x, groundH(x, z), z); foliageGroup.add(fr);
   } }
-  if (MODELS[FOLIAGE.tree]) { const NT = Math.round(60 * fol); for (let i = 0; i < NT; i++) {   // solid 3D trees for a fuller canopy
-    let x, z, ok = 0;
-    do { x = rand(-half + 6, half - 6); z = rand(-half + 6, half - 6); } while ((Math.hypot(x, z) < 12 || inClearing(x, z)) && ++ok < 12);
-    const t = fitModel(MODELS[FOLIAGE.tree].clone(true), rand(9, 15), rand(0, 6.28));
-    t.position.set(x, groundH(x, z), z); foliageGroup.add(t);
-    trees.push({ x, z, r: 1.3 });
-  } }
+  // MIXED real 3D tree canopy — 3 species (buttressed canopy, palm, original) cluster-placed for a
+  // believable layered jungle (variety kills the "one repeated tree" read). Placed-counter so the full count lands.
+  const TREE_KINDS = [
+    { m: FOLIAGE.tree,  h: [9, 15],  w: 0.5 },
+    { m: FOLIAGE.tree2, h: [10, 17], w: 0.32 },
+    { m: FOLIAGE.palm,  h: [11, 18], w: 0.18 },
+  ].filter(k => MODELS[k.m]);
+  if (TREE_KINDS.length) {
+    const NT = Math.round(70 * fol); let placed = 0, guard = 0;
+    while (placed < NT && guard < NT * 6) { guard++;
+      const x = rand(-half + 6, half - 6), z = rand(-half + 6, half - 6);
+      if (Math.hypot(x, z) < 12 || inClearing(x, z)) continue;   // retried, not lost
+      // weighted pick: mostly canopy hardwood, some big buttressed, a few palms
+      let r = rand(0, 1), kind = TREE_KINDS[0];
+      let acc = 0; for (const k of TREE_KINDS) { acc += k.w; if (r <= acc) { kind = k; break; } }
+      const t = fitModel(MODELS[kind.m].clone(true), rand(kind.h[0], kind.h[1]), rand(0, 6.28));
+      t.position.set(x, groundH(x, z), z); foliageGroup.add(t);
+      trees.push({ x, z, r: 1.4 });
+      // a couple of cluster-mates so the player walks into pockets of canopy, not lone trees
+      const mates = rand(0,1) < 0.5 ? (1 + (rand(0,2)|0)) : 0;
+      for (let m = 0; m < mates; m++) {
+        const ang = rand(0, 6.28), d = rand(3, 8), mx = x + Math.cos(ang)*d, mz = z + Math.sin(ang)*d;
+        if (Math.hypot(mx, mz) > half - 6 || inClearing(mx, mz)) continue;
+        const k2 = TREE_KINDS[(rand(0, TREE_KINDS.length)|0)];
+        const t2 = fitModel(MODELS[k2.m].clone(true), rand(k2.h[0], k2.h[1]), rand(0, 6.28));
+        t2.position.set(mx, groundH(mx, mz), mz); foliageGroup.add(t2);
+        trees.push({ x: mx, z: mz, r: 1.4 });
+      }
+      placed++;
+    }
+  }
   scene.add(foliageGroup);
 }
 function addBlob(parent, r) {
