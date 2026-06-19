@@ -135,6 +135,7 @@ const ROLES = [
   { id: "survival",  name: "SURVIVAL",  img: "./assets/keyart/squad/card_survival.png",  model: "./assets/models/char_survival.glb",  perk: "Endurance · stamina lasts far longer", mod: { drain: 0.6 } },
   { id: "research",  name: "RESEARCH",  img: "./assets/keyart/squad/card_research.png",  model: "./assets/models/char_research.glb",  perk: "Careful steps · −30% noise", mod: { noise: 0.7 } },
   { id: "seal",      name: "SEAL OPERATOR", img: "./assets/keyart/squad/card_seal.png",  model: "./assets/models/char_seal.glb",      perk: "Combat security · armed rifle · suppresses predators", mod: { armed: true } },
+  { id: "assault",   name: "ASSAULT",       img: "./assets/keyart/squad/card_assault.png", model: "./assets/models/char_assault.glb",  perk: "Heavy weapons · armed rifle · extra ammo · suppresses predators", mod: { armed: true, ammo: 1.5 } },
 ];
 let selectedRole = ROLES[0];
 function curPlayerModel() { const u = selectedRole && selectedRole.model; return (u && MODELS[u]) ? u : PLAYER_MODEL; }
@@ -2931,7 +2932,7 @@ const TOOLS = [
 let selTool = 0;
 function selectTool(i) {
   if (i < 0 || i >= TOOLS.length) return;
-  if (TOOLS[i] && TOOLS[i].sealOnly && !(selectedRole && selectedRole.id === "seal")) return;   // rifle is SEAL-only
+  if (TOOLS[i] && TOOLS[i].sealOnly && !(selectedRole && selectedRole.mod && selectedRole.mod.armed)) return;   // rifle is for armed specialists (SEAL/Assault)
   const prev = selTool; selTool = i; const t = TOOLS[i];
   if (t && (t.id === "tranq" || t.id === "sample" || t.id === "rifle") && prev !== i) toast((t.id === "rifle" ? "RIFLE UP · scope on a predator · " : "SCOPE UP · look to aim the reticle · ") + (isTouch ? "tap FIRE" : "click / F") + " to FIRE");
 }
@@ -5208,9 +5209,9 @@ function startRun() {
   clearRemotes(); clearEvac(); clearFx(); clearAirdrop(); clearWreck(); clearField(); clearIntroProp(); clearMissionSites(); clearBoss(); preloadRadio();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
   // SEAL OPERATOR signature: the service rifle slot is only available to the SEAL specialist
-  { const seal = (selectedRole && selectedRole.id === "seal");
-    const rifle = TOOLS.find(t => t.id === "rifle"); if (rifle) rifle.charges = seal ? rifle.max : 0;
-    const rb = document.querySelector("#tools .tool-seal"); if (rb) rb.style.display = seal ? "" : "none"; }
+  { const armed = (selectedRole && selectedRole.mod && selectedRole.mod.armed);
+    const rifle = TOOLS.find(t => t.id === "rifle"); if (rifle) rifle.charges = armed ? Math.round(rifle.max * (selectedRole.mod.ammo || 1)) : 0;
+    const rb = document.querySelector("#tools .tool-seal"); if (rb) rb.style.display = armed ? "" : "none"; }
   applyUnlocks();                                                                     // persistent progression: veteran loadout bonuses
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
