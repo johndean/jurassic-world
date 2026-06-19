@@ -422,7 +422,9 @@ function updateAction(dt) {
   // aiming reticle: a center crosshair while the tranq/sample is selected, green when a valid target is locked
   // the FIRE/USE button reads the selected tool's actual function (TRANQ→FIRE, SAMPLE→COLLECT, …)
   const bu = $("btnUse");
-  if (bu) { const t = TOOLS[selTool]; const lbl = t ? ({ tranq: "FIRE", rifle: "FIRE", sample: "COLLECT", trap: "SET TRAP", flare: "FLARE", decoy: "DECOY", melee: "STRIKE" }[t.id] || "USE") : "USE"; if (bu.textContent !== lbl) bu.textContent = lbl; }
+  if (bu) { const t = TOOLS[selTool]; let lbl = t ? ({ tranq: "FIRE", rifle: "FIRE", sample: "COLLECT", trap: "SET TRAP", flare: "FLARE", decoy: "DECOY", melee: "STRIKE" }[t.id] || "USE") : "USE";
+    if (t && t.id === "rifle") lbl = t.reloadT > 0 ? "RELOADING…" : (t.mag <= 0 ? (t.reserve > 0 ? "RELOAD" : "NO AMMO") : "FIRE " + t.mag + "/" + t.reserve);
+    if (bu.textContent !== lbl) bu.textContent = lbl; }
   const ret = $("reticle");
   if (ret) {
     const aiming = aimMode();
@@ -2145,6 +2147,7 @@ function initInput() {
     if (e.code === "KeyE") interact();   // climb tower / zip down / call extraction (context)
     if (e.code === "KeyM") toggleMap();
     if (e.code === "KeyF") useTool();                                   // use selected defense tool
+    if (e.code === "KeyR") { const rt = TOOLS.find(x => x.id === "rifle"); if (rt && selTool === TOOLS.indexOf(rt)) reloadRifle(rt); }   // manual reload
     if (e.code === "Digit1") selectTool(0);
     if (e.code === "Digit2") selectTool(1);
     if (e.code === "Digit3") selectTool(2);
@@ -2833,7 +2836,7 @@ function updateAirdrop(dt) {
   }
 }
 function collectAirdrop() {
-  TOOLS.forEach(t => { if (t.max !== Infinity) { t.charges = t.max; t.cd = 0; } });   // refill the whole kit
+  TOOLS.forEach(t => { if (t.max !== Infinity) { t.charges = t.max; t.cd = 0; } if (t.id === 'rifle') { t.mag = t.magMax; t.reserve = t.totalMax - t.magMax; t.reloadT = 0; } });   // refill the whole kit
   clearAirdrop(); flash(); Audio.beacon(false);
   toast("✓ RESUPPLIED · flares, tranqs, traps & decoys refilled");
 }
@@ -2929,7 +2932,7 @@ const TOOLS = [
   { id: "tranq", name: "TRANQ", icon: "➶", charges: 8, max: 8, cd: 0, cdMax: 1.1 },   // dart gun — sedate a dino
   { id: "trap", name: "TRAP", icon: "⊓", charges: 3, max: 3, cd: 0, cdMax: 1.0 },     // snare trap — immobilise
   { id: "sample", name: "SAMPLE", icon: "⚗", charges: Infinity, max: Infinity, cd: 0, cdMax: 1.4 },  // syringe — draw DNA
-  { id: "rifle", name: "RIFLE", icon: "▮", charges: 30, max: 30, cd: 0, cdMax: 0.5, sealOnly: true },  // SEAL service rifle — scoped, lethal, suppresses predators
+  { id: "rifle", name: "RIFLE", icon: "▮", charges: Infinity, max: Infinity, cd: 0, cdMax: 0.5, sealOnly: true, mag: 30, magMax: 30, reserve: 210, totalMax: 240, reloadT: 0, reloadDur: 1.8 },  // service rifle — 30-rd mag, 240 total, reloads each mag
 ];
 let selTool = 0;
 function selectTool(i) {
@@ -3014,9 +3017,25 @@ function scareDinos(x, z, r, secs) {
   }
   return n;
 }
+function reloadRifle(t) {
+  if (!t || t.id !== "rifle" || t.reloadT > 0) return;
+  if (t.reserve <= 0 && t.mag <= 0) { toast("RIFLE · OUT OF AMMO — call a resupply"); return; }
+  if (t.mag >= t.magMax || t.reserve <= 0) return;             // already full, or nothing to load
+  t.reloadT = t.reloadDur; Audio.step("run");                  // chunky reload sound stand-in
+  toast("RELOADING…");
+}
+function updateReload(dt) {
+  const t = TOOLS.find(x => x.id === "rifle"); if (!t || t.reloadT <= 0) return;
+  t.reloadT = Math.max(0, t.reloadT - dt);
+  if (t.reloadT === 0) {                                       // reload complete → top up the mag from reserve
+    const need = t.magMax - t.mag, take = Math.min(need, t.reserve);
+    t.mag += take; t.reserve -= take;
+    toast(t.reserve > 0 ? `RELOADED · ${t.mag}/${t.reserve}` : (t.mag > 0 ? `LAST MAG · ${t.mag} rounds` : "OUT OF AMMO"));
+  }
+}
 function useTool() {
   if (S.phase !== "playing" || !S.player.alive) return;
-  const t = TOOLS[selTool], P = S.player; if (t.cd > 0 || t.charges <= 0) return;
+  const t = TOOLS[selTool], P = S.player; if (t.cd > 0) return; if (t.charges !== Infinity && t.charges <= 0) return;
   if (t.id === "flare") { t.charges--; t.cd = t.cdMax; flash(); fxFlare(P.x, P.z); Audio.beacon(true); P.noise = Math.max(P.noise, 0.8); const n = scareDinos(P.x, P.z, 24, 5); toast(n ? `FLARE · ${n} predator${n > 1 ? "s" : ""} recoil` : "FLARE · no predators near"); }
   else if (t.id === "decoy") { t.charges--; t.cd = t.cdMax; decoy.x = P.x + Math.sin(P.yaw) * 15; decoy.z = P.z + Math.cos(P.yaw) * 15; decoy.t = 6; showDecoy(decoy.x, decoy.z); Audio.step("run"); toast("DECOY thrown · draws them off"); }
   else if (t.id === "melee") {
@@ -3050,8 +3069,11 @@ function useTool() {
     if (a.sedation >= need) { a.sedated = true; a.downT = 24; a.state = "Down"; a.bb.scared = 0; S.downs = (S.downs || 0) + 1; fxReact(a, "Zz", "#8fb8c4"); toast(a.sp.displayName + " SEDATED — draw a sample"); }
     else { fxReact(a, "✦", "#8fb8c4"); a.bb.scared = Math.max(a.bb.scared, 1.0); toast(`TRANQ · ${a.sp.displayName} ${Math.round(a.sedation / need * 100)}%`); }
   }
-  else if (t.id === "rifle") {                                 // SEAL service rifle — scoped, lethal, suppresses predators
-    t.charges--; t.cd = t.cdMax; Audio.hit(); flash(); camShake = Math.min(0.45, camShake + 0.22);
+  else if (t.id === "rifle") {                                 // service rifle — magazine-fed, reloads each 30-rd mag
+    if (t.reloadT > 0) return;                                 // mid-reload — can't fire
+    if (t.mag <= 0) { reloadRifle(t); return; }                // dry → start a reload instead of firing
+    t.mag--; t.cd = t.cdMax; Audio.hit(); flash(); camShake = Math.min(0.45, camShake + 0.22);
+    if (t.mag <= 0) reloadRifle(t);                            // emptied the mag with this shot → auto-reload
     const a = aimTarget(120, false);
     const oy = groundH(P.x, P.z) + 1.45;
     const tx = a ? a.x : P.x + Math.sin(cam.yaw) * 80, tz = a ? a.z : P.z + Math.cos(cam.yaw) * 80;
@@ -3121,6 +3143,7 @@ function updateTools(dt) {
   if (decoy.t > 0) { decoy.t = Math.max(0, decoy.t - dt); if (decoyMesh) { const s = 1 + Math.sin(S.t * 6) * 0.12; decoyMesh.userData.ring.scale.set(s, s, s); decoyMesh.children.forEach(c => { if (c.material) c.material.opacity = (c.isMesh ? (c.geometry.type === "RingGeometry" ? 0.85 : 0.45) : 1) * Math.min(1, decoy.t); }); } }
   else if (decoyMesh) decoyMesh.visible = false;
   for (const t of TOOLS) if (t.cd > 0) t.cd = Math.max(0, t.cd - dt);
+  updateReload(dt);
 }
 function updateField(dt) {   // tranq sedation + snare traps lifecycle (DNA collection kit)
   // armed traps snap shut on the first dino to step in
@@ -5209,10 +5232,14 @@ function startRun() {
   for (const d of dinos) scene.remove(d.mesh); dinos = []; dinosByNetId.clear(); _netDinoId = 0;   // P-09: recycle net-ids each run so they don't grow unbounded across replays
   if (worldJeep) { scene.remove(worldJeep); worldJeep = null; }   // clear last run's drivable jeep
   clearRemotes(); clearEvac(); clearFx(); clearAirdrop(); clearWreck(); clearField(); clearIntroProp(); clearMissionSites(); clearBoss(); preloadRadio();
-  decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
+  decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; if (t.id === 'rifle') { t.mag = t.magMax; t.reserve = t.totalMax - t.magMax; t.reloadT = 0; } });   // fresh kit each run
   // SEAL OPERATOR signature: the service rifle slot is only available to the SEAL specialist
   { const armed = (selectedRole && selectedRole.mod && selectedRole.mod.armed);
-    const rifle = TOOLS.find(t => t.id === "rifle"); if (rifle) rifle.charges = armed ? Math.round(rifle.max * (selectedRole.mod.ammo || 1)) : 0;
+    const rifle = TOOLS.find(t => t.id === "rifle");
+    if (rifle) {
+      const total = armed ? Math.round(240 * (selectedRole.mod.ammo || 1)) : 0;   // 240 default · ASSAULT 1.5x = 360
+      rifle.totalMax = total; rifle.mag = armed ? rifle.magMax : 0; rifle.reserve = Math.max(0, total - rifle.mag); rifle.reloadT = 0;
+    }
     const rb = document.querySelector("#tools .tool-seal"); if (rb) rb.style.display = armed ? "" : "none"; }
   applyUnlocks();                                                                     // persistent progression: veteran loadout bonuses
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
@@ -5589,7 +5616,7 @@ function updateToolHUD() {
     const t = TOOLS[i]; if (!t) return;
     el.classList.toggle("sel", i === selTool);
     el.classList.toggle("empty", t.max !== Infinity && t.charges <= 0);
-    const ch = el.querySelector(".t-ch"); if (ch) ch.textContent = t.max === Infinity ? "∞" : "×" + t.charges;
+    const ch = el.querySelector(".t-ch"); if (ch) ch.textContent = t.id === "rifle" ? (t.reloadT > 0 ? "⟳" : t.mag + "/" + t.reserve) : (t.max === Infinity ? "∞" : "×" + t.charges);
     const cd = el.querySelector(".t-cd"); if (cd) cd.style.height = (t.cd > 0 ? (t.cd / t.cdMax * 100) : 0).toFixed(0) + "%";
   });
   const dh = $("dnaHud"); if (dh) dh.textContent = `⚗ DNA ${dnaSamples}  ·  ID ${identified.size}/${Object.keys(SPECIES).length}`;
