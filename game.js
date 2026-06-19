@@ -332,6 +332,7 @@ function applyPhaseMarker() {
   if (ph.t === "interact") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0x8fb8c4, "interact"); }
   else if (ph.t === "reach") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0x8fb8c4); }
   else if (ph.t === "defend" || ph.t === "boss") { const [x, z] = phaseSite(ph); setObjMarker(x, z, 0xd6562f); }   // hold-the-line / boss marker (alert)
+  else if (ph.t === "collect" && ph.mode === "pickup") { const o = currentObjective(); if (o && o.x != null) setObjMarker(o.x, o.z, 0x2cc8d8); else setObjMarker(null); }
   else if (ph.t === "extract") setObjMarker(S.extraction.beacon.x, S.extraction.beacon.z, 0xe0772f);
   else setObjMarker(null);
 }
@@ -349,6 +350,12 @@ function currentObjective() {
   if (cm && MC) {
     const ph = cm.phases[MC.idx]; if (!ph) return null;
     if (ph.t === "extract" || ph.atBeacon) return { x: S.extraction.beacon.x, z: S.extraction.beacon.z, label: phLabel(ph), atBeacon: true };
+    if (ph.t === "collect" && ph.mode === "pickup") {   // point at the nearest UNPICKED canister
+      const P = S.player; let best = null, bd = 1e9;
+      for (const c of canisters) { if (c.picked) continue; const d = dist2(P.x, P.z, c.x, c.z); if (d < bd) { bd = d; best = c; } }
+      if (best) return { x: best.x, z: best.z, label: `Recover DNA canister  (${pickedCanisters}/${canisters.length})` };
+      const [x0, z0] = phaseSite(ph); return { x: x0, z: z0, label: phLabel(ph) };
+    }
     const [x, z] = phaseSite(ph); return { x, z, label: phLabel(ph) };
   }
   if (selectedMission.id === "dna") {
@@ -2918,6 +2925,9 @@ function updateCanisters(dt) {
       c.picked = true; c.g.visible = false; pickedCanisters++;
       Audio.beacon(false); flash();
       toast(`◇ DNA CANISTER RECOVERED  (${pickedCanisters}/${canisters.length})`);
+      try { applyPhaseMarker(); } catch (e) {}   // re-point the objective arrow to the next canister
+      const left = canisters.length - pickedCanisters;
+      if (left > 0) toast(`${left} canister${left === 1 ? "" : "s"} remaining — follow the markers`);
     }
   }
 }
@@ -5582,7 +5592,14 @@ function mapSVG(big) {
       });
     }
   }
-  // active mission objective — tracks the CURRENT step for every mission type (not the fixed beacon)
+  // DNA canisters (SECTOR 4 collect phase) — every unpicked canister marked on minimap + enlarged map
+  for (const c of canisters) {
+    if (c.picked) continue;
+    const [cmx, cmz] = toMM(c.x, c.z), cpu = (1.6 + Math.sin(S.t * 4 + c.x) * 0.6).toFixed(1);
+    s += `<circle cx="${cmx.toFixed(1)}" cy="${cmz.toFixed(1)}" r="${cpu}" fill="none" stroke="#2cc8d8" stroke-width="0.6" opacity="0.85"/>`;
+    s += `<rect x="${(cmx - 1.1).toFixed(1)}" y="${(cmz - 1.1).toFixed(1)}" width="2.2" height="2.2" fill="#2cc8d8" transform="rotate(45 ${cmx.toFixed(1)} ${cmz.toFixed(1)})"${big ? `><title>DNA CANISTER</title></rect` : "/"}>`;
+  }
+    // active mission objective — tracks the CURRENT step for every mission type (not the fixed beacon)
   const obj = currentObjective();
   if (obj && !obj.roaming) {
     const [omx, omz] = toMM(obj.x, obj.z), [pmx, pmz] = toMM(P.x, P.z), pu = (2.0 + Math.sin(S.t * 4) * 0.7).toFixed(1);
