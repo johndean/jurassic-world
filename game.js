@@ -913,8 +913,8 @@ function buildWorld() {
   // TRACK A: procedural icosahedron rocks REMOVED — they read as ugly low-poly blobs next to the real
   // textured prop_rock.glb. The hero rocks in buildHeroProps now carry ALL boulders (real moss geometry).
 
-  buildRuins();
-  addCollidersFromObject(ruinsGroup, { min: 0.9, minH: 1.1, scale: 0.78 });   // ruined masonry / columns / jeep are solid
+  try { buildRuins(); } catch(e) { console.error('buildRuins failed:', e); }
+  if (ruinsGroup) addCollidersFromObject(ruinsGroup, { min: 0.9, minH: 1.1, scale: 0.78 });   // ruined masonry / columns / jeep are solid
   buildTowers();
   buildPlayer();
 
@@ -945,6 +945,7 @@ function buildRuins() {
   // a broken masonry wall: a run of irregular stacked blocks with a jagged (broken) top + gaps
   // a vine strand (drapes down a ruin face)
   function vine(parent, x, y, z, len) {
+    len = Math.max(0.5, len || 0.5);
     const vmat = new THREE.MeshStandardMaterial({ color: 0x3e5a2e, roughness: 1 });
     const pts = []; let vx = 0, vz = 0;
     for (let i = 0; i <= 6; i++) { pts.push(new THREE.Vector3(vx, -len * i / 6, vz)); vx += rand(-0.08, 0.08); vz += rand(-0.05, 0.05); }
@@ -975,7 +976,7 @@ function buildRuins() {
       // a dislodged block fallen at the base
       if (rand(0,1) < 0.25) { const fb = new THREE.Mesh(new THREE.BoxGeometry(bwj*rand(0.6,0.9), rand(0.5,0.9), dpt*rand(0.7,1)), sm()); fb.position.set(x + rand(-1,1), rand(0.25,0.5), rand(-1.4,-0.7)*(rand(0,1)<0.5?1:-1)); fb.rotation.set(rand(0,0.6), rand(0,6), rand(0,0.6)); w.add(fb); }
       // vines draping the face
-      if (rand(0,1) < 0.4) vine(w, x + rand(-0.4,0.4), h - 0.2, dpt/2 + 0.05, rand(1.0, Math.min(h, 3)));
+      if (h > 1.3 && rand(0,1) < 0.4) { const vl = rand(0.8, Math.max(1.0, Math.min(h - 0.3, 3))); vine(w, x + rand(-0.4,0.4), h - 0.2, dpt/2 + 0.05, vl); }
     }
     // rubble scattered along the foot of the wall
     for (let r = 0; r < Math.round(len/2.2); r++) { const s = rand(0.25, 0.7); const rk = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), rand(0,1)<0.4?moss:sm()); rk.position.set(rand(-len/2, len/2), s*0.35, rand(-1.6,1.6)); rk.rotation.set(rand(0,3),rand(0,6),rand(0,3)); rk.scale.y = rand(0.5,0.9); w.add(rk); }
@@ -1005,7 +1006,7 @@ function buildRuins() {
       for (let i = 0; i < segs; i++) { const taper = 1 - i*0.06; const bs = (2.5*taper) + rand(-0.25, 0.18); const bh = 1.5*rand(0.8,1.1); const b = new THREE.Mesh(new THREE.BoxGeometry(bs, bh, bs + rand(-0.2,0.2)), rand(0, 1) < 0.32 ? moss : sm()); b.position.set(px + i*rand(-0.12,0.12) + rand(-0.12,0.12), groundH(px, gz) + y + bh/2, gz + rand(-0.12,0.12)); b.rotation.set(rand(-0.05,0.05), rand(0,0.3), rand(-0.06,0.06)); gateGrp.add(b); y += bh*rand(0.92,1.0); if (i>2 && rand(0,1)<0.3) break; }
       // toppled cap blocks at the foot + vines down the shaft
       for (let k=0;k<3;k++){ const s=rand(0.5,1.0); const fb=new THREE.Mesh(new THREE.BoxGeometry(s,s*rand(0.6,1),s),rand(0,1)<0.4?moss:sm()); fb.position.set(px+rand(-2,2), groundH(px,gz)+s*0.4, gz+rand(-2,2)); fb.rotation.set(rand(0,1),rand(0,6),rand(0,1)); gateGrp.add(fb); }
-      vine(gateGrp, px + rand(-0.6,0.6), groundH(px,gz)+y-0.5, gz+1.3, rand(2,Math.min(y,5)));
+      { const vl = rand(1.5, Math.max(2.0, Math.min(y - 0.5, 5))); vine(gateGrp, px + rand(-0.6,0.6), groundH(px,gz)+y-0.5, gz+1.3, vl); }
       const fl = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.7, 8), torchMat); fl.position.set(px, groundH(px, gz) + postH + 1.0, gz); gateGrp.add(fl);
       const pl = new THREE.PointLight(0xff8a2a, 6, 42, 2); pl.position.copy(fl.position); gateGrp.add(pl);
     }
