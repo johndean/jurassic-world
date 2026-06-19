@@ -829,6 +829,7 @@ function buildTableaus() {
     const x = Math.cos(ang) * rad, z = Math.sin(ang) * rad;
     const h0 = groundH(x, z);
     if (Math.abs(groundH(x + 7, z) - h0) > 3 || Math.abs(groundH(x, z + 7) - h0) > 3) continue;
+    if (inBridgeCorridor(x, z)) continue;
     if (spots.some(s => Math.hypot(s.x - x, s.z - z) < 50)) continue;
     spots.push({ x, z });
   }
@@ -1160,7 +1161,7 @@ function buildRuins() {
     while (placed < 22 && guard < 260) { guard++;
       const ang = rand(0, 6.283), rad = Math.sqrt(rand(0, 1)) * 92;   // uniform over the valley DISC, inside the flat floor
       const cx2 = Math.cos(ang) * rad, cz2 = Math.sin(ang) * rad;
-      if (Math.hypot(cx2, cz2) < 14) continue;                        // keep the immediate spawn clear (retried, not lost)
+      if (Math.hypot(cx2, cz2) < 14 || inBridgeCorridor(cx2, cz2)) continue;   // keep spawn + the bridge crossing clear (retried, not lost)
       // slope guard: ruins on a cliff look broken — require near-flat ground
       const sh = groundH(cx2, cz2);
       if (Math.abs(groundH(cx2 + 8, cz2) - sh) > 3 || Math.abs(groundH(cx2, cz2 + 8) - sh) > 3) continue;
@@ -1285,6 +1286,12 @@ function buildSky() {
 // one dense layer of alpha-cutout cross-quad billboards (the standard cheap way to do thick vegetation)
 let CLEARINGS = [];   // open spaces where foliage is suppressed (e.g. around the carcass) for a clean 360 view
 function inClearing(x, z) { for (const c of CLEARINGS) { const dx = x - c.x, dz = z - c.z; if (dx * dx + dz * dz < c.r * c.r) return true; } return false; }
+// the bridge crossing corridor (deck + ramps + generous margin) — NOTHING may spawn here so the crossing
+// is 100% passable in every mission. Wide in Z (the span), with clear run-up at both ramp ends.
+function inBridgeCorridor(x, z) {
+  if (typeof BRIDGE === "undefined" || BRIDGE.z == null) return false;
+  return Math.abs(x - BRIDGE.x) < (BRIDGE.halfW + 7) && Math.abs(z - BRIDGE.z) < (BRIDGE.halfLen + BRIDGE.rampLen + 10);
+}
 function billboardLayer(texUrl, count, hMin, hMax, opts) {
   opts = opts || {};
   const half = BIOME.map.size / 2;
@@ -1301,7 +1308,7 @@ function billboardLayer(texUrl, count, hMin, hMax, opts) {
     do {
       if (opts.edge) { const ang = rand(0, 6.28), rr = rand(half * 0.62, half - 4); x = Math.cos(ang) * rr; z = Math.sin(ang) * rr; }
       else { x = rand(-half + 4, half - 4); z = rand(-half + 4, half - 4); }
-    } while ((Math.hypot(x, z) < (opts.minR || 8) || inClearing(x, z)) && ++ok < 10);
+    } while ((Math.hypot(x, z) < (opts.minR || 8) || inClearing(x, z) || inBridgeCorridor(x, z)) && ++ok < 10);
     const h = rand(hMin, hMax), w = h * rand(0.7, 1.05);
     dm.position.set(x, groundH(x, z), z); dm.scale.set(w, h, w); dm.rotation.set(0, rand(0, 6.28), 0); dm.updateMatrix();
     mesh.setMatrixAt(i, dm.matrix);
@@ -1356,7 +1363,7 @@ function buildHeroProps() {
     if (!MODELS[url]) return;
     for (let c = 0; c < clusters; c++) {
       let cx = rand(-half + 14, half - 14), cz = rand(-half + 14, half - 14);
-      if (Math.hypot(cx, cz) < 18 || inClearing(cx, cz)) { c--; continue; }
+      if (Math.hypot(cx, cz) < 18 || inClearing(cx, cz) || inBridgeCorridor(cx, cz)) { c--; continue; }
       const n = perCluster + Math.round(rand(-1, 1));
       for (let i = 0; i < n; i++) {
         const x = clamp(cx + rand(-6, 6), -half + 6, half - 6);
@@ -1410,7 +1417,7 @@ function buildFoliage() {
     const NT = Math.round(70 * fol); let placed = 0, guard = 0;
     while (placed < NT && guard < NT * 6) { guard++;
       const x = rand(-half + 6, half - 6), z = rand(-half + 6, half - 6);
-      if (Math.hypot(x, z) < 12 || inClearing(x, z)) continue;   // retried, not lost
+      if (Math.hypot(x, z) < 12 || inClearing(x, z) || inBridgeCorridor(x, z)) continue;   // retried, not lost
       // weighted pick: mostly canopy hardwood, some big buttressed, a few palms
       let r = rand(0, 1), kind = TREE_KINDS[0];
       let acc = 0; for (const k of TREE_KINDS) { acc += k.w; if (r <= acc) { kind = k; break; } }
@@ -1421,7 +1428,7 @@ function buildFoliage() {
       const mates = rand(0,1) < 0.5 ? (1 + (rand(0,2)|0)) : 0;
       for (let m = 0; m < mates; m++) {
         const ang = rand(0, 6.28), d = rand(3, 8), mx = x + Math.cos(ang)*d, mz = z + Math.sin(ang)*d;
-        if (Math.hypot(mx, mz) > half - 6 || inClearing(mx, mz)) continue;
+        if (Math.hypot(mx, mz) > half - 6 || inClearing(mx, mz) || inBridgeCorridor(mx, mz)) continue;
         const k2 = TREE_KINDS[(rand(0, TREE_KINDS.length)|0)];
         const t2 = fitModel(MODELS[k2.m].clone(true), rand(k2.h[0], k2.h[1]), rand(0, 6.28));
         t2.position.set(mx, groundH(mx, mz), mz); foliageGroup.add(t2);
@@ -5533,6 +5540,14 @@ function mapSVG(big) {
   s += `<circle cx="50" cy="50" r="${((70 / half) * 46).toFixed(1)}" fill="none" stroke="#7d8a72" stroke-width="0.5" stroke-dasharray="2 2" opacity="0.4"/>`;
   let rv = ""; for (let x = -half; x <= half; x += half / 24) { const [mx, mz] = toMM(x, riverCenter(x)); rv += `${mx.toFixed(1)},${mz.toFixed(1)} `; }
   s += `<polyline points="${rv}" fill="none" stroke="#5b9fd6" stroke-width="${big ? 1.6 : 1.2}" opacity="0.5" stroke-linecap="round"/>`;
+  // BRIDGE — the one river crossing, always shown on minimap + enlarged map across all missions
+  if (typeof BRIDGE !== "undefined" && BRIDGE.z != null) {
+    const [b1x, b1z] = toMM(BRIDGE.x, BRIDGE.z - BRIDGE.halfLen), [b2x, b2z] = toMM(BRIDGE.x, BRIDGE.z + BRIDGE.halfLen), [bmx, bmz] = toMM(BRIDGE.x, BRIDGE.z);
+    s += `<line x1="${b1x.toFixed(1)}" y1="${b1z.toFixed(1)}" x2="${b2x.toFixed(1)}" y2="${b2z.toFixed(1)}" stroke="#caa46a" stroke-width="${big ? 2.2 : 1.8}" stroke-linecap="round"/>`;
+    s += `<line x1="${b1x.toFixed(1)}" y1="${b1z.toFixed(1)}" x2="${b2x.toFixed(1)}" y2="${b2z.toFixed(1)}" stroke="#3a2c18" stroke-width="${big ? 0.7 : 0.6}" stroke-dasharray="1 1"/>`;
+    if (big) s += `<text x="${(bmx + 3).toFixed(1)}" y="${bmz.toFixed(1)}" fill="#e0c48a" font-size="3" text-anchor="start" dominant-baseline="middle">BRIDGE</text>`;
+    else s += `<text x="${(bmx + 2).toFixed(1)}" y="${bmz.toFixed(1)}" fill="#e0c48a" font-size="3.4" text-anchor="start" dominant-baseline="middle">⌂</text>`;
+  }
   // extraction facility + pulsing beacon
   const [bx, bz] = toMM(S.extraction.beacon.x, S.extraction.beacon.z), pulse = 2.4 + Math.sin(S.t * 4) * 0.9;
   s += `<rect x="${(bx - 2.2).toFixed(1)}" y="${(bz - 2.2).toFixed(1)}" width="4.4" height="4.4" fill="none" stroke="var(--hud-accent)" stroke-width="0.6"/>`;
