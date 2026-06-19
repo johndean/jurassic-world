@@ -136,6 +136,7 @@ const ROLES = [
   { id: "research",  name: "RESEARCH",  img: "./assets/keyart/squad/card_research.png",  model: "./assets/models/char_research.glb",  perk: "Careful steps · −30% noise", mod: { noise: 0.7 } },
   { id: "seal",      name: "SEAL OPERATOR", img: "./assets/keyart/squad/card_seal.png",  model: "./assets/models/char_seal.glb",      perk: "Combat security · armed rifle · suppresses predators", mod: { armed: true } },
   { id: "assault",   name: "ASSAULT",       img: "./assets/keyart/squad/card_assault.png", model: "./assets/models/char_assault.glb",  perk: "Heavy weapons · armed rifle · extra ammo · suppresses predators", mod: { armed: true, ammo: 1.5 } },
+  { id: "recon",     name: "RECON",         img: "./assets/keyart/squad/card_recon.png",   model: "./assets/models/char_recon.glb",    perk: "Night-ops · armed rifle · predators notice you slower · suppresses", mod: { armed: true, seen: 0.82 } },
 ];
 let selectedRole = ROLES[0];
 function curPlayerModel() { const u = selectedRole && selectedRole.model; return (u && MODELS[u]) ? u : PLAYER_MODEL; }
