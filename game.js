@@ -934,8 +934,10 @@ function buildRuins() {
   const half = BIOME.map.size / 2;
   const g = new THREE.Group(); ruinsGroup = g;
   // a few weathered-stone variants (jittered so masonry doesn't read as one flat colour)
-  const stone = [0x8a8d83, 0x7c8377, 0x717a68, 0x6a6f63].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 1, metalness: 0.02, flatShading: true }));
-  const moss = new THREE.MeshStandardMaterial({ color: 0x5a6b46, roughness: 1, flatShading: true });
+  const _ctex = _texLoader.load("./assets/textures/concrete.webp?v=1");
+  _ctex.wrapS = _ctex.wrapT = THREE.RepeatWrapping; _ctex.repeat.set(1.4, 1.4); _ctex.colorSpace = THREE.SRGBColorSpace;
+  const stone = [0x9a9d93, 0x8c9387, 0x80897a, 0x767d6e].map(c => new THREE.MeshStandardMaterial({ map: _ctex, color: c, roughness: 1, metalness: 0.02 }));
+  const moss = new THREE.MeshStandardMaterial({ map: _ctex, color: 0x6a7b54, roughness: 1 });
   const rust = new THREE.MeshStandardMaterial({ color: 0x6f4630, roughness: 1, metalness: 0.15, flatShading: true });
   const torchMat = new THREE.MeshStandardMaterial({ color: 0xffb347, emissive: 0xff7a1a, emissiveIntensity: 2.4 });
   const sm = () => stone[(rand(0, 1) * stone.length) | 0];
