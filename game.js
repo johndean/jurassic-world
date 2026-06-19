@@ -1063,13 +1063,23 @@ function buildRuins() {
   buildWreckTruck(g);
 
   // ---- scattered ruins across the valley: broken columns, wall fragments, rubble ----
-  for (let i = 0; i < 9; i++) {
-    const x = rand(-half + 16, half - 16), z = rand(-half + 16, half - 16);
-    if (Math.hypot(x, z) < 16 || Math.hypot(x, z) > 60) continue;
-    const r = rand(0, 1);
-    if (r < 0.4) column(x, z, rand(3, 7), true);
-    else if (r < 0.7) brokenWall(x, z, rand(5, 11), rand(2.5, 5), rand(0, 6));
-    else rubble(x, z, rand(2, 4), 14);
+  // CLUSTER-place so the player walks INTO dense ruin pockets (not 1 lone piece per mission).
+  // Loop on a placed-counter (retry rejected spots) so the FULL count always lands — never waste an iteration.
+  { let placed = 0, guard = 0;
+    while (placed < 22 && guard < 260) { guard++;
+      const ang = rand(0, 6.283), rad = Math.sqrt(rand(0, 1)) * 92;   // uniform over the valley DISC, inside the flat floor
+      const cx2 = Math.cos(ang) * rad, cz2 = Math.sin(ang) * rad;
+      if (Math.hypot(cx2, cz2) < 14) continue;                        // keep the immediate spawn clear (retried, not lost)
+      // slope guard: ruins on a cliff look broken — require near-flat ground
+      const sh = groundH(cx2, cz2);
+      if (Math.abs(groundH(cx2 + 8, cz2) - sh) > 3 || Math.abs(groundH(cx2, cz2 + 8) - sh) > 3) continue;
+      // each cluster: a focal ruin + a few satellites in a tight radius so it reads as a collapsed structure
+      const r = rand(0, 1);
+      if (r < 0.36) { column(cx2, cz2, rand(3, 7), true); column(cx2 + rand(-3, 3), cz2 + rand(-3, 3), rand(2, 5), true); rubble(cx2, cz2, 4, 12); }
+      else if (r < 0.72) { brokenWall(cx2, cz2, rand(6, 12), rand(3, 6), rand(0, 6)); rubble(cx2 + rand(-4, 4), cz2 + rand(-2, 2), 3, 10); if (rand(0,1)<0.5) column(cx2 + rand(-5,5), cz2 + rand(-5,5), rand(2,4), true); }
+      else { rubble(cx2, cz2, rand(3, 5), 20); brokenWall(cx2 + rand(-3,3), cz2 + rand(-3,3), rand(4, 8), rand(2, 4), rand(0, 6)); }
+      placed++;
+    }
   }
 
   g.userData.gateGrp = gateGrp; g.userData.centreGrp = centreGrp;
