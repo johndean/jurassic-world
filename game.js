@@ -775,8 +775,8 @@ function buildCarcass(x, z) {
   // ---- CLEAN realistic carcass: the 3D body model + a ground blood pool. No wound overlay (every attempt at
   // an opened cavity read as broken primitives; a clean realistic dead dinosaur is the right AAA call). ----
   if (MODELS[CARCASS_MODEL]) {
-    for (const [pr, py, op, col] of [[3.6, 0.02, 0.5, 0x2a0805], [2.4, 0.03, 0.8, 0x4a120a]]) {
-      const blob = new THREE.Mesh(new THREE.CircleGeometry(pr, 22), new THREE.MeshStandardMaterial({ color: col, roughness: 0.3, metalness: 0.15, transparent: true, opacity: op, polygonOffset: true, polygonOffsetFactor: -1, depthWrite: false }));
+    for (const [pr, py, op, col] of [[3.2, 0.015, 0.92, 0x1a0604], [2.2, 0.025, 0.97, 0x300a06], [1.3, 0.035, 1.0, 0x430f08]]) {
+      const blob = new THREE.Mesh(new THREE.CircleGeometry(pr, 26), new THREE.MeshStandardMaterial({ color: col, roughness: 0.22, metalness: 0.0, transparent: true, opacity: op, polygonOffset: true, polygonOffsetFactor: -1, depthWrite: false }));
       blob.rotation.x = -Math.PI / 2; blob.rotation.z = rand(0, 6); blob.position.set(rand(-0.5, 0.8), py, rand(0.3, 1.3)); blob.scale.set(rand(0.9, 1.1), 1, rand(0.7, 0.9)); g.add(blob);
     }
   }
@@ -943,16 +943,42 @@ function buildRuins() {
   const sm = () => stone[(rand(0, 1) * stone.length) | 0];
 
   // a broken masonry wall: a run of irregular stacked blocks with a jagged (broken) top + gaps
+  // a vine strand (drapes down a ruin face)
+  function vine(parent, x, y, z, len) {
+    const vmat = new THREE.MeshStandardMaterial({ color: 0x3e5a2e, roughness: 1 });
+    const pts = []; let vx = 0, vz = 0;
+    for (let i = 0; i <= 6; i++) { pts.push(new THREE.Vector3(vx, -len * i / 6, vz)); vx += rand(-0.08, 0.08); vz += rand(-0.05, 0.05); }
+    const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 8, rand(0.03, 0.06), 5, false);
+    const v = new THREE.Mesh(geo, vmat); v.position.set(x, y, z); parent.add(v);
+    // a few leaf clumps
+    for (let k = 1; k < 5; k++) { const lf = new THREE.Mesh(new THREE.IcosahedronGeometry(rand(0.12, 0.22), 0), vmat); lf.position.set(x + rand(-0.1,0.1), y - len*k/5, z + rand(-0.1,0.1)); parent.add(lf); }
+  }
+  // a broken masonry wall: irregular crumbled chunks, jagged collapsing profile, displaced stones, rubble + vines
   function brokenWall(cx, cz, len, baseH, ry) {
-    const w = new THREE.Group(), bw = 1.8;
-    for (let x = -len / 2; x < len / 2; x += bw * rand(0.95, 1.18)) {
-      if (rand(0, 1) < 0.13) continue;                   // a missing block
-      const h = baseH * rand(0.42, 1.0);
-      const b = new THREE.Mesh(new THREE.BoxGeometry(bw * rand(0.82, 1.0), h, 1.5 * rand(0.9, 1.12)), rand(0, 1) < 0.3 ? moss : sm());
-      b.position.set(x, h / 2, rand(-0.14, 0.14));
-      b.rotation.set(rand(-0.04, 0.04), rand(-0.06, 0.06), rand(-0.05, 0.05));
+    const w = new THREE.Group(), bw = 1.7;
+    let prevTop = baseH;
+    for (let x = -len / 2; x < len / 2; x += bw * rand(0.9, 1.22)) {
+      if (rand(0, 1) < 0.18) { prevTop = baseH * rand(0.2, 0.7); continue; }   // a collapsed gap
+      // jagged broken top: each block height wanders from its neighbour so the crest is uneven, lower toward the ends
+      const endFall = 1 - Math.abs(x) / (len / 2) * rand(0.3, 0.6);
+      let h = Math.max(0.8, (prevTop + rand(-1.6, 1.4)) * endFall);
+      h = Math.min(h, baseH * 1.05); prevTop = h;
+      const bwj = bw * rand(0.78, 1.02), dpt = 1.5 * rand(0.85, 1.18);
+      // chamfer the top corners by stacking a smaller capstone -> reads as eroded, not a clean box
+      const b = new THREE.Mesh(new THREE.BoxGeometry(bwj, h, dpt), rand(0, 1) < 0.32 ? moss : sm());
+      const lean = rand(-0.10, 0.10);
+      b.position.set(x + rand(-0.12, 0.12), h / 2, rand(-0.22, 0.22));
+      b.rotation.set(rand(-0.07, 0.07), rand(-0.10, 0.10), lean);
       w.add(b);
+      // eroded cap (smaller, offset) so the top isn't a flat plane
+      if (rand(0,1) < 0.7) { const cap = new THREE.Mesh(new THREE.BoxGeometry(bwj*rand(0.5,0.85), rand(0.3,0.7), dpt*rand(0.6,0.9)), rand(0,1)<0.4?moss:sm()); cap.position.set(x + rand(-0.25,0.25), h + 0.15, rand(-0.2,0.2)); cap.rotation.set(rand(-0.2,0.2), rand(0,0.5), rand(-0.2,0.2)); w.add(cap); }
+      // a dislodged block fallen at the base
+      if (rand(0,1) < 0.25) { const fb = new THREE.Mesh(new THREE.BoxGeometry(bwj*rand(0.6,0.9), rand(0.5,0.9), dpt*rand(0.7,1)), sm()); fb.position.set(x + rand(-1,1), rand(0.25,0.5), rand(-1.4,-0.7)*(rand(0,1)<0.5?1:-1)); fb.rotation.set(rand(0,0.6), rand(0,6), rand(0,0.6)); w.add(fb); }
+      // vines draping the face
+      if (rand(0,1) < 0.4) vine(w, x + rand(-0.4,0.4), h - 0.2, dpt/2 + 0.05, rand(1.0, Math.min(h, 3)));
     }
+    // rubble scattered along the foot of the wall
+    for (let r = 0; r < Math.round(len/2.2); r++) { const s = rand(0.25, 0.7); const rk = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), rand(0,1)<0.4?moss:sm()); rk.position.set(rand(-len/2, len/2), s*0.35, rand(-1.6,1.6)); rk.rotation.set(rand(0,3),rand(0,6),rand(0,3)); rk.scale.y = rand(0.5,0.9); w.add(rk); }
     w.position.set(cx, groundH(cx, cz), cz); w.rotation.y = ry; g.add(w); return w;
   }
   // a column built from stacked drums; broken ones lose their top drums + sprout rebar
@@ -974,8 +1000,12 @@ function buildRuins() {
     const gx = 0, gz = -56, postH = 11, span = 16;
     for (const sx of [-1, 1]) {
       const px = gx + sx * span / 2;
-      // pillar of stacked stone blocks
-      let y = 0; for (let i = 0; i < 7; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(2.6 + rand(-0.2, 0.2), 1.6, 2.6 + rand(-0.2, 0.2)), rand(0, 1) < 0.3 ? moss : sm()); b.position.set(px + rand(-0.1, 0.1), groundH(px, gz) + y + 0.8, gz); b.rotation.y = rand(-0.05, 0.05); gateGrp.add(b); y += 1.55; }
+      // crumbled pillar of stacked stone blocks — narrows + leans as it rises, broken top, vined
+      let y = 0; const segs = 5 + (rand(0,1)*2|0);
+      for (let i = 0; i < segs; i++) { const taper = 1 - i*0.06; const bs = (2.5*taper) + rand(-0.25, 0.18); const bh = 1.5*rand(0.8,1.1); const b = new THREE.Mesh(new THREE.BoxGeometry(bs, bh, bs + rand(-0.2,0.2)), rand(0, 1) < 0.32 ? moss : sm()); b.position.set(px + i*rand(-0.12,0.12) + rand(-0.12,0.12), groundH(px, gz) + y + bh/2, gz + rand(-0.12,0.12)); b.rotation.set(rand(-0.05,0.05), rand(0,0.3), rand(-0.06,0.06)); gateGrp.add(b); y += bh*rand(0.92,1.0); if (i>2 && rand(0,1)<0.3) break; }
+      // toppled cap blocks at the foot + vines down the shaft
+      for (let k=0;k<3;k++){ const s=rand(0.5,1.0); const fb=new THREE.Mesh(new THREE.BoxGeometry(s,s*rand(0.6,1),s),rand(0,1)<0.4?moss:sm()); fb.position.set(px+rand(-2,2), groundH(px,gz)+s*0.4, gz+rand(-2,2)); fb.rotation.set(rand(0,1),rand(0,6),rand(0,1)); gateGrp.add(fb); }
+      vine(gateGrp, px + rand(-0.6,0.6), groundH(px,gz)+y-0.5, gz+1.3, rand(2,Math.min(y,5)));
       const fl = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.7, 8), torchMat); fl.position.set(px, groundH(px, gz) + postH + 1.0, gz); gateGrp.add(fl);
       const pl = new THREE.PointLight(0xff8a2a, 6, 42, 2); pl.position.copy(fl.position); gateGrp.add(pl);
     }
