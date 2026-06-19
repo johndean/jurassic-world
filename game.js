@@ -2151,6 +2151,7 @@ function initInput() {
     if (e.code === "Digit4") selectTool(3);
     if (e.code === "Digit5") selectTool(4);
     if (e.code === "Digit6") selectTool(5);
+    if (e.code === "Digit7") selectTool(6);   // rifle (armed specialists)
     if (e.code === "KeyB") toggleBinoc();   // binoculars (zoom + species ID)
     if (e.code === "KeyV" && S.player.driveVeh) { driveCamFP = !driveCamFP; toast(driveCamFP ? "VIEW · FIRST PERSON" : "VIEW · THIRD PERSON"); }   // in-vehicle camera toggle
     if (binoc && (e.code === "Equal" || e.code === "NumpadAdd")) binocZoom(1);
@@ -2182,7 +2183,7 @@ function initInput() {
   // defense tool bar: tap a tool to select it; tap the selected one (or the USE button) to activate
   document.querySelectorAll("#tools .tool").forEach(el => el.addEventListener("click", () => {
     const i = +el.dataset.i;
-    if (i === selTool) { const t = TOOLS[i]; if (t && (t.id === "tranq" || t.id === "sample" || t.id === "rifle")) selectTool(2); else useTool(); }   // re-tap an aim tool → lower the scope (firing is on the FIRE button); other tools fire on re-tap
+    if (i === selTool) { const t = TOOLS[i]; if (t && (t.id === "tranq" || t.id === "sample" || t.id === "rifle")) selectTool(0); else useTool(); }   // re-tap an aim tool → lower the scope (firing is on the FIRE button); other tools fire on re-tap
     else selectTool(i);
   }));
   const bu = $("btnUse"); if (bu) bu.addEventListener("pointerdown", e => { e.preventDefault(); useTool(); });
@@ -2939,7 +2940,7 @@ function selectTool(i) {
 }
 // aiming a ranged field tool (tranq dart / sample) raises a first-person SCOPE so you can look-to-aim
 // the reticle onto a dinosaur, then FIRE — instead of a fixed centre crosshair stuck on a 3rd-person camera.
-function aimMode() { const t = TOOLS[selTool]; return S.phase === "playing" && !S.player.driveVeh && !binoc && !!t && (t.id === "tranq" || t.id === "sample"); }
+function aimMode() { const t = TOOLS[selTool]; return S.phase === "playing" && !S.player.driveVeh && !binoc && !!t && (t.id === "tranq" || t.id === "sample" || t.id === "rifle"); }
 /* ---- field-science kit (DNA collection): tranq → sedate, trap → snare, syringe → draw blood ---- */
 const traps = [];                 // { mesh, x, z, r, armed }
 let dnaSamples = 0;               // collected blood/DNA samples this run
