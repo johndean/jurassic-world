@@ -235,6 +235,18 @@ Object.assign(MISSIONS, {
       { t: "extract", l: "Survive the hold — T-REX inbound — board the evac", species: "trex" },
     ],
   },
+  sector4: {
+    id: "sector4", name: "SECTOR 4 RECOVERY", tag: "MEDIUM · SCIENTIST · RECOVERY",
+    short: "Recover scattered DNA canisters from the overrun lab grounds, then evac.",
+    blurb: "A research convoy was ambushed crossing Sector 4 — its cargo of priceless DNA canisters lies scattered across the lab grounds, each still pulsing on its emergency beacon. Recover every canister on foot while the pack that took the convoy still hunts the area, then reach the beacon and extract before they find you.",
+    phases: [
+      { t: "reach", l: "Reach the wrecked convoy in the lab grounds", x: -38, z: -40, r: 8, site: "safehouse" },
+      { t: "collect", l: "Recover the scattered DNA canisters", mode: "pickup", count: 5, radius: 40, x: -38, z: -40, r: 8 },
+      { t: "defend", l: "The pack closes in — hold while you secure the cargo", x: -38, z: -40, r: 9, dur: 35, species: "velociraptor", n: 3, every: 6 },
+      { t: "interact", l: "Activate the distress beacon", atBeacon: true, r: 7, starts: "evac" },
+      { t: "extract", l: "Survive the hold — ALLOSAURUS inbound — board the evac", species: "allosaurus" },
+    ],
+  },
   blackout: {
     id: "blackout", name: "OPERATION BLACKOUT", tag: "MEDIUM · ENGINEER · SURVIVAL",
     short: "Restart three power stations and the island grid, then escape.",
@@ -417,7 +429,12 @@ function updateMission(dt) {
   const P = S.player; let done = false;
   if (ph.t === "reach") { const [x, z] = phaseSite(ph); if (dist2(P.x, P.z, x, z) < (ph.r || 7) * (ph.r || 7)) done = true; }
   else if (ph.t === "interact") { if (ph._done) done = true; }
-  else if (ph.t === "collect") { if (dnaSamples >= (ph.count || 3)) done = true; }
+  else if (ph.t === "collect") {
+    if (ph.mode === "pickup") {
+      if (!MC.started) { MC.started = true; const [cx, cz] = phaseSite(ph); spawnCanisters(cx, cz, ph.count || 4, ph.radius || 34); toast(`RECOVER ${ph.count || 4} DNA CANISTERS — follow the cyan beacons`); }
+      if (pickedCanisters >= (ph.count || 4)) { clearCanisters(); done = true; }
+    } else { if (dnaSamples >= (ph.count || 3)) done = true; }
+  }
   else if (ph.t === "defend") {   // hold the line: survive a timed predator assault at the site
     const [x, z] = phaseSite(ph);
     if (!MC.started) { MC.started = true; MC.defendT = ph.dur || 45; MC.spawnAcc = 0; MC.heldOk = false; S.player.noise = 1; spawnTimer = 0; Audio.roar(); for (let i = 0; i < (ph.n || 3); i++) spawnDrawn(ph.species || "deinonychus", P); toast("⚠ HOLD THE LINE — " + Math.ceil(MC.defendT) + "s"); }
@@ -852,7 +869,19 @@ function buildTableaus() {
       for (let i=0;i<4;i++){ box(_mm(0x2a241c,1), cx+1.5+i*0.7, gy+0.03, cz-2-i*0.6, 0.35,0.02,0.5, 0.3); }   // three-toe tracks leading away
     },
   ];
-  spots.forEach((s, i) => SCENES[i % SCENES.length](s.x, s.z));
+  // mission-aware: lead with the scene that fits the active mission's story, near its first site
+  const m = activeCampaign();
+  let order = [0, 1, 2, 3];
+  if (m) {
+    if (m.id === "sector4") order = [1, 3, 0, 2];        // wrecked convoy + nest first (cargo ambush)
+    else if (m.id === "ghosts") order = [0, 2, 3, 1];    // ranger's last stand + failed experiment (horror)
+    else if (m.id === "fallen_outpost") order = [0, 1, 3, 2];
+    else if (m.id === "last_sample" || m.id === "dna") order = [2, 3, 1, 0]; // failed experiment lab story
+    // stage the lead vignette right by the mission's opening site so the player reads the story on arrival
+    const ph0 = m.phases.find(p => p.x != null && !p.atBeacon);
+    if (ph0 && spots.length) { const gy = groundH(ph0.x, ph0.z); spots[0] = { x: ph0.x + 10, z: ph0.z + 10 }; }
+  }
+  spots.forEach((s, i) => SCENES[order[i % order.length]](s.x, s.z));
   return grp;
 }
 function buildWorld() {
@@ -2849,6 +2878,42 @@ function aimMode() { const t = TOOLS[selTool]; return S.phase === "playing" && !
 /* ---- field-science kit (DNA collection): tranq → sedate, trap → snare, syringe → draw blood ---- */
 const traps = [];                 // { mesh, x, z, r, armed }
 let dnaSamples = 0;               // collected blood/DNA samples this run
+// ---- item-pickup DNA canisters (the `collect` phase type, pickup mode) ----
+let canisters = [], pickedCanisters = 0;
+function spawnCanisters(cx, cz, n, radius) {
+  clearCanisters();
+  pickedCanisters = 0;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * 6.283 + rand(-0.4, 0.4), d = rand(radius * 0.35, radius);
+    let x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+    const half = BIOME.map.size / 2 - 8; x = clamp(x, -half, half); z = clamp(z, -half, half);
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.7, 12), new THREE.MeshStandardMaterial({ color: 0xb9c4cc, roughness: 0.4, metalness: 0.6 }));
+    body.position.y = 0.45; g.add(body);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.18, 10), new THREE.MeshStandardMaterial({ color: 0x2cc8d8, emissive: 0x18a0b0, emissiveIntensity: 1.6, transparent: true, opacity: 0.92 }));
+    cap.position.y = 0.86; g.add(cap);
+    const glow = new THREE.PointLight(0x2cc8d8, 2.2, 9, 2); glow.position.set(0, 0.9, 0); g.add(glow);
+    // a tall beacon shaft so it's findable from distance
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 7, 6), new THREE.MeshBasicMaterial({ color: 0x2cc8d8, transparent: true, opacity: 0.32, depthWrite: false }));
+    beam.position.y = 4; g.add(beam);
+    g.position.set(x, groundH(x, z), z); scene.add(g);
+    canisters.push({ g, x, z, picked: false, beam, cap });
+  }
+}
+function clearCanisters() { for (const c of canisters) scene.remove(c.g); canisters = []; }
+function updateCanisters(dt) {
+  if (!canisters.length) return;
+  const P = S.player;
+  for (const c of canisters) {
+    if (c.picked) continue;
+    c.cap.rotation.y += dt * 1.5; c.beam.material.opacity = 0.22 + Math.abs(Math.sin(S.t * 2 + c.x)) * 0.18;
+    if (dist2(P.x, P.z, c.x, c.z) < 2.6 * 2.6) {
+      c.picked = true; c.g.visible = false; pickedCanisters++;
+      Audio.beacon(false); flash();
+      toast(`◇ DNA CANISTER RECOVERED  (${pickedCanisters}/${canisters.length})`);
+    }
+  }
+}
 const dnaSpecies = new Set();     // species sampled this run
 const identified = new Set();     // species identified through the binoculars
 let binoc = false;                // binoculars (zoom + species ID) toggle
@@ -5005,6 +5070,7 @@ function skipIntro() {
 
 /* ================================================== run lifecycle ======== */
 function startRun() {
+  clearCanisters(); pickedCanisters = 0;
   // reset
   for (const d of dinos) scene.remove(d.mesh); dinos = []; dinosByNetId.clear(); _netDinoId = 0;   // P-09: recycle net-ids each run so they don't grow unbounded across replays
   if (worldJeep) { scene.remove(worldJeep); worldJeep = null; }   // clear last run's drivable jeep
@@ -5081,7 +5147,9 @@ function applyUnlocks() {   // veteran loadout: extra charges earned by extracti
 function careerLine() {
   const n = identified.size, total = Object.keys(SPECIES).length;
   return `CAREER · ${PROGRESS.wins || 0} extraction${PROGRESS.wins === 1 ? "" : "s"} · ${PROGRESS.runs || 0} runs · ${n}/${total} species cataloged` +
-    (PROGRESS.wins >= 3 ? " · VETERAN loadout" : PROGRESS.wins >= 1 ? " · +1 flare unlocked" : "");
+    (PROGRESS.wins >= 3 ? " · VETERAN loadout" : PROGRESS.wins >= 1 ? " · +1 flare unlocked" : "") +
+    (PROGRESS.extinctionEnding ? ` · EXTINCTION: ${({A:"CONTAINMENT HOLDS",B:"INTO THE DEEP",C:"YOU GOT OUT"})[PROGRESS.extinctionEnding]}` : "") +
+    (PROGRESS.extinctionEndings && Object.keys(PROGRESS.extinctionEndings).length >= 3 ? " · ◆ ALL ENDINGS WITNESSED" : "");
 }
 function endRun(won, ending) {
   if (S.phase !== "playing") return;
@@ -5093,7 +5161,8 @@ function endRun(won, ending) {
   Audio.ambient(false); won ? Audio.win() : Audio.lose();
   if (pointerLocked) document.exitPointerLock();
   const t = $("endTitle"), b = $("endBody");
-  if (ending && ENDINGS[ending]) { const e = ENDINGS[ending]; t.textContent = e.title; t.className = e.cls; b.textContent = e.body; }
+  if (ending && ENDINGS[ending]) { const e = ENDINGS[ending]; t.textContent = e.title; t.className = e.cls; b.textContent = e.body;
+    if (selectedMission && selectedMission.id === "extinction") { PROGRESS.extinctionEnding = ending; PROGRESS.extinctionEndings = PROGRESS.extinctionEndings || {}; PROGRESS.extinctionEndings[ending] = 1; saveProgress(); } }
   else { t.textContent = won ? STR.winTitle : STR.loseTitle; t.className = won ? "win" : "lose"; b.textContent = won ? STR.winBody : (STR.loseBody + (S.killedBy ? `  (${STR.caught} ${S.killedBy})` : "")); }
   // win → celebration + NEXT MISSION option; loss → RUN AGAIN only
   const scr = $("endScreen"); scr.classList.toggle("win", !!won); scr.classList.toggle("lose", !won);
@@ -5777,6 +5846,7 @@ function simulate(dt) {
   updateEvac(dt);
   updateTools(dt);
   updateField(dt);
+  updateCanisters(dt);
   updateMission(dt);
   updateAction(dt);
   updateFx(dt);
