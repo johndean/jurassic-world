@@ -2858,6 +2858,45 @@ function fxMelee(x, z, yaw) {                         // quick slash arc in fron
   m.position.set(fx, groundH(fx, fz) + 1.1, fz); m.rotation.set(Math.PI / 2, 0, -yaw);
   addFx(m, 0.26, t => { const k = t / 0.26; m.material.opacity = 0.95 * (1 - k); m.scale.setScalar(1 + k * 0.7); });
 }
+function fxBlood(x, y, z) {                           // quick blood splash at a hit point
+  const g = new THREE.Group();
+  for (let i = 0; i < 7; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.06 + Math.random() * 0.07, 5, 4),
+      new THREE.MeshBasicMaterial({ color: 0x6e0d08, transparent: true, opacity: 0.9 }));
+    const a = Math.random() * 6.28, sp = 1 + Math.random() * 2.5;
+    m.position.set(x + Math.cos(a) * 0.2, y, z + Math.sin(a) * 0.2);
+    m.userData.vx = Math.cos(a) * sp; m.userData.vz = Math.sin(a) * sp; m.userData.vy = 1.5 + Math.random() * 2;
+    g.add(m);
+  }
+  g.userData.life = 0.7; scene.add(g); _bloodFx.push(g);
+}
+const _bloodFx = [];
+function updateBloodFx(dt) {
+  for (let i = _bloodFx.length - 1; i >= 0; i--) {
+    const g = _bloodFx[i]; g.userData.life -= dt;
+    for (const m of g.children) { m.userData.vy -= 9 * dt; m.position.x += m.userData.vx * dt; m.position.z += m.userData.vz * dt; m.position.y += m.userData.vy * dt; if (m.position.y < 0.02) m.position.y = 0.02; m.material.opacity = Math.max(0, g.userData.life); }
+    if (g.userData.life <= 0) { scene.remove(g); _bloodFx.splice(i, 1); }
+  }
+}
+function spawnPreyCarcass(x, z, sp) {                 // a lightweight fresh kill: blood pool + a low mound (the predator feeds here)
+  const g = new THREE.Group(); const y = groundH(x, z);
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(1.8 + Math.random() * 0.8, 20),
+    new THREE.MeshStandardMaterial({ color: 0x3a0c07, roughness: 0.5, metalness: 0.1, transparent: true, opacity: 0.96 }));
+  pool.rotation.x = -Math.PI / 2; pool.position.set(x, y + 0.03, z); g.add(pool);
+  // a low carcass mound (remains) so it reads as a kill, not a stain
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 7),
+    new THREE.MeshStandardMaterial({ color: 0x5a5043, roughness: 0.9 }));
+  body.scale.set(1.8, 0.5, 1.0); body.position.set(x, y + 0.35, z); body.rotation.y = Math.random() * 6.28; g.add(body);
+  scene.add(g); g.userData.ttl = 60; _killCarcasses.push(g);   // cleaned up after a while
+  return g;
+}
+const _killCarcasses = [];
+function updateKillCarcasses(dt) {
+  for (let i = _killCarcasses.length - 1; i >= 0; i--) {
+    const g = _killCarcasses[i]; g.userData.ttl -= dt;
+    if (g.userData.ttl <= 0) { scene.remove(g); _killCarcasses.splice(i, 1); }
+  }
+}
 function fxReact(a, glyph, color) {                  // floating reaction marker over a dino (e.g. "!" recoil)
   const cv = document.createElement("canvas"); cv.width = cv.height = 64;
   const ctx = cv.getContext("2d"); ctx.font = "bold 50px ui-monospace,monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -3128,6 +3167,31 @@ function decide(a, P) {
   if (decoy.t > 0 && dist2(a.x, a.z, decoy.x, decoy.z) < (sp.senses.sightRangeM * 1.3) ** 2) {                  // a thrown decoy pulls them off you
     a.state = "Investigate"; bb.lastSeenX = decoy.x; bb.lastSeenZ = decoy.z; bb.hasTarget = true; bb.preyHunt = null; return;
   }
+  // ---- OPPORTUNISTIC PREY DIVERSION (emergent cover mechanic, all missions) ----
+  // A predator pressing the player will take an EASIER meal if a herbivore is meaningfully
+  // closer than the player. This lets the player use a herd as living cover / a distraction:
+  // slip a grazer between you and the hunter and it peels off after the soft target.
+  if (playerEngageable() && S.t >= DIFF.grace && a.sp.diet === "carnivore") {
+    const pd = per.d;                                         // distance to player (already computed)
+    let ez = null, ezd = 1e9;                                 // easiest herbivore
+    for (const h of dinos) {
+      if (!h.alive || h.sp.diet === "carnivore" || h === a) continue;
+      const hd = Math.hypot(h.x - a.x, h.z - a.z);
+      if (hd < ezd) { ezd = hd; ez = h; }
+    }
+    // divert when a herbivore is well within reach AND clearly closer/easier than the player
+    // (40% closer, or the predator is at least a bit hungry and the grazer is right there).
+    if (ez && ezd < a.sp.senses.sightRangeM * 0.9 &&
+        (ezd < pd * 0.6 || (a.hunger > 0.3 && ezd < pd * 0.85) || ezd < a.sp.combat.attackRangeM + 4)) {
+      a.state = "Chase"; bb.lastSeenX = ez.x; bb.lastSeenZ = ez.z; bb.preyHunt = ez;
+      bb.divertT = 4;                                          // commit to the grazer briefly (no instant flip-flop)
+      if (!bb._divNoteT || S.t - bb._divNoteT > 6) { bb._divNoteT = S.t; if (dist2(P.x, P.z, a.x, a.z) < 40*40) fxReact(a, "▸", "#cfe8a0"); }
+      return;
+    }
+  }
+  // stay committed to a chosen grazer for a beat so cover actually works
+  if (bb.divertT > 0 && bb.preyHunt && bb.preyHunt.alive) { bb.divertT -= 0.25; a.state = "Chase"; bb.lastSeenX = bb.preyHunt.x; bb.lastSeenZ = bb.preyHunt.z; return; }
+
   if (playerEngageable() && S.t >= DIFF.grace) {   // beacon zone is the ONLY true disengage; the truck is still hunted
     if (per.seen && per.d < sp.combat.attackRangeM + 0.5) { a.state = "Attack"; return; }
     if ((per.seen || (bb.hasTarget && rng() < aggr)) && per.d < sp.senses.sightRangeM * 1.4) { a.state = (usesPackTactics(sp) ? "Chase" : (per.seen ? "Chase" : "Stalk")); return; }
@@ -3295,8 +3359,23 @@ function steer(a, dt, P) {
       a.cd -= dt;
       const d = Math.hypot(P.x - a.x, P.z - a.z);
       if (d < sp.combat.attackRangeM && a.cd <= 0 && S.player.alive) { a.cd = sp.combat.attackCooldownS * DIFF.atkCd; a.anim = 0.4; damagePlayer(sp.combat.damage * DIFF.dmg, sp.displayName, a.x, a.z); }
-      // also can kill prey
-      if (bb.preyHunt && Math.hypot(bb.preyHunt.x - a.x, bb.preyHunt.z - a.z) < sp.combat.attackRangeM + 1 && a.cd <= 0) { a.cd = 1; bb.preyHunt.hp -= 30; if (bb.preyHunt.hp <= 0) { a.feedT = rand(4, 7); a.state = "Feed"; bb.preyHunt = null; } }   // kill → feed at the carcass
+      // also can kill prey — VISIBLE predation: lunge, bite, blood, downed carcass + feeding
+      if (bb.preyHunt && bb.preyHunt.alive && Math.hypot(bb.preyHunt.x - a.x, bb.preyHunt.z - a.z) < sp.combat.attackRangeM + 1.4 && a.cd <= 0) {
+        const q = bb.preyHunt; a.cd = 0.9; a.anim = 0.5;
+        q.hp -= 34 + (sp.combat.damage || 20) * 0.6;          // a real bite — predators actually bring prey down
+        q.bb.scared = 6; q.state = "Flee"; q.bb.lastSeenX = a.x; q.bb.lastSeenZ = a.z; q.anim = 0.4;
+        const kx = (q.x - a.x), kz = (q.z - a.z), kl = Math.hypot(kx, kz) || 1;
+        q.x += kx / kl * 0.5; q.z += kz / kl * 0.5;           // the prey is shoved by the hit
+        Audio.hit();
+        if (dist2(P.x, P.z, a.x, a.z) < 60 * 60) { fxReact(q, q.hp <= 0 ? "✕" : "!", "#c23a2a"); fxBlood(q.x, groundH(q.x, q.z) + 1.0, q.z); camShake = Math.min(camShake + 0.05, 0.3); }
+        if (q.hp <= 0) {                                       // KILL → drop a carcass + the predator feeds (full scenario)
+          killDino(q);
+          if (typeof spawnPreyCarcass === "function" && dist2(P.x, P.z, q.x, q.z) < 90 * 90) spawnPreyCarcass(q.x, q.z, q.sp);
+          a.x += (q.x - a.x) * 0.3; a.z += (q.z - a.z) * 0.3;  // step onto the kill
+          a.feedT = rand(7, 12); a.state = "Feed"; a.hunger = 0; bb.preyHunt = null; bb.divertT = 0;
+          if (dist2(P.x, P.z, a.x, a.z) < 70 * 70) { fxReact(a, "♦", "#e0b24a"); toast(sp.displayName + " brings down a " + q.sp.displayName); }
+        }
+      }
       break;
     }
     case "Retreat": { run = true; tx = a.x + (a.x - (bb.lastSeenX)); tz = a.z + (a.z - (bb.lastSeenZ)); break; }
@@ -5917,7 +5996,7 @@ function simulate(dt) {
   updateEvac(dt);
   updateTools(dt);
   updateField(dt);
-  updateCanisters(dt);
+  updateCanisters(dt); updateBloodFx(dt); updateKillCarcasses(dt);
   updateMission(dt);
   updateAction(dt);
   updateFx(dt);
