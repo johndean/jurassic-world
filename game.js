@@ -134,7 +134,7 @@ const ROLES = [
   { id: "comms",     name: "COMMS",     img: "./assets/keyart/squad/card_comms.png",     model: "./assets/models/char_comms.glb",     perk: "Fast evac · extraction hold −15s", mod: { hold: -15 } },
   { id: "survival",  name: "SURVIVAL",  img: "./assets/keyart/squad/card_survival.png",  model: "./assets/models/char_survival.glb",  perk: "Endurance · stamina lasts far longer", mod: { drain: 0.6 } },
   { id: "research",  name: "RESEARCH",  img: "./assets/keyart/squad/card_research.png",  model: "./assets/models/char_research.glb",  perk: "Careful steps · −30% noise", mod: { noise: 0.7 } },
-  { id: "seal",      name: "SEAL OPERATOR", img: "./assets/keyart/squad/card_seal.png",  model: "./assets/models/char_seal.glb",      perk: "Combat security · armed rifle · suppresses predators", mod: { armed: true } },
+  { id: "seal",      name: "SEAL OPERATOR", img: "./assets/keyart/squad/card_seal_v2.png",  model: "./assets/models/char_seal.glb",      perk: "Combat security · armed rifle · suppresses predators", mod: { armed: true } },
   { id: "assault",   name: "ASSAULT",       img: "./assets/keyart/squad/card_assault.png", model: "./assets/models/char_assault.glb",  perk: "Heavy weapons · armed rifle · extra ammo · suppresses predators", mod: { armed: true, ammo: 1.5 } },
   { id: "recon",     name: "RECON",         img: "./assets/keyart/squad/card_recon.png",   model: "./assets/models/char_recon.glb",    perk: "Night-ops · armed rifle · predators notice you slower · suppresses", mod: { armed: true, seen: 0.82 } },
 ];
