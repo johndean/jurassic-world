@@ -134,6 +134,7 @@ const ROLES = [
   { id: "comms",     name: "COMMS",     img: "./assets/keyart/squad/card_comms.png",     model: "./assets/models/char_comms.glb",     perk: "Fast evac · extraction hold −15s", mod: { hold: -15 } },
   { id: "survival",  name: "SURVIVAL",  img: "./assets/keyart/squad/card_survival.png",  model: "./assets/models/char_survival.glb",  perk: "Endurance · stamina lasts far longer", mod: { drain: 0.6 } },
   { id: "research",  name: "RESEARCH",  img: "./assets/keyart/squad/card_research.png",  model: "./assets/models/char_research.glb",  perk: "Careful steps · −30% noise", mod: { noise: 0.7 } },
+  { id: "seal",      name: "SEAL OPERATOR", img: "./assets/keyart/squad/card_seal.png",  model: "./assets/models/char_seal.glb",      perk: "Combat security · armed rifle · suppresses predators", mod: { armed: true } },
 ];
 let selectedRole = ROLES[0];
 function curPlayerModel() { const u = selectedRole && selectedRole.model; return (u && MODELS[u]) ? u : PLAYER_MODEL; }
@@ -419,12 +420,12 @@ function updateAction(dt) {
   // aiming reticle: a center crosshair while the tranq/sample is selected, green when a valid target is locked
   // the FIRE/USE button reads the selected tool's actual function (TRANQ→FIRE, SAMPLE→COLLECT, …)
   const bu = $("btnUse");
-  if (bu) { const t = TOOLS[selTool]; const lbl = t ? ({ tranq: "FIRE", sample: "COLLECT", trap: "SET TRAP", flare: "FLARE", decoy: "DECOY", melee: "STRIKE" }[t.id] || "USE") : "USE"; if (bu.textContent !== lbl) bu.textContent = lbl; }
+  if (bu) { const t = TOOLS[selTool]; const lbl = t ? ({ tranq: "FIRE", rifle: "FIRE", sample: "COLLECT", trap: "SET TRAP", flare: "FLARE", decoy: "DECOY", melee: "STRIKE" }[t.id] || "USE") : "USE"; if (bu.textContent !== lbl) bu.textContent = lbl; }
   const ret = $("reticle");
   if (ret) {
     const aiming = aimMode();
     ret.style.display = aiming ? "block" : "none";
-    if (aiming) { const tool = TOOLS[selTool]; const tgt = aimTarget(tool.id === "sample" ? 4.2 : 72, tool.id === "sample"); ret.style.color = tgt ? "#7ef08a" : "rgba(255,255,255,.7)"; ret.classList.toggle("locked", !!tgt); }
+    if (aiming) { const tool = TOOLS[selTool]; const tgt = aimTarget(tool.id === "sample" ? 4.2 : (tool.id === "rifle" ? 120 : 72), tool.id === "sample"); ret.style.color = tgt ? "#7ef08a" : "rgba(255,255,255,.7)"; ret.classList.toggle("locked", !!tgt); }
   }
 }
 function updateMission(dt) {
@@ -2179,7 +2180,7 @@ function initInput() {
   // defense tool bar: tap a tool to select it; tap the selected one (or the USE button) to activate
   document.querySelectorAll("#tools .tool").forEach(el => el.addEventListener("click", () => {
     const i = +el.dataset.i;
-    if (i === selTool) { const t = TOOLS[i]; if (t && (t.id === "tranq" || t.id === "sample")) selectTool(2); else useTool(); }   // re-tap an aim tool → lower the scope (firing is on the FIRE button); other tools fire on re-tap
+    if (i === selTool) { const t = TOOLS[i]; if (t && (t.id === "tranq" || t.id === "sample" || t.id === "rifle")) selectTool(2); else useTool(); }   // re-tap an aim tool → lower the scope (firing is on the FIRE button); other tools fire on re-tap
     else selectTool(i);
   }));
   const bu = $("btnUse"); if (bu) bu.addEventListener("pointerdown", e => { e.preventDefault(); useTool(); });
@@ -2886,12 +2887,14 @@ const TOOLS = [
   { id: "tranq", name: "TRANQ", icon: "➶", charges: 8, max: 8, cd: 0, cdMax: 1.1 },   // dart gun — sedate a dino
   { id: "trap", name: "TRAP", icon: "⊓", charges: 3, max: 3, cd: 0, cdMax: 1.0 },     // snare trap — immobilise
   { id: "sample", name: "SAMPLE", icon: "⚗", charges: Infinity, max: Infinity, cd: 0, cdMax: 1.4 },  // syringe — draw DNA
+  { id: "rifle", name: "RIFLE", icon: "▮", charges: 30, max: 30, cd: 0, cdMax: 0.5, sealOnly: true },  // SEAL service rifle — scoped, lethal, suppresses predators
 ];
 let selTool = 0;
 function selectTool(i) {
   if (i < 0 || i >= TOOLS.length) return;
+  if (TOOLS[i] && TOOLS[i].sealOnly && !(selectedRole && selectedRole.id === "seal")) return;   // rifle is SEAL-only
   const prev = selTool; selTool = i; const t = TOOLS[i];
-  if (t && (t.id === "tranq" || t.id === "sample") && prev !== i) toast("SCOPE UP · look to aim the reticle · " + (isTouch ? "tap USE" : "click / F") + " to FIRE");
+  if (t && (t.id === "tranq" || t.id === "sample" || t.id === "rifle") && prev !== i) toast((t.id === "rifle" ? "RIFLE UP · scope on a predator · " : "SCOPE UP · look to aim the reticle · ") + (isTouch ? "tap FIRE" : "click / F") + " to FIRE");
 }
 // aiming a ranged field tool (tranq dart / sample) raises a first-person SCOPE so you can look-to-aim
 // the reticle onto a dinosaur, then FIRE — instead of a fixed centre crosshair stuck on a 3rd-person camera.
@@ -3004,6 +3007,31 @@ function useTool() {
     const need = sedThreshold(a.sp);
     if (a.sedation >= need) { a.sedated = true; a.downT = 24; a.state = "Down"; a.bb.scared = 0; S.downs = (S.downs || 0) + 1; fxReact(a, "Zz", "#8fb8c4"); toast(a.sp.displayName + " SEDATED — draw a sample"); }
     else { fxReact(a, "✦", "#8fb8c4"); a.bb.scared = Math.max(a.bb.scared, 1.0); toast(`TRANQ · ${a.sp.displayName} ${Math.round(a.sedation / need * 100)}%`); }
+  }
+  else if (t.id === "rifle") {                                 // SEAL service rifle — scoped, lethal, suppresses predators
+    t.charges--; t.cd = t.cdMax; Audio.hit(); flash(); camShake = Math.min(0.45, camShake + 0.22);
+    const a = aimTarget(120, false);
+    const oy = groundH(P.x, P.z) + 1.45;
+    const tx = a ? a.x : P.x + Math.sin(cam.yaw) * 80, tz = a ? a.z : P.z + Math.cos(cam.yaw) * 80;
+    const ty = a ? groundH(a.x, a.z) + (a.sp.greybox.standH || 2) * 0.55 : oy;
+    fxTracer(P.x, oy, P.z, tx, ty, tz);                        // muzzle → tracer line → impact
+    P.noise = Math.max(P.noise, 0.9);                          // gunfire is LOUD — draws attention island-wide
+    // the crack of gunfire spooks every predator in earshot → they break and run
+    const spooked = scareDinos(P.x, P.z, 55, 6);
+    if (!a) { toast(spooked ? `RIFLE · suppressing fire — ${spooked} predator${spooked>1?"s":""} scatter` : "RIFLE · centre the target"); return; }
+    if (a.sp.diet !== "carnivore") {                           // don't gun down herbivores
+      a.bb.scared = Math.max(a.bb.scared, 6); a.state = "Retreat"; fxReact(a, "!", "#ffce4a");
+      toast(a.sp.displayName + " bolts — hold fire on the herd"); return;
+    }
+    // wound the target; lighter predators drop, heavy ones are driven off hard
+    const maxhp = a.sp.combat.health || 120;
+    a.hp -= Math.max(34, maxhp * 0.42);
+    const kx = (a.x - P.x), kz = (a.z - P.z), kl = Math.hypot(kx, kz) || 1;
+    a.x += kx / kl * 1.2; a.z += kz / kl * 1.2;                // hit knockback
+    a.bb.scared = Math.max(a.bb.scared, 8); a.bb.lastSeenX = P.x; a.bb.lastSeenZ = P.z; a.state = "Retreat"; a.anim = 0.3;
+    if (a.hp <= 0) { killDino(a); S.kills = (S.kills||0)+1; fxReact(a, "✕", "#e8907a"); toast("DOWN · " + a.sp.displayName); }
+    else { fxReact(a, "!", "#e8907a"); toast("HIT · " + a.sp.displayName + " — it breaks and runs"); }
+    return;
   }
   else if (t.id === "trap") {                                   // drop a snare trap a few metres ahead
     t.charges--; t.cd = t.cdMax;
@@ -5100,6 +5128,10 @@ function startRun() {
   if (worldJeep) { scene.remove(worldJeep); worldJeep = null; }   // clear last run's drivable jeep
   clearRemotes(); clearEvac(); clearFx(); clearAirdrop(); clearWreck(); clearField(); clearIntroProp(); clearMissionSites(); clearBoss(); preloadRadio();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; });   // fresh kit each run
+  // SEAL OPERATOR signature: the service rifle slot is only available to the SEAL specialist
+  { const seal = (selectedRole && selectedRole.id === "seal");
+    const rifle = TOOLS.find(t => t.id === "rifle"); if (rifle) rifle.charges = seal ? rifle.max : 0;
+    const rb = document.querySelector("#tools .tool-seal"); if (rb) rb.style.display = seal ? "" : "none"; }
   applyUnlocks();                                                                     // persistent progression: veteran loadout bonuses
   // co-op: all players seed from the room so terrain/beacon/initial spawns match (dinos drift locally, v2: host sync)
   reseed(Net.on ? (Net.seed >>> 0) : ((Math.random() * 1e9) >>> 0));
