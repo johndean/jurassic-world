@@ -3742,7 +3742,7 @@ function updateExtraction(dt) {
   if ((S.extraction.hold | 0) !== (S._lastBeep | 0)) { S._lastBeep = S.extraction.hold; if ((S.extraction.hold | 0) % 3 === 0) Audio.beacon(false); }
   if (S.extraction.hold >= S.extraction.holdMax && !S.extraction.won) {
     S.extraction.won = true;
-    if (evac) { evac.phase = "boarding"; evac.t = 0; toast("BOARD THE CHOPPER"); }   // walk to the door + climb in
+    if (evac) { evac.phase = "boarding"; evac.t = 0; toast("BOARD — reach the green ring & rope ladder at the chopper"); }   // walk to the rope; ground-level, always reachable
     else endRun(true);
   }
 }
@@ -3827,17 +3827,37 @@ function buildHeli() {
   scene.add(g);
   return { group: g, rotor, tailRotor, real: !!MODELS[HELI_MODEL] };
 }
+function buildEvacRope(x, z, groundY) {        // a visible boarding rope ladder hanging from the chopper door to the ground
+  const g = new THREE.Group();
+  const topY = groundY + 13;                    // up at the door
+  const ropeMat = new THREE.MeshStandardMaterial({ color: 0x3a2f22, roughness: 1 });
+  const rungMat = new THREE.MeshStandardMaterial({ color: 0x6b5638, roughness: 0.9 });
+  for (const sx of [-0.22, 0.22]) {             // two side ropes
+    const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, topY - groundY, 6), ropeMat);
+    rope.position.set(x + sx, (groundY + topY) / 2, z); g.add(rope);
+  }
+  const n = Math.floor((topY - groundY) / 0.45);
+  for (let i = 0; i < n; i++) {                  // rungs
+    const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.5, 6), rungMat);
+    rung.rotation.z = Math.PI / 2; rung.position.set(x, groundY + 0.3 + i * 0.45, z); g.add(rung);
+  }
+  // a glowing ground marker ring so the player sees exactly where to board
+  const ring = new THREE.Mesh(new THREE.RingGeometry(1.4, 1.9, 24),
+    new THREE.MeshBasicMaterial({ color: 0x6ef0a0, transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.set(x, groundY + 0.05, z); g.add(ring);
+  g.userData.ring = ring;
+  scene.add(g); return g;
+}
 function startEvac() {
   if (evac) return;
   const bx = S.extraction.beacon.x, bz = S.extraction.beacon.z;
-  // LAND ON THE HELIPAD: target the facility's elevated pad, not bare ground beside the beacon.
-  let lx, lz, landY;
-  if (FACILITY) {
-    lx = FACILITY.padX; lz = FACILITY.padZ;
-    landY = groundH(FACILITY.x, FACILITY.z) + FACILITY.padH + 0.15;   // skids rest on the pad deck
-  } else {
-    lx = bx + 4.5; lz = bz + 2.5; landY = groundH(lx, lz);            // fallback (no facility)
-  }
+  // GROUND-LEVEL EXTRACTION: the chopper sets down on open ground right beside the beacon so the
+  // player boards directly — no dependency on any compound ladder / elevated helipad (which could be
+  // unreachable). A rope ladder also drops from the door so boarding is always possible.
+  let lx = bx + 5, lz = bz + 3;
+  // nudge the landing spot to the nearest clear flat ground near the beacon
+  for (let i = 0; i < 8; i++) { const a = i / 8 * 6.283, r = 5; const cx = bx + Math.cos(a) * r, cz = bz + Math.sin(a) * r; if (!inBridgeCorridor(cx, cz)) { lx = cx; lz = cz; break; } }
+  let landY = groundH(lx, lz);
   const heli = buildHeli();
   heli.group.position.set(lx + 50, landY + 120, lz + 50);   // enters high + far
   heli.group.rotation.y = Math.atan2(bx - lx, bz - lz);      // nose roughly toward the pad
@@ -3862,9 +3882,11 @@ function updateEvac(dt) {
     if (g.position.y - evac.groundY < 0.1) { g.position.y = evac.groundY; evac.phase = "grounded"; evac.t = 0; Audio.beacon(true); toast("CHOPPER DOWN — HOLD, THEN BOARD"); }
   } else if (evac.phase === "grounded") {                   // sits with rotors running through the hold
     g.position.y = evac.groundY;
+    if (!evac.rope) evac.rope = buildEvacRope(lx, lz, evac.groundY);   // drop a boarding rope ladder from the door
+    if (evac.rope && evac.rope.userData.ring) evac.rope.userData.ring.material.opacity = 0.45 + Math.abs(Math.sin(S.t * 3)) * 0.4;
   } else if (evac.phase === "boarding") {                   // YOU keep control — walk to the door to climb in
     g.position.y = evac.groundY;
-    if (dist2(S.player.x, S.player.z, lx, lz) < 8.5 * 8.5) { evac.phase = "climbing"; evac.t = 0; }   // board from ground-adjacent — no hard climb-to-deck gate
+    if (dist2(S.player.x, S.player.z, lx, lz) < 10 * 10) { evac.phase = "climbing"; evac.t = 0; }   // board on contact — ground-level, always reachable
   } else if (evac.phase === "climbing") {                   // brief auto climb-aboard, then hide
     g.position.y = evac.groundY;
     const P = S.player;
@@ -3876,7 +3898,7 @@ function updateEvac(dt) {
     if (evac.t > 5.2 && !evac.done) { evac.done = true; endRun(true); }
   }
 }
-function clearEvac() { if (evac) { scene.remove(evac.heli.group); evac = null; } }
+function clearEvac() { if (evac) { scene.remove(evac.heli.group); if (evac.rope) scene.remove(evac.rope); evac = null; } }
 
 /* ============================================ opening crash intro ======== *
  * Compressed (~36s) interactive build of OPENING_SEQUENCE.md: deployment flight
