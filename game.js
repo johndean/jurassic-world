@@ -349,6 +349,9 @@ const phLabel = ph => (typeof ph.l === "function" ? ph.l() : ph.l);
 // The single source of truth for "what's the current step + where" — used by the HUD and the map so the
 // objective always tracks the NEXT step of the active mission (not the fixed extraction beacon).
 function currentObjective() {
+  // EXTRACTION: once the chopper is down, the objective is the rope/landing spot (not the beacon, which
+  // can be inside a building) — leads the player out to the open boarding point.
+  if (evac && (evac.phase === "grounded" || evac.phase === "boarding")) return { x: evac.lx, z: evac.lz, label: "Board the chopper — green ring", atBeacon: false, evac: true };
   const cm = activeCampaign();
   if (cm && MC) {
     const ph = cm.phases[MC.idx]; if (!ph) return null;
@@ -3854,9 +3857,24 @@ function startEvac() {
   // GROUND-LEVEL EXTRACTION: the chopper sets down on open ground right beside the beacon so the
   // player boards directly — no dependency on any compound ladder / elevated helipad (which could be
   // unreachable). A rope ladder also drops from the door so boarding is always possible.
-  let lx = bx + 5, lz = bz + 3;
-  // nudge the landing spot to the nearest clear flat ground near the beacon
-  for (let i = 0; i < 8; i++) { const a = i / 8 * 6.283, r = 5; const cx = bx + Math.cos(a) * r, cz = bz + Math.sin(a) * r; if (!inBridgeCorridor(cx, cz)) { lx = cx; lz = cz; break; } }
+  // Find a CLEAR, OPEN landing spot: outside every building/wall collider, off the bridge, on flat-ish
+  // ground. The beacon can sit INSIDE the building — so we spiral outward from it until we find open sky.
+  const clearForHeli = (x, z) => {
+    if (inBridgeCorridor(x, z)) return false;
+    if (Math.hypot(x, z) > MAP_HALF - 8) return false;                 // not off the map edge
+    const near = queryColliders(x, z);
+    for (let i = 0; i < near.length; i++) { const c = near[i]; if (dist2(x, z, c.x, c.z) < (c.r + 4.0) * (c.r + 4.0)) return false; }   // 4m clearance from any solid
+    // reasonably flat (no cliff)
+    const h = groundH(x, z); const slope = Math.abs(groundH(x + 2, z) - h) + Math.abs(groundH(x, z + 2) - h);
+    if (slope > 4) return false;
+    return true;
+  };
+  let lx = null, lz = null;
+  for (let ring = 0; ring <= 10 && lx === null; ring++) {              // expanding rings out from the beacon
+    const r = 6 + ring * 5;
+    for (let i = 0; i < 12; i++) { const a = i / 12 * 6.283 + ring * 0.5; const cx = bx + Math.cos(a) * r, cz = bz + Math.sin(a) * r; if (clearForHeli(cx, cz)) { lx = cx; lz = cz; break; } }
+  }
+  if (lx === null) { lx = bx + 6; lz = bz + 6; }                       // last-ditch fallback
   let landY = groundH(lx, lz);
   const heli = buildHeli();
   heli.group.position.set(lx + 50, landY + 120, lz + 50);   // enters high + far
