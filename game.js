@@ -13,7 +13,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-07-06-anim1";
+const BUILD = "2026-07-06-anim3";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -1269,6 +1269,17 @@ function buildPlayer() {
 // overcast gradient sky dome with faint procedural cloud banding near the horizon (no asset, not fogged)
 // TRACK A: drifting mist / spore motes that follow the camera for volumetric depth (GFX-gated).
 let mistField = null;
+let _softDot = null;
+function _softDotTex() {   // tiny radial-gradient sprite: opaque core -> transparent rim
+  if (_softDot) return _softDot;
+  const cv = document.createElement("canvas"); cv.width = cv.height = 32;
+  const c = cv.getContext("2d");
+  const g = c.createRadialGradient(16, 16, 0, 16, 16, 16);
+  g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.45, "rgba(255,255,255,0.55)"); g.addColorStop(1, "rgba(255,255,255,0)");
+  c.fillStyle = g; c.fillRect(0, 0, 32, 32);
+  _softDot = new THREE.CanvasTexture(cv); _softDot.colorSpace = THREE.SRGBColorSpace;
+  return _softDot;
+}
 function buildMist() {
   if (mistField) { scene.remove(mistField); if (mistField.geometry) mistField.geometry.dispose(); mistField = null; }
   if (!GFX.mist || !scene) return;
@@ -1276,7 +1287,7 @@ function buildMist() {
   const pos = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) { pos[i*3] = rand(-R, R); pos[i*3+1] = rand(0.4, 14); pos[i*3+2] = rand(-R, R); }
   const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const mat = new THREE.PointsMaterial({ color: 0xe8e4cf, size: 0.16, transparent: true, opacity: 0.22, depthWrite: false, sizeAttenuation: true, fog: true });   // warm sunlit spores/pollen
+  const mat = new THREE.PointsMaterial({ color: 0xe8e4cf, size: 0.16, transparent: true, opacity: 0.18, depthWrite: false, sizeAttenuation: true, fog: true, map: _softDotTex(), alphaTest: 0.02 });   // soft round motes (untextured points render as hard white squares)
   mistField = new THREE.Points(geo, mat); mistField.frustumCulled = false; mistField.renderOrder = 2; scene.add(mistField);
 }
 function updateMist(dt, now) {
@@ -2499,7 +2510,7 @@ function updatePlayer(dt) {
     P.x += wx * speed * dt; P.z += wz * speed * dt;
     P.yaw = lerp2angle(P.yaw, Math.atan2(wx, wz));   // body faces travel
     stepPhase += speed * dt;
-    if (stepPhase > (gait === "run" ? 1.7 : 2.6)) { stepPhase = 0; Audio.step(gait); if (gait === "run" && !P.swim && Math.random() < 0.7) fxDust(P.x - wx * 0.3, P.z - wz * 0.3, 0.42); }
+    if (stepPhase > (gait === "run" ? 1.7 : 2.6)) { stepPhase = 0; Audio.step(gait); if (gait === "run" && !P.swim && Math.random() < 0.4) fxDust(P.x - wx * 0.3, P.z - wz * 0.3, 0.3); }
   } else P._moving = false;
   // vertical traversal (jump / auto-vault / mantle) — additive; does nothing while grounded & not jumping
   updateTraversal(dt, wx, wz, moving);
@@ -2931,20 +2942,21 @@ function updateKillCarcasses(dt) {
     if (g.userData.ttl <= 0) { scene.remove(g); _killCarcasses.splice(i, 1); }
   }
 }
-function fxDust(x, z, scale) {                        // soft ground dust burst (footfall / body impact)
+function fxDust(x, z, scale) {                        // dark leaf-litter/earth scuff — flat, low, subtle (jungle floor, not desert dust)
   const g = new THREE.Group(); const y = groundH(x, z);
-  const n = 7, puffs = [];
+  const n = 5, puffs = [];
   for (let i = 0; i < n; i++) {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(0.22 + Math.random() * 0.2, 6, 5),
-      new THREE.MeshBasicMaterial({ color: 0xb8ad93, transparent: true, opacity: 0.34, depthWrite: false }));
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.16 + Math.random() * 0.12, 6, 5),
+      new THREE.MeshBasicMaterial({ color: 0x4a4136, transparent: true, opacity: 0.16, depthWrite: false }));
+    m.scale.y = 0.35;                                  // flattened — hugs the ground, never an egg
     const a = (i / n) * Math.PI * 2 + Math.random();
-    m.position.set(Math.cos(a) * 0.3, 0.15, Math.sin(a) * 0.3);
-    m.userData.dir = { x: Math.cos(a) * (0.8 + Math.random() * 0.8), y: 0.5 + Math.random() * 0.7, z: Math.sin(a) * (0.8 + Math.random() * 0.8) };
+    m.position.set(Math.cos(a) * 0.28, 0.06, Math.sin(a) * 0.28);
+    m.userData.dir = { x: Math.cos(a) * (0.6 + Math.random() * 0.5), y: 0.10 + Math.random() * 0.14, z: Math.sin(a) * (0.6 + Math.random() * 0.5) };
     g.add(m); puffs.push(m);
   }
-  g.position.set(x, y + 0.05, z); g.scale.setScalar(scale || 1);
-  addFx(g, 0.85, t => { const k = t / 0.85;
-    for (const m of puffs) { m.position.x += m.userData.dir.x * 0.016; m.position.y += m.userData.dir.y * 0.012; m.position.z += m.userData.dir.z * 0.016; m.scale.setScalar(1 + k * 2.2); m.material.opacity = 0.34 * (1 - k); }
+  g.position.set(x, y + 0.03, z); g.scale.setScalar(Math.min(1.5, scale || 1));   // hard cap — no giant blobs on big dinos
+  addFx(g, 0.7, t => { const k = t / 0.7;
+    for (const m of puffs) { m.position.x += m.userData.dir.x * 0.014; m.position.y += m.userData.dir.y * 0.010; m.position.z += m.userData.dir.z * 0.014; const s = 1 + k * 1.4; m.scale.set(s, s * 0.35, s); m.material.opacity = 0.16 * (1 - k) * (1 - k); }
   });
 }
 function fxReact(a, glyph, color) {                  // floating reaction marker over a dino (e.g. "!" recoil)
@@ -3487,10 +3499,17 @@ function steer(a, dt, P) {
   if (a.lod === "full" && !a.inWater) resolveColliders(a, dinoRadius(sp));
   // ---- VEHICLE COLLISION: a dino can NEVER stand inside the truck — push it out to the cab's edge.
   // (the truck moves, so it's not in the static grid; resolve it directly here every frame). ----
-  if (a.lod === "full" && worldJeep && worldJeep.visible !== false) {
-    const jr = 3.0 + dinoRadius(sp);            // cab half-extent + the dino's body radius
-    const dxv = a.x - worldJeep.position.x, dzv = a.z - worldJeep.position.z, dv = Math.hypot(dxv, dzv);
-    if (dv < jr && dv > 1e-3) { const push = (jr - dv); a.x += (dxv / dv) * push; a.z += (dzv / dv) * push; }
+  if (a.lod === "full" && worldJeep) {   // even when hidden (FP drive) the truck physically exists
+    // oriented CAPSULE along the truck heading (a circle let dinos stand over the long hood/roof):
+    // closest point on the truck's centre segment (half-length 2.4m) -> push out to body radius.
+    const jy = worldJeep.rotation.y, jfx = Math.sin(jy), jfz = Math.cos(jy);
+    const dxv = a.x - worldJeep.position.x, dzv = a.z - worldJeep.position.z;
+    const lon = clamp(dxv * jfx + dzv * jfz, -2.4, 2.4);
+    const ncx = worldJeep.position.x + jfx * lon, ncz = worldJeep.position.z + jfz * lon;
+    const ddx = a.x - ncx, ddz = a.z - ncz, dc = Math.hypot(ddx, ddz);
+    const rr = 1.8 + dinoRadius(sp);            // cab half-width + the dino's body radius
+    if (dc < rr && dc > 1e-3) { const push = (rr - dc); a.x += (ddx / dc) * push; a.z += (ddz / dc) * push; }
+    else if (dc <= 1e-3) { a.x = ncx + rr; }    // degenerate: dead-centre — eject sideways
   }
   const lim = BIOME.map.size / 2 - 3; a.x = clamp(a.x, -lim, lim); a.z = clamp(a.z, -lim, lim);
   // ---- FACING with MOMENTUM (Phase 8): heavy dinos cannot snap-turn. Rotational inertia scales with
@@ -3552,15 +3571,15 @@ function animateDino(a, dt, turnSpeed, vmag2) {
       a.gaitPhase += vmag * dt * (2.6 / Math.max(0.7, legLen2));
       const sw = Math.sin(a.gaitPhase) * (0.38 + 0.22 * moveAmt) * Math.min(1, moveAmt * 3);
       legs[0].rotation.x = sw; legs[1].rotation.x = -sw;
-      a.mesh.position.y += Math.abs(Math.sin(a.gaitPhase)) * legLen2 * 0.04 * moveAmt;   // stride bob
+      a.mesh.position.y += (0.5 - 0.5 * Math.cos(a.gaitPhase * 2)) * legLen2 * 0.018 * moveAmt;   // smooth two-beat footfall bob (no cusp)
     }
     else if (body) {   // static .glb: distance-synced body gait (stride bob, footfall pitch, roll, waddle)
       const legLen = sp.greybox.standH || 2;
       a.gaitPhase += vmag * dt * (2.0 / Math.max(1, legLen));        // 2*PI ~ one full L+R stride cycle
       const ph = a.gaitPhase, amp = Math.min(1.25, vmag / (sp.move.walk || 2));
-      a.mesh.position.y += Math.abs(Math.sin(ph)) * legLen * 0.05 * amp;
-      body.rotation.x = (Math.sin(ph * 2) * 0.05 + Math.sin(ph) * 0.035) * amp;
-      body.rotation.z = Math.sin(ph) * 0.11 * amp;
+      a.mesh.position.y += (0.5 - 0.5 * Math.cos(ph * 2)) * legLen * 0.024 * amp;   // smooth footfall bob (cusped abs(sin) read as bouncing)
+      body.rotation.x = (Math.sin(ph * 2) * 0.035 + Math.sin(ph) * 0.022) * amp;
+      body.rotation.z = Math.sin(ph) * 0.065 * amp;
       body.rotation.y = (sp.modelYaw || 0) + Math.cos(ph) * 0.06 * amp;
     }
   }
@@ -3583,7 +3602,7 @@ function animateDino(a, dt, turnSpeed, vmag2) {
   // heavy-predator footfalls thud through the ground when one is close (positional)
   if (sp.combat.health >= 260 && a.lod === "full" && vmag > 0.5) {
     a.footPhase = (a.footPhase || 0) + vmag * dt;
-    if (a.footPhase > 1.5) { a.footPhase = 0; const dxp = a.x - P.x, dzp = a.z - P.z, dd = Math.hypot(dxp, dzp) || 1; if (dd < 45) { Audio.thudAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw)); fxDust(a.x, a.z, 0.5 + ((sp.greybox && sp.greybox.standH) || 2) * 0.22); } }
+    if (a.footPhase > 1.5) { a.footPhase = 0; const dxp = a.x - P.x, dzp = a.z - P.z, dd = Math.hypot(dxp, dzp) || 1; if (dd < 45) { Audio.thudAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw)); if (Math.random() < 0.45) fxDust(a.x, a.z, Math.min(1.1, 0.4 + ((sp.greybox && sp.greybox.standH) || 2) * 0.09)); } }
   }
   // ---- procedural action overlays (additive on top of the gait) ----
   const head = a.mesh.userData.head, jaw = a.mesh.userData.jaw;
@@ -3607,7 +3626,7 @@ function animateDino(a, dt, turnSpeed, vmag2) {
     }
     if (a.startle > 0) {                                // STARTLE: crouch-dip then explosive launch into the flee
       const s = a.startle / 0.45, dip = Math.sin(s * Math.PI);
-      a.mesh.position.y -= dip * ((sp.greybox && sp.greybox.standH) || 2) * 0.07;
+      a.mesh.position.y -= dip * ((sp.greybox && sp.greybox.standH) || 2) * 0.035;
       if (!a.mixer) body.rotation.x += dip * 0.18;      // coiled crouch
       headPitch -= dip * 0.4;                            // head snaps up alert
     }
@@ -3626,9 +3645,13 @@ function animateDino(a, dt, turnSpeed, vmag2) {
       headYaw += Math.sin(t * 26) * 0.22 * peak;         // side-to-side head shake at the bellow
       jawOpen = Math.max(jawOpen, 0.55 + peak * 0.55);   // wide gape, held through the peak
     } else {
-      // BREATHING — chest swell at rest, faster shallow breaths for small species (bs = base scale)
-      const brRate = clamp(4.2 - ((sp.greybox && sp.greybox.standH) || 2) * 0.45, 1.1, 3.8);
-      body.scale.setScalar(bs * (1 + Math.sin(S.t * brRate + a.gaitPhase) * (0.005 + 0.007 * (1 - moveAmt))));
+      if (body.scale.x !== bs) body.scale.setScalar(bs);   // restore after a roar chest-swell
+      // BREATHING — a subtle idle chest-pitch sway only (rotation, never scale/position: scaling the
+      // whole body lifted the feet every cycle and read as rubbery bouncing). Skipped for rigged models.
+      if (!a.mixer && moveAmt < 0.15) {
+        const brRate = clamp(3.6 - ((sp.greybox && sp.greybox.standH) || 2) * 0.4, 1.0, 3.2);
+        body.rotation.x += Math.sin(S.t * brRate + a.gaitPhase) * 0.010;
+      }
     }
     // ---- EAT / FEED — carnivore tearing at a carcass: rhythmic head-down lunges + chomp ----
     if (a.state === "Feed") {
@@ -3750,7 +3773,7 @@ function updateDying(dt) {
       if (legs && t > 0.5 && t < 1.9) { const tw = Math.sin(t * 22) * 0.35 * (1 - k); legs[0].rotation.x = tw; legs[1].rotation.x = -tw; }
       if (!d.dusted && e > 0.85) {                                   // ground impact: dust burst + felt thud nearby
         d.dusted = true;
-        fxDust(d.a.x, d.a.z, 1 + standH * 0.45);
+        fxDust(d.a.x, d.a.z, Math.min(1.5, 0.7 + standH * 0.12));
         const dxp = d.a.x - S.player.x, dzp = d.a.z - S.player.z, dd = Math.hypot(dxp, dzp) || 1;
         if (dd < 50) { camShake = Math.min(0.5, camShake + 0.22 * (1 - dd / 50)); Audio.thudAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw)); }
       }
