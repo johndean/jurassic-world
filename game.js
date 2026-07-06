@@ -13,7 +13,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-06-17-x";
+const BUILD = "2026-07-06-anim1";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -123,6 +123,7 @@ const RUINS = {
 const PLAYER_MODEL_YAW = 0;        // facing correction; flip to Math.PI if the player faces the camera
 let playerMixer = null, playerAction = null;
 const GAIT_RATE = { idle: 0, walk: 1, run: 1.9, crouch: 0.6 };  // walk-clip playback speed per gait
+let _pAnimTs = 0;   // eased clip rate — gait changes blend instead of snapping
 
 // ---- selectable expedition specialists (role = player character + a gameplay perk) ----
 // model: per-role rigged .glb (streams in; falls back to the default player model until present).
@@ -1307,12 +1308,36 @@ function inBridgeCorridor(x, z) {
   if (typeof BRIDGE === "undefined" || BRIDGE.z == null) return false;
   return Math.abs(x - BRIDGE.x) < (BRIDGE.halfW + 7) && Math.abs(z - BRIDGE.z) < (BRIDGE.halfLen + BRIDGE.rampLen + 10);
 }
+// living-world WIND: one shared clock uniform drives a GPU vertex sway on every foliage billboard.
+// Blade tips lean and flutter (weighted by local Y so roots stay planted), each instance phase-shifted
+// by its world position so the jungle ripples in waves instead of swaying as one rigid sheet.
+const _windU = { value: 0 };
+function _windify(mat, strength) {
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uWindT = _windU;
+    sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", "#include <common>\nuniform float uWindT;")
+      .replace("#include <begin_vertex>",
+        "#include <begin_vertex>\n"
+        + "#ifdef USE_INSTANCING\n"
+        + "  float wPh = instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.28;\n"
+        + "  float wW = position.y * position.y;\n"                        // tip sways, root planted
+        + "  float wGust = sin(uWindT * 0.55 + wPh * 0.12) * 0.5 + 0.5;\n" // slow travelling gust front
+        + "  float wSway = sin(uWindT * 1.7 + wPh) * (0.42 + wGust * 0.58);\n"
+        + "  float wFlut = sin(uWindT * 6.3 + wPh * 2.7) * 0.22 * wGust;\n" // fine leaf flutter
+        + ("  transformed.x += (wSway + wFlut) * wW * " + strength + ";\n")
+        + ("  transformed.z += (wSway * 0.6 - wFlut) * wW * " + strength + ";\n")
+        + "#endif\n");
+  };
+  mat.customProgramCacheKey = () => "wind" + strength;
+}
 function billboardLayer(texUrl, count, hMin, hMax, opts) {
   opts = opts || {};
   const half = BIOME.map.size / 2;
   // start INVISIBLE; only show once the texture actually decodes (a failed/loading texture must never render as a coloured box)
   const mat = new THREE.MeshStandardMaterial({ alphaTest: 0.5, transparent: true, opacity: 0, side: THREE.DoubleSide, roughness: 1, metalness: 0, color: opts.color || 0x6f8a5c, depthWrite: false });
   const tex = _texLoader.load(texUrl, t => { t.colorSpace = THREE.SRGBColorSpace; mat.map = t; mat.opacity = 1; mat.depthWrite = true; mat.needsUpdate = true; }, undefined, () => { mat.visible = false; });
+  _windify(mat, (hMax > 6 ? "0.055" : hMax > 2 ? "0.075" : "0.10"));   // tall canopy sways less than grass blades
   const a = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
   const b = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0); b.rotateY(Math.PI / 2);
   const geo = mergeGeometries([a, b]);   // X-shaped cross-quad = volume from any angle
@@ -2409,7 +2434,7 @@ function updateTraversal(dt, wx, wz, moving) {
     if (lowObstacleAhead(P, wx, wz, feetY)) { P.vy = JUMP_V * 0.8; P.air = 0.001; }
   }
   // airborne: integrate gravity over the ground
-  if (P.air > 0 || P.vy !== 0) { P.vy -= GRAV * dt; P.air += P.vy * dt; if (P.air <= 0) { P.air = 0; P.vy = 0; } }
+  if (P.air > 0 || P.vy !== 0) { P.vy -= GRAV * dt; P.air += P.vy * dt; if (P.air <= 0) { if (P.vy < -8.5) { camShake = Math.min(0.35, camShake + 0.16); fxDust(P.x, P.z, 0.6); Audio.step("run"); } P.air = 0; P.vy = 0; } }
 }
 
 /* ======================================================= player update === */
@@ -2474,7 +2499,7 @@ function updatePlayer(dt) {
     P.x += wx * speed * dt; P.z += wz * speed * dt;
     P.yaw = lerp2angle(P.yaw, Math.atan2(wx, wz));   // body faces travel
     stepPhase += speed * dt;
-    if (stepPhase > (gait === "run" ? 1.7 : 2.6)) { stepPhase = 0; Audio.step(gait); }
+    if (stepPhase > (gait === "run" ? 1.7 : 2.6)) { stepPhase = 0; Audio.step(gait); if (gait === "run" && !P.swim && Math.random() < 0.7) fxDust(P.x - wx * 0.3, P.z - wz * 0.3, 0.42); }
   } else P._moving = false;
   // vertical traversal (jump / auto-vault / mantle) — additive; does nothing while grounded & not jumping
   updateTraversal(dt, wx, wz, moving);
@@ -2906,6 +2931,22 @@ function updateKillCarcasses(dt) {
     if (g.userData.ttl <= 0) { scene.remove(g); _killCarcasses.splice(i, 1); }
   }
 }
+function fxDust(x, z, scale) {                        // soft ground dust burst (footfall / body impact)
+  const g = new THREE.Group(); const y = groundH(x, z);
+  const n = 7, puffs = [];
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.22 + Math.random() * 0.2, 6, 5),
+      new THREE.MeshBasicMaterial({ color: 0xb8ad93, transparent: true, opacity: 0.34, depthWrite: false }));
+    const a = (i / n) * Math.PI * 2 + Math.random();
+    m.position.set(Math.cos(a) * 0.3, 0.15, Math.sin(a) * 0.3);
+    m.userData.dir = { x: Math.cos(a) * (0.8 + Math.random() * 0.8), y: 0.5 + Math.random() * 0.7, z: Math.sin(a) * (0.8 + Math.random() * 0.8) };
+    g.add(m); puffs.push(m);
+  }
+  g.position.set(x, y + 0.05, z); g.scale.setScalar(scale || 1);
+  addFx(g, 0.85, t => { const k = t / 0.85;
+    for (const m of puffs) { m.position.x += m.userData.dir.x * 0.016; m.position.y += m.userData.dir.y * 0.012; m.position.z += m.userData.dir.z * 0.016; m.scale.setScalar(1 + k * 2.2); m.material.opacity = 0.34 * (1 - k); }
+  });
+}
 function fxReact(a, glyph, color) {                  // floating reaction marker over a dino (e.g. "!" recoil)
   const cv = document.createElement("canvas"); cv.width = cv.height = 64;
   const ctx = cv.getContext("2d"); ctx.font = "bold 50px ui-monospace,monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -3052,7 +3093,7 @@ function useTool() {
       hit.hp -= light ? 40 : 22;
       const kx = (hit.x - P.x), kz = (hit.z - P.z), kl = Math.hypot(kx, kz) || 1, kb = light ? 2.6 : 1.4;   // knockback
       hit.x += kx / kl * kb; hit.z += kz / kl * kb;
-      hit.bb.scared = Math.max(hit.bb.scared, 2.2); hit.bb.lastSeenX = P.x; hit.bb.lastSeenZ = P.z; hit.state = "Retreat"; hit.anim = 0.3;
+      hit.bb.scared = Math.max(hit.bb.scared, 2.2); hit.bb.lastSeenX = P.x; hit.bb.lastSeenZ = P.z; hit.state = "Retreat"; hit.flinch = 0.45;
       Audio.hit(); flash(); fxReact(hit, hit.hp <= 0 ? "✕" : "!", "#e8907a");
       if (hit.hp <= 0) { killDino(hit); toast("DOWNED · " + hit.sp.displayName); } else toast("STRUCK · " + hit.sp.displayName + (light ? " — it reels" : " — it shrugs it off"));
     }
@@ -3095,7 +3136,7 @@ function useTool() {
     a.hp -= Math.max(34, maxhp * 0.42);
     const kx = (a.x - P.x), kz = (a.z - P.z), kl = Math.hypot(kx, kz) || 1;
     a.x += kx / kl * 1.2; a.z += kz / kl * 1.2;                // hit knockback
-    a.bb.scared = Math.max(a.bb.scared, 8); a.bb.lastSeenX = P.x; a.bb.lastSeenZ = P.z; a.state = "Retreat"; a.anim = 0.3;
+    a.bb.scared = Math.max(a.bb.scared, 8); a.bb.lastSeenX = P.x; a.bb.lastSeenZ = P.z; a.state = "Retreat"; a.flinch = 0.45;
     if (a.hp <= 0) { killDino(a); S.kills = (S.kills||0)+1; fxReact(a, "✕", "#e8907a"); toast("DOWN · " + a.sp.displayName); }
     else { fxReact(a, "!", "#e8907a"); toast("HIT · " + a.sp.displayName + " — it breaks and runs"); }
     return;
@@ -3485,17 +3526,34 @@ function animateDino(a, dt, turnSpeed, vmag2) {
   a.mesh.rotation.x = 0;   // (terrain tilt removed — it lifted long dinos' far feet off the ground & foreshortened them)
   a.anim = Math.max(0, a.anim - dt);
   if (a.roar > 0) a.roar = Math.max(0, a.roar - dt);
+  if (a.flinch > 0) a.flinch = Math.max(0, a.flinch - dt);
+  // STARTLE: a calm dino that suddenly breaks into flight does a crouch-and-launch pop first
+  if (a._pState !== a.state) {
+    const calm = a._pState === "Patrol" || a._pState === "Graze" || a._pState === "Rest" || a._pState === "Drink";
+    if (calm && (a.state === "Flee" || a.state === "Retreat")) a.startle = 0.45;
+    a._pState = a.state;
+  }
+  if (a.startle > 0) a.startle = Math.max(0, a.startle - dt);
   const vmag = Math.hypot(a.vx, a.vz);
   const run = a.state === "Chase" || a.state === "Attack" || a.state === "Flee" || a.state === "Retreat";
   const moveAmt = Math.min(1, vmag / sp.move.run);
   const body = a.mesh.children[0];
   // ---- base locomotion ----
   if (a.mixer) {   // rigged model (T-Rex): baked walk clip, cadence scaled by speed (frozen when idle)
-    a.walkAction.timeScale = moveAmt < 0.04 ? 0 : (0.5 + 1.7 * moveAmt);
+    const tgtTs = moveAmt < 0.04 ? 0 : (0.5 + 1.7 * moveAmt);
+    a._ts = lerp(a._ts == null ? tgtTs : a._ts, tgtTs, Math.min(1, dt * 6));   // eased gait blend — no snap between idle/walk/run
+    a.walkAction.timeScale = a._ts;
     a.mixer.update(dt);
   } else {
     const legs = a.mesh.userData.legs;
-    if (legs) { const sw = Math.sin(S.t * (run ? 16 : 8) + a.x) * 0.5 * moveAmt; legs[0].rotation.x = sw; legs[1].rotation.x = -sw; }
+    if (legs) {
+      // distance-synced leg swing: stride phase advances with metres travelled, so feet never skate
+      const legLen2 = sp.greybox.standH || 2;
+      a.gaitPhase += vmag * dt * (2.6 / Math.max(0.7, legLen2));
+      const sw = Math.sin(a.gaitPhase) * (0.38 + 0.22 * moveAmt) * Math.min(1, moveAmt * 3);
+      legs[0].rotation.x = sw; legs[1].rotation.x = -sw;
+      a.mesh.position.y += Math.abs(Math.sin(a.gaitPhase)) * legLen2 * 0.04 * moveAmt;   // stride bob
+    }
     else if (body) {   // static .glb: distance-synced body gait (stride bob, footfall pitch, roll, waddle)
       const legLen = sp.greybox.standH || 2;
       a.gaitPhase += vmag * dt * (2.0 / Math.max(1, legLen));        // 2*PI ~ one full L+R stride cycle
@@ -3525,7 +3583,7 @@ function animateDino(a, dt, turnSpeed, vmag2) {
   // heavy-predator footfalls thud through the ground when one is close (positional)
   if (sp.combat.health >= 260 && a.lod === "full" && vmag > 0.5) {
     a.footPhase = (a.footPhase || 0) + vmag * dt;
-    if (a.footPhase > 1.5) { a.footPhase = 0; const dxp = a.x - P.x, dzp = a.z - P.z, dd = Math.hypot(dxp, dzp) || 1; if (dd < 45) Audio.thudAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw)); }
+    if (a.footPhase > 1.5) { a.footPhase = 0; const dxp = a.x - P.x, dzp = a.z - P.z, dd = Math.hypot(dxp, dzp) || 1; if (dd < 45) { Audio.thudAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw)); fxDust(a.x, a.z, 0.5 + ((sp.greybox && sp.greybox.standH) || 2) * 0.22); } }
   }
   // ---- procedural action overlays (additive on top of the gait) ----
   const head = a.mesh.userData.head, jaw = a.mesh.userData.jaw;
@@ -3538,6 +3596,20 @@ function animateDino(a, dt, turnSpeed, vmag2) {
       a.mesh.position.z += Math.cos(a.yaw) * snap * 0.5;
       headPitch += snap * 0.5;                           // head drives DOWN into the bite
       jawOpen = Math.max(jawOpen, 0.7);
+    }
+    if (a.flinch > 0) {                                 // HIT FLINCH: recoil back + pained head-toss (not a bite lunge)
+      const f = Math.sin((a.flinch / 0.45) * Math.PI);
+      if (!a.mixer) { body.rotation.x -= f * 0.28; body.rotation.z += Math.sin(a.flinch * 40) * 0.06 * f; }
+      a.mesh.position.x -= Math.sin(a.yaw) * f * 0.25;   // shoved back off the hit
+      a.mesh.position.z -= Math.cos(a.yaw) * f * 0.25;
+      headPitch -= f * 0.35; headYaw += Math.sin(a.flinch * 34) * 0.3 * f;   // pained head-toss
+      jawOpen = Math.max(jawOpen, f * 0.5);
+    }
+    if (a.startle > 0) {                                // STARTLE: crouch-dip then explosive launch into the flee
+      const s = a.startle / 0.45, dip = Math.sin(s * Math.PI);
+      a.mesh.position.y -= dip * ((sp.greybox && sp.greybox.standH) || 2) * 0.07;
+      if (!a.mixer) body.rotation.x += dip * 0.18;      // coiled crouch
+      headPitch -= dip * 0.4;                            // head snaps up alert
     }
     if (body.userData._baseScale == null) body.userData._baseScale = body.scale.x || 1;
     const bs = body.userData._baseScale;
@@ -3553,7 +3625,11 @@ function animateDino(a, dt, turnSpeed, vmag2) {
       headPitch -= env * 0.85;                           // head/neck rears UP (negative = up)
       headYaw += Math.sin(t * 26) * 0.22 * peak;         // side-to-side head shake at the bellow
       jawOpen = Math.max(jawOpen, 0.55 + peak * 0.55);   // wide gape, held through the peak
-    } else if (body.scale.x !== bs) body.scale.setScalar(bs);
+    } else {
+      // BREATHING — chest swell at rest, faster shallow breaths for small species (bs = base scale)
+      const brRate = clamp(4.2 - ((sp.greybox && sp.greybox.standH) || 2) * 0.45, 1.1, 3.8);
+      body.scale.setScalar(bs * (1 + Math.sin(S.t * brRate + a.gaitPhase) * (0.005 + 0.007 * (1 - moveAmt))));
+    }
     // ---- EAT / FEED — carnivore tearing at a carcass: rhythmic head-down lunges + chomp ----
     if (a.state === "Feed") {
       a.eatPhase += dt * 5.2;                            // tearing cadence
@@ -3650,7 +3726,40 @@ function updateDinos(dt, P) {
     if (a.hp <= 0) killDino(a);
   }
 }
-function killDino(a) { a.alive = false; scene.remove(a.mesh); }
+// ---- AAA death sequence: stagger -> heavy side topple w/ settle bounce -> impact dust + felt thud -> linger -> sink ----
+const _dying = [];
+function killDino(a) {
+  if (!a.alive) return;
+  a.alive = false;
+  if (a.walkAction) a.walkAction.timeScale = 0;                      // freeze the rigged walk clip mid-stride
+  _dying.push({ a, t: 0, side: Math.random() < 0.5 ? 1 : -1, y0: a.mesh.position.y, dusted: false });
+}
+function updateDying(dt) {
+  for (let i = _dying.length - 1; i >= 0; i--) {
+    const d = _dying[i], m = d.a.mesh; d.t += dt; const t = d.t;
+    const standH = (d.a.sp.greybox && d.a.sp.greybox.standH) || 2;
+    if (t < 2.0) {
+      // stagger (0-0.35s rear-up) then the legs give out: ease-out side collapse with a settle bounce
+      const k = clamp((t - 0.35) / 1.0, 0, 1);
+      const e = 1 - Math.pow(1 - k, 3);
+      const bounce = t > 1.35 ? Math.max(0, Math.sin(clamp((t - 1.35) / 0.65, 0, 1) * Math.PI)) * 0.06 : 0;
+      m.rotation.z = d.side * (e * (Math.PI / 2 - 0.12) - bounce);
+      m.rotation.x = Math.sin(clamp(t / 0.35, 0, 1) * Math.PI) * 0.18;
+      m.position.y = d.y0 - e * standH * 0.30;
+      const legs = m.userData.legs;                                  // dying leg kicks fade as it settles
+      if (legs && t > 0.5 && t < 1.9) { const tw = Math.sin(t * 22) * 0.35 * (1 - k); legs[0].rotation.x = tw; legs[1].rotation.x = -tw; }
+      if (!d.dusted && e > 0.85) {                                   // ground impact: dust burst + felt thud nearby
+        d.dusted = true;
+        fxDust(d.a.x, d.a.z, 1 + standH * 0.45);
+        const dxp = d.a.x - S.player.x, dzp = d.a.z - S.player.z, dd = Math.hypot(dxp, dzp) || 1;
+        if (dd < 50) { camShake = Math.min(0.5, camShake + 0.22 * (1 - dd / 50)); Audio.thudAt(dd, (dxp / dd) * Math.cos(cam.yaw) - (dzp / dd) * Math.sin(cam.yaw)); }
+      }
+    } else if (t > 11) {                                             // the kill lingers, then sinks away
+      m.position.y = d.y0 - standH * 0.30 - (t - 11) * 0.9;
+      if (t > 14) { scene.remove(m); _dying.splice(i, 1); }
+    }
+  }
+}
 function dinoBodyR(a) {   // collision push-out radius: length-scaled, but never thinner than the actual body width (P-07)
   const byLen = (a.sp.size && a.sp.size.lengthM || 4) * 0.1, gb = a.sp.greybox, byWidth = gb && gb.bodyW ? gb.bodyW * 0.5 : 0;
   return clamp(Math.max(byLen, byWidth), 0.4, 2.0);
@@ -5269,7 +5378,8 @@ function skipIntro() {
 function startRun() {
   clearCanisters(); pickedCanisters = 0;
   // reset
-  for (const d of dinos) scene.remove(d.mesh); dinos = []; dinosByNetId.clear(); _netDinoId = 0;   // P-09: recycle net-ids each run so they don't grow unbounded across replays
+  for (const d of dinos) scene.remove(d.mesh); dinos = []; dinosByNetId.clear(); _netDinoId = 0;
+  for (const d of _dying) scene.remove(d.a.mesh); _dying.length = 0;   // P-09: recycle net-ids each run so they don't grow unbounded across replays
   if (worldJeep) { scene.remove(worldJeep); worldJeep = null; }   // clear last run's drivable jeep
   clearRemotes(); clearEvac(); clearFx(); clearAirdrop(); clearWreck(); clearField(); clearIntroProp(); clearMissionSites(); clearBoss(); preloadRadio();
   decoy.t = 0; selTool = 0; TOOLS.forEach(t => { t.charges = t.max; t.cd = 0; if (t.id === 'rifle') { t.mag = t.magMax; t.reserve = t.totalMax - t.magMax; t.reloadT = 0; } });   // fresh kit each run
@@ -5946,8 +6056,11 @@ function updateCamera() {
   if (aimMode()) {   // tranq/sample SCOPE — first person from the operative's eyes; look to aim the reticle, then FIRE
     if (playerMesh) playerMesh.visible = false;
     const ey = (P.eyeY != null ? P.eyeY : playerFloorY(P.x, P.z)) + 1.55, cpb = Math.cos(cam.pitch);
+    // scoped breathing sway — a slow figure-8 drift (bigger when winded, calms as stamina recovers)
+    const swAmp = 0.010 + (1 - P.stamina / 100) * 0.022 + P.fear * 0.012;
+    const swYaw = Math.sin(S.t * 1.5) * swAmp, swPit = Math.sin(S.t * 3.1 + 1.2) * swAmp * 0.7;
     camera.position.set(P.x + Math.sin(cam.yaw) * 0.15, ey, P.z + Math.cos(cam.yaw) * 0.15);
-    camera.lookAt(P.x + Math.sin(cam.yaw) * cpb * 12, ey + Math.sin(cam.pitch) * 12, P.z + Math.cos(cam.yaw) * cpb * 12);
+    camera.lookAt(P.x + Math.sin(cam.yaw + swYaw) * cpb * 12, ey + Math.sin(cam.pitch + swPit) * 12, P.z + Math.cos(cam.yaw + swYaw) * cpb * 12);
     if (beaconRing) beaconRing.rotation.z += (S.extraction.called ? 0.08 : 0.02);
     return;
   }
@@ -5992,9 +6105,16 @@ function updateCamera() {
   const ghCam = (P.onTower ? P.onTower.platformY : groundH(cx, cz)) + 1.3;
   const ghMid = groundH(midX, midZ) + 1.3;
   const gh = Math.max(ghCam, ghMid, WATER_Y + 1.2); if (cy < gh) cy = gh;
+  // camera micro-bob synced to the stride — the follow cam breathes with the run instead of gliding
+  if (P._moving && !P.swim && S.phase === "playing") cy += Math.sin(S.t * (P.gait === "run" ? 11 : 6.5)) * (P.gait === "run" ? 0.05 : 0.022);
   if (camShake > 0) { cx += (Math.random() - 0.5) * camShake; cy += (Math.random() - 0.5) * camShake; cz += (Math.random() - 0.5) * camShake; camShake = Math.max(0, camShake - 0.045); }
   camera.position.set(cx, cy, cz);
   camera.lookAt(tx, ty, tz);
+  // sprint FOV kick — the frame widens as you run (speed sensation), eases back at a walk
+  if (!binoc) {
+    const wantFov = DEFAULT_FOV + (P.gait === "run" && P._moving ? 5.5 : 0);
+    if (Math.abs(camera.fov - wantFov) > 0.02) { camera.fov = lerp(camera.fov, wantFov, 0.08); camera.updateProjectionMatrix(); }
+  }
   // beacon spin + glow pulse
   if (beaconRing) beaconRing.rotation.z += (S.extraction.called ? 0.08 : 0.02);
   if (beaconGlow) { const s = 1 + Math.sin(S.t * 4) * (S.extraction.called ? 0.4 : 0.15); beaconGlow.scale.setScalar(s); }
@@ -6040,9 +6160,10 @@ function frame(now) {
   if (_diagAcc > 1) { _diagAcc = 0; try { diagSizes(); } catch (e) {} }
   // toast fade
   if (toastTimer > 0) { toastTimer -= dtMs / 1000; if (toastTimer <= 0) $("toast").style.opacity = "0"; }
-  if (playerMixer) { playerAction.timeScale = GAIT_RATE[S.player.gait] ?? 1; playerMixer.update(dtMs / 1000); }
+  if (playerMixer) { _pAnimTs = lerp(_pAnimTs, GAIT_RATE[S.player.gait] ?? 1, Math.min(1, (dtMs / 1000) * 8)); playerAction.timeScale = _pAnimTs; playerMixer.update(dtMs / 1000); }
   updateCineUniforms(now);   // TRACK A
   if (S.phase === "playing") updateMist(Math.min(0.05, dtMs / 1000), now);   // TRACK A
+  _windU.value = now * 0.001;   // wind clock — foliage sway runs whenever the world is visible
   composer.render();
   if (dev) {
     devFrames++; if (now - devAt >= 500) { devFps = Math.round(devFrames * 1000 / (now - devAt)); devFrames = 0; devAt = now; }
@@ -6070,6 +6191,7 @@ function simulate(dt) {
   updateMission(dt);
   updateAction(dt);
   updateFx(dt);
+  updateDying(dt);
   updateAirdrop(dt);
   if (wreckMesh) updateWreck(dt);
   Audio.tickHeartbeat(dt, S.player.fear);
@@ -6144,7 +6266,7 @@ function updateRemotes(dt) {
     let dy = r.tyaw - r.group.rotation.y; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
     r.group.rotation.y += dy * k;
     r.group.rotation.x = r.gait === "run" ? 0.16 : (r.gait === "crouch" ? 0.22 : 0);
-    if (r.action) r.action.timeScale = r.gait === "idle" ? 0 : (GAIT_RATE[r.gait] ?? 1);
+    if (r.action) { const rt = r.gait === "idle" ? 0 : (GAIT_RATE[r.gait] ?? 1); r._ts = lerp(r._ts == null ? rt : r._ts, rt, 0.12); r.action.timeScale = r._ts; }
     if (r.mixer) r.mixer.update(dt);
   }
 }
