@@ -13,7 +13,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-07-06-intro4";
+const BUILD = "2026-07-06-intro5";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -4010,6 +4010,7 @@ function startEvac() {
   let landY = groundH(lx, lz);
   const heli = buildHeli();
   heli.group.position.set(lx + 50, landY + 120, lz + 50);   // enters high + far
+  { const h = measureHull(heli.group); addPilots(heli.group, h.halfW, h.floorY, h.noseZ); }   // visible flight crew — the pickup bird must not fly itself
   heli.group.rotation.y = Math.atan2(bx - lx, bz - lz);      // nose roughly toward the pad
   evac = { phase: "incoming", t: 0, heli, hx: bx, hz: bz, lx, lz, groundY: landY, hoverY: landY + 14, done: false };
 }
@@ -4390,15 +4391,39 @@ function makeTrooper(color) {
   }
   return g;
 }
-function buildRiders(group) {                             // squad seated INSIDE the cabin (within the fuselage volume)
-  const n = Math.min(5, Net.on ? (remotePlayers.size + 1) : 1);
-  const colors = [0x5a6b3f, 0x4a5236, 0x6b6f4a, 0x47513f, 0x595b40];
-  for (let i = 0; i < n; i++) {
-    const t = makeTrooper(colors[i % colors.length]);
-    const x = n === 1 ? -0.3 : -1.0 + (i / (n - 1)) * 1.5;   // cabin row, well within the body
-    t.position.set(x, 1.3, (i % 2 ? 0.32 : -0.32)); t.scale.setScalar(0.82); group.add(t);
+// Crew must be VISIBLE from the chase camera: the streamed helicopter GLB is ONE opaque mesh,
+// so figures placed inside the fuselage volume are invisible (that read as "no pilot, no squad").
+// Fix: measure the real hull (children[0] — NOT the group, the rotor blur disc inflates the box)
+// and seat the squad IN THE OPEN SIDE DOORWAYS, legs hanging out — the classic Huey door-ride,
+// readable from any exterior angle. Pilot + co-pilot sit high at the canopy line up front.
+function addPilots(group, halfW, floorY, noseZ) {
+  for (const sx of [-1, 1]) {
+    const p = makeTrooper(0x3a3f30);
+    p.position.set(sx * Math.min(0.36, halfW * 0.4), floorY + 0.16, noseZ * 0.42);
+    p.scale.setScalar(0.92); group.add(p);
   }
-  const pilot = makeTrooper(0x3a3f30); pilot.position.set(1.15, 1.35, 0); pilot.scale.setScalar(0.82); group.add(pilot);   // cockpit
+}
+function measureHull(group) {
+  const body = group.children[0] || group;
+  const bb = new THREE.Box3().setFromObject(body);
+  return { halfW: clamp((bb.max.x - bb.min.x) * 0.5 * 0.92, 0.8, 1.7),
+           floorY: bb.min.y + (bb.max.y - bb.min.y) * 0.32,
+           noseZ: bb.max.z, tailZ: bb.min.z };
+}
+function buildRiders(group) {
+  const h = measureHull(group);
+  const cz = (h.noseZ + h.tailZ) / 2;                       // cabin midline (aft of the cockpit)
+  const n = Math.min(4, Math.max(2, Net.on ? (remotePlayers.size + 1) : 2));   // squad always reads crewed
+  const colors = [0x5a6b3f, 0x4a5236, 0x6b6f4a, 0x47513f];
+  // door seats: alternate sides, spaced along the cabin, facing OUT, boots hanging past the sill
+  const seats = [[1, cz - 0.15], [-1, cz - 0.85], [1, cz - 1.45], [-1, cz + 0.45]];
+  for (let i = 0; i < n; i++) {
+    const s = seats[i], t = makeTrooper(colors[i % colors.length]);
+    t.position.set(s[0] * (h.halfW + 0.05), h.floorY, s[1]);
+    t.rotation.y = s[0] * Math.PI / 2;                      // face outward through the open door
+    t.scale.setScalar(0.95); group.add(t);
+  }
+  addPilots(group, h.halfW, h.floorY, h.noseZ);
 }
 function upgradeIntroHeli() {                             // swap the boxy fallback for the realistic Huey the instant it loads
   if (!intro || intro.crashed || !intro.heli || intro.heli.real || !MODELS[HELI_MODEL]) return;
