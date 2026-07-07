@@ -13,7 +13,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-07-06-intro1";
+const BUILD = "2026-07-06-intro3";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -4105,6 +4105,47 @@ function vehFrame(g, dt) {   // +x = vehicle forward after rotation.y; returns s
   u._sm.wx = lerp(u._sm.wx, wx, k); u._sm.wz = lerp(u._sm.wz, wz, k);
   return u._sm;
 }
+/* Real helicopter visual flight model — nose = local +Z (the convention the game's own evac
+   chopper uses: rotation.y = atan2(dx,dz)). Owns the group's full rotation each frame.
+   Signatures of real rotorcraft it reproduces: heading lags travel (heavy yaw inertia);
+   nose-down proportional to speed + acceleration; FLARE (nose-up) when decelerating;
+   coordinated bank into turns; critically-damped attitude (no wobble); fine turbulence. */
+function heliAttitude(g, dt, grounded) {
+  const u = g.userData; const idt = Math.max(dt, 1e-4);
+  if (!u._fm) u._fm = { yaw: g.rotation.y, pitch: 0, roll: 0, pp: g.position.clone(), vx: 0, vz: 0, fV: 0, yr: 0, t: Math.random() * 20 };
+  const m = u._fm; m.t += dt;
+  const wvx = (g.position.x - m.pp.x) / idt, wvz = (g.position.z - m.pp.z) / idt;
+  m.pp.copy(g.position);
+  const kv = Math.min(1, dt * 2.5);
+  m.vx = lerp(m.vx, wvx, kv); m.vz = lerp(m.vz, wvz, kv);
+  const spd = Math.hypot(m.vx, m.vz);
+  if (grounded) {   // on the skids: settle level, keep heading
+    m.pitch = lerp(m.pitch, 0, Math.min(1, dt * 2.5));
+    m.roll = lerp(m.roll, 0, Math.min(1, dt * 2.5));
+    g.rotation.set(m.pitch, m.yaw, m.roll);
+    return;
+  }
+  // heading: ease toward travel direction — a 4-tonne airframe swings slowly, never snaps
+  const prevYaw = m.yaw;
+  if (spd > 1.2) m.yaw = lerp2angle(m.yaw, Math.atan2(m.vx, m.vz), Math.min(1, dt * 0.85));
+  const yr = (((m.yaw - prevYaw + Math.PI) % (Math.PI * 2)) - Math.PI) / idt;
+  m.yr = lerp(m.yr, yr, Math.min(1, dt * 4));
+  // local-frame speeds (+Z forward, +X right)
+  const sf = Math.sin(m.yaw), cf = Math.cos(m.yaw);
+  const fV = m.vx * sf + m.vz * cf;
+  const lV = m.vx * cf - m.vz * sf;
+  const fA = clamp((fV - m.fV) / idt, -10, 10); m.fV = lerp(m.fV, fV, kv);
+  // attitude targets: cruise nose-down ~ up to 12 deg, flare on decel; coordinated bank into the turn
+  const tgtPitch = clamp(fV * 0.012 + fA * 0.028, -0.20, 0.21);
+  const tgtRoll  = clamp(-m.yr * Math.min(spd, 16) * 0.055 - lV * 0.016, -0.30, 0.30);
+  m.pitch = lerp(m.pitch, tgtPitch, Math.min(1, dt * 1.6));
+  m.roll  = lerp(m.roll,  tgtRoll,  Math.min(1, dt * 1.6));
+  // fine turbulence (smooth, tiny) + rotor-beat heave
+  const nP = Math.sin(m.t * 1.9) * 0.008 + Math.sin(m.t * 5.3) * 0.004;
+  const nR = Math.sin(m.t * 1.4 + 2) * 0.010 + Math.sin(m.t * 4.1 + 1) * 0.005;
+  g.rotation.set(m.pitch + nP, m.yaw, m.roll + nR);
+  g.position.y += Math.sin(m.t * 4.7) * 0.012;
+}
 let worldJeep = null;   // the drivable ranger jeep parked in-world (every mission gets one near the player)
 function clearIntroProp() { if (introProp) { scene.remove(introProp); introProp = null; } for (const e of introExtra) scene.remove(e); introExtra = []; }   // parked intro vehicle + props (jeep/boat/dock) left in-world
 function coopSpread(bx, bz) {   // fan co-op players out from a shared hand-off point so they don't stack on each other
@@ -4381,6 +4422,7 @@ function startIntroCrash() {
   const wx = 6, wz = 4;
   Audio.rotor(true);
   const heli = buildHeli(); heli.group.position.set(60, 150, 120);
+  heli.group.rotation.y = Math.atan2(-6 - 60, -30 - 120);   // enter NOSE-FIRST toward the first waypoint (+Z convention)
   buildRiders(heli.group);                                // the squad rides in the open door
   intro = { kind: "crash", t: 0, phase: "flight", heli, line: -1, shake: 0, crashed: false, camActive: true, wx, wz };
   if (playerMesh) playerMesh.visible = false;
@@ -4412,18 +4454,20 @@ function updateIntroCrash(dt) {
     if (e.say || e.clip) { Audio.squelch(); playRadio(e); }    // actual spoken radio / mayday
   }
   if (g && !intro.crashed && intro.heli.rotor) { intro.heli.rotor.rotation.y += dt * 30; if (intro.heli.tailRotor) intro.heli.tailRotor.rotation.x += dt * 60; }
-  // AAA flight feel: the heli flies NOSE-FIRST (yaw eases to travel dir), pitches down with speed,
-  // banks into lateral drift, rides a rotor-beat bob; tail-rotor loss = accelerating flat spin.
+  // Real flight model (nose=+Z): heading lags travel, nose-down with speed, flare on decel,
+  // coordinated banked turns. Trouble phase adds growing instability; tail loss = flat spin.
   if (g && !intro.crashed) {
     if (intro.phase === "spin") {
+      // tail-rotor gone: torque spins the fuselage flat while it wallows and drops
       g.rotation.y += dt * Math.min(6, (T - 14) * 0.9);
       g.rotation.z = Math.sin(T * 6.1) * 0.22; g.rotation.x = Math.sin(T * 4.3 + 1) * 0.18;
+      if (g.userData._fm) g.userData._fm.yaw = g.rotation.y;   // hand the spin heading back to the model
     } else {
-      const fr = vehFrame(g, dt), spd = Math.hypot(fr.wx, fr.wz), wob = intro.shake || 0;
-      if (spd > 1.2) g.rotation.y = lerp2angle(g.rotation.y, Math.atan2(-fr.wz, fr.wx), Math.min(1, dt * 1.1));
-      g.rotation.z = clamp(-fr.fV * 0.02, -0.17, 0.10) + Math.sin(T * 0.8) * 0.02 + Math.sin(T * 7.3) * wob * 0.28;
-      g.rotation.x = clamp(fr.lV * 0.018, -0.15, 0.15) + Math.sin(T * 1.13) * 0.015 + Math.sin(T * 8.7) * wob * 0.22;
-      g.position.y += Math.sin(T * 4.6) * 0.014;
+      heliAttitude(g, dt, false);
+      if (intro.phase === "trouble" || intro.phase === "wrong") {   // mechanical distress: growing judder
+        const w = intro.phase === "wrong" ? 1 : 0.4;
+        g.rotation.z += Math.sin(T * 9.3) * 0.05 * w; g.rotation.x += Math.sin(T * 11.1) * 0.035 * w;
+      }
     }
   }
 
@@ -4518,6 +4562,7 @@ function startIntroResearch() {
   const lx = 6, lz = 4;                                   // landing zone; player stands at origin on hand-off
   Audio.rotor(true);
   const heli = buildHeli(); heli.group.position.set(86, 128, 150);
+  heli.group.rotation.y = Math.atan2(24 - 86, 44 - 150);   // enter NOSE-FIRST toward the approach waypoint
   buildRiders(heli.group);
   intro = { kind: "research", t: 0, phase: "approach", heli, line: -1, shake: 0, crashed: false, camActive: true, wx: lx, wz: lz, landed: false };
   if (playerMesh) playerMesh.visible = false;
@@ -4539,16 +4584,11 @@ function updateIntroResearch(dt) {
     if (e.say || e.clip) { Audio.squelch(); playRadio(e); }
   }
   if (g && intro.heli.rotor) { intro._rs = lerp(intro._rs == null ? 30 : intro._rs, intro.landed ? 5 : 30, Math.min(1, dt * 1.4)); intro.heli.rotor.rotation.y += dt * intro._rs; if (intro.heli.tailRotor) intro.heli.tailRotor.rotation.x += dt * intro._rs * 2; }
-  if (g && !intro.landed) {
-    // nose-first flight, speed-coupled attitude, hover bob, and rotor wash kicking up the LZ
-    const fr = vehFrame(g, dt), spd = Math.hypot(fr.wx, fr.wz);
-    if (spd > 1.0) g.rotation.y = lerp2angle(g.rotation.y, Math.atan2(-fr.wz, fr.wx), Math.min(1, dt * 1.2));
-    g.rotation.z = clamp(-fr.fV * 0.024, -0.15, 0.10) + Math.sin(T * 0.9) * 0.018;
-    g.rotation.x = clamp(fr.lV * 0.02, -0.13, 0.13) + Math.sin(T * 1.2) * 0.014;
-    g.position.y += Math.sin(T * 4.4) * 0.012;
+  if (g) {
+    heliAttitude(g, dt, intro.landed);   // real flight model; settles level on the skids
     const agl = g.position.y - groundH(g.position.x, g.position.z);
-    if (agl < 12 && Math.random() < dt * 7) fxDust(g.position.x + rand(-4, 4), g.position.z + rand(-4, 4), 1.1);
-  } else if (g) { g.rotation.z = lerp(g.rotation.z || 0, 0, Math.min(1, dt * 3)); g.rotation.x = lerp(g.rotation.x || 0, 0, Math.min(1, dt * 3)); }
+    if (!intro.landed && agl < 12 && Math.random() < dt * 7) fxDust(g.position.x + rand(-4, 4), g.position.z + rand(-4, 4), 1.1);   // rotor wash on the LZ
+  }
 
   if (T < 6) {                            // 1 · banking approach over the ruined labs (golden hour)
     intro.phase = "approach"; intro.shake = 0.05;
