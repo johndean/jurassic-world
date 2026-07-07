@@ -13,7 +13,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-07-06-anim3";
+const BUILD = "2026-07-06-intro1";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -4056,6 +4056,55 @@ function clearEvac() { if (evac) { scene.remove(evac.heli.group); if (evac.rope)
  * mission update -> jungle silence + distant roar -> hand control to the player.
  * Skippable; auto-skips on later runs in the same session (you've seen it). */
 let intro = null, wreckMesh = null, introSeen = false, introProp = null, introExtra = [], introPersist = [];
+
+/* ── AAA cinematic rig (shared by every intro) ────────────────────────────────
+   cineCam: eased camera position AND eased look-target (raw lookAt at a stepping
+   vehicle = micro-jerks) + layered-sine handheld drift (Math.random jitter reads
+   as glitchy vibration, never as a held camera).
+   vehFrame: local-frame velocity/accel of an intro vehicle so attitude (banking,
+   nose pitch) can couple to real motion instead of being static.
+   setLetterbox: 2.35:1 cinematic bars during intros. ── */
+let _cineP = new THREE.Vector3(), _cineT = new THREE.Vector3(), _cineOn = false, _cineSeed = 7.3;
+const _cineT2 = new THREE.Vector3();
+function cineReset() { _cineOn = false; _cineSeed = Math.random() * 90; }
+function cineNoise(t, amp) {   // layered sines: slow sway + mid drift + micro tremor
+  const s = _cineSeed;
+  return { x: (Math.sin(t * 0.9 + s) * 0.55 + Math.sin(t * 2.3 + s * 2.1) * 0.28 + Math.sin(t * 5.1 + s * 3.2) * 0.13) * amp,
+           y: (Math.sin(t * 1.2 + s * 1.7) * 0.45 + Math.sin(t * 3.1 + s * 2.3) * 0.22 + Math.sin(t * 6.7 + s) * 0.10) * amp,
+           z: (Math.sin(t * 0.7 + s * 2.9) * 0.50 + Math.sin(t * 2.9 + s * 1.3) * 0.20) * amp };
+}
+function cineCam(px, py, pz, tx, ty, tz, posK, tgtK) {
+  if (!_cineOn) { _cineOn = true; _cineP.set(px, py, pz); _cineT.set(tx, ty, tz); }
+  _cineP.lerp(tmp.set(px, py, pz), posK == null ? 0.055 : posK);
+  _cineT.lerp(_cineT2.set(tx, ty, tz), tgtK == null ? 0.085 : tgtK);
+  const n = cineNoise(intro ? intro.t : S.t, Math.max(0.02, (intro && intro.shake) || 0) * 2.0);
+  camera.position.set(_cineP.x + n.x, _cineP.y + n.y, _cineP.z + n.z * 0.6);
+  camera.lookAt(_cineT.x + n.x * 0.4, _cineT.y + n.y * 0.35, _cineT.z);
+}
+let _lbTop = null, _lbBot = null;
+function setLetterbox(on) {
+  if (!_lbTop) {
+    const mk = pos => { const d = document.createElement("div"); d.style.cssText = "position:fixed;left:0;right:0;height:0;background:#000;z-index:71;transition:height 1.2s cubic-bezier(.4,0,.2,1);pointer-events:none;" + pos; document.body.appendChild(d); return d; };
+    _lbTop = mk("top:0;"); _lbBot = mk("bottom:0;");
+  }
+  _lbTop.style.height = _lbBot.style.height = on ? "7vh" : "0px";
+}
+function vehFrame(g, dt) {   // +x = vehicle forward after rotation.y; returns smoothed {fV,lV,fA,lA,wx,wz}
+  const u = g.userData;
+  if (!u._pp) { u._pp = g.position.clone(); u._pv = { f: 0, l: 0 }; u._sm = { fV: 0, lV: 0, fA: 0, lA: 0, wx: 0, wz: 0 }; }
+  const idt = Math.max(dt, 1e-4);
+  const wx = (g.position.x - u._pp.x) / idt, wz = (g.position.z - u._pp.z) / idt;
+  u._pp.copy(g.position);
+  const cf = Math.cos(g.rotation.y), sf = Math.sin(g.rotation.y);
+  const fV = wx * cf - wz * sf, lV = wx * sf + wz * cf;
+  const fA = clamp((fV - u._pv.f) / idt, -30, 30), lA = clamp((lV - u._pv.l) / idt, -30, 30);
+  u._pv.f = fV; u._pv.l = lV;
+  const k = Math.min(1, dt * 3);
+  u._sm.fV = lerp(u._sm.fV, fV, k); u._sm.lV = lerp(u._sm.lV, lV, k);
+  u._sm.fA = lerp(u._sm.fA, fA, k); u._sm.lA = lerp(u._sm.lA, lA, k);
+  u._sm.wx = lerp(u._sm.wx, wx, k); u._sm.wz = lerp(u._sm.wz, wz, k);
+  return u._sm;
+}
 let worldJeep = null;   // the drivable ranger jeep parked in-world (every mission gets one near the player)
 function clearIntroProp() { if (introProp) { scene.remove(introProp); introProp = null; } for (const e of introExtra) scene.remove(e); introExtra = []; }   // parked intro vehicle + props (jeep/boat/dock) left in-world
 function coopSpread(bx, bz) {   // fan co-op players out from a shared hand-off point so they don't stack on each other
@@ -4318,6 +4367,7 @@ function upgradeIntroHeli() {                             // swap the boxy fallb
   buildRiders(heli.group); intro.heli = heli;
 }
 function startIntro() {                                   // dispatch to the active mission's insertion cinematic
+  cineReset(); setLetterbox(true);
   const k = introKind();
   if (k === "research") return startIntroResearch();
   if (k === "jeep") return startIntroJeep();
@@ -4362,6 +4412,20 @@ function updateIntroCrash(dt) {
     if (e.say || e.clip) { Audio.squelch(); playRadio(e); }    // actual spoken radio / mayday
   }
   if (g && !intro.crashed && intro.heli.rotor) { intro.heli.rotor.rotation.y += dt * 30; if (intro.heli.tailRotor) intro.heli.tailRotor.rotation.x += dt * 60; }
+  // AAA flight feel: the heli flies NOSE-FIRST (yaw eases to travel dir), pitches down with speed,
+  // banks into lateral drift, rides a rotor-beat bob; tail-rotor loss = accelerating flat spin.
+  if (g && !intro.crashed) {
+    if (intro.phase === "spin") {
+      g.rotation.y += dt * Math.min(6, (T - 14) * 0.9);
+      g.rotation.z = Math.sin(T * 6.1) * 0.22; g.rotation.x = Math.sin(T * 4.3 + 1) * 0.18;
+    } else {
+      const fr = vehFrame(g, dt), spd = Math.hypot(fr.wx, fr.wz), wob = intro.shake || 0;
+      if (spd > 1.2) g.rotation.y = lerp2angle(g.rotation.y, Math.atan2(-fr.wz, fr.wx), Math.min(1, dt * 1.1));
+      g.rotation.z = clamp(-fr.fV * 0.02, -0.17, 0.10) + Math.sin(T * 0.8) * 0.02 + Math.sin(T * 7.3) * wob * 0.28;
+      g.rotation.x = clamp(fr.lV * 0.018, -0.15, 0.15) + Math.sin(T * 1.13) * 0.015 + Math.sin(T * 8.7) * wob * 0.22;
+      g.position.y += Math.sin(T * 4.6) * 0.014;
+    }
+  }
 
   if (T < 6.5) {                          // 1 · deployment flight
     intro.phase = "flight"; intro.shake = 0.04;
@@ -4421,19 +4485,21 @@ function updateIntroCamera() {
 function updateIntroCameraCrash() {
   const g = intro.heli ? intro.heli.group : null; if (!g) return;
   const T = intro.t;
-  if (T < 15) {                           // trailing chase over the valley
-    camera.position.lerp(tmp.set(g.position.x - 10, g.position.y + 6, g.position.z + 16), 0.06);
-    camera.lookAt(g.position.x, g.position.y - 2, g.position.z - 10);
+  if (T < 15) {                           // trailing chase — eased handheld, slow push-in
+    const d = 1 - Math.min(0.35, T * 0.023);
+    cineCam(g.position.x - 10 * d, g.position.y + 6 * d, g.position.z + 16 * d,
+            g.position.x, g.position.y - 2, g.position.z - 10, 0.06, 0.09);
   } else {                                // spin: orbit + roll the horizon
     const a = T * 2.4;
     camera.position.lerp(tmp.set(g.position.x + Math.sin(a) * 13, g.position.y + 4, g.position.z + Math.cos(a) * 13), 0.12);
     camera.up.set(Math.sin(a * 0.7) * 0.5, 1, 0).normalize();
     camera.lookAt(g.position.x, g.position.y, g.position.z);
   }
-  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; camera.position.z += (Math.random() - 0.5) * intro.shake; }
+  if (T >= 15 && intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; camera.position.z += (Math.random() - 0.5) * intro.shake; }   // violent random only for the spin/crash
 }
 function finishIntroCommon(msg) {                          // shared hand-off: return control, clear cinematic DOM
   introSeen = true; intro = null;
+  setLetterbox(false);
   try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
   stopRadioClips();
   Audio.rotor(false);
@@ -4472,7 +4538,17 @@ function updateIntroResearch(dt) {
     intro.line++; const e = INTRO_RADIO_RESEARCH[intro.line]; const r = $("introRadio"); r.innerHTML = e.h; r.style.opacity = "1";
     if (e.say || e.clip) { Audio.squelch(); playRadio(e); }
   }
-  if (g && intro.heli.rotor) { const rs = intro.landed ? 12 : 30; intro.heli.rotor.rotation.y += dt * rs; if (intro.heli.tailRotor) intro.heli.tailRotor.rotation.x += dt * rs * 2; }
+  if (g && intro.heli.rotor) { intro._rs = lerp(intro._rs == null ? 30 : intro._rs, intro.landed ? 5 : 30, Math.min(1, dt * 1.4)); intro.heli.rotor.rotation.y += dt * intro._rs; if (intro.heli.tailRotor) intro.heli.tailRotor.rotation.x += dt * intro._rs * 2; }
+  if (g && !intro.landed) {
+    // nose-first flight, speed-coupled attitude, hover bob, and rotor wash kicking up the LZ
+    const fr = vehFrame(g, dt), spd = Math.hypot(fr.wx, fr.wz);
+    if (spd > 1.0) g.rotation.y = lerp2angle(g.rotation.y, Math.atan2(-fr.wz, fr.wx), Math.min(1, dt * 1.2));
+    g.rotation.z = clamp(-fr.fV * 0.024, -0.15, 0.10) + Math.sin(T * 0.9) * 0.018;
+    g.rotation.x = clamp(fr.lV * 0.02, -0.13, 0.13) + Math.sin(T * 1.2) * 0.014;
+    g.position.y += Math.sin(T * 4.4) * 0.012;
+    const agl = g.position.y - groundH(g.position.x, g.position.z);
+    if (agl < 12 && Math.random() < dt * 7) fxDust(g.position.x + rand(-4, 4), g.position.z + rand(-4, 4), 1.1);
+  } else if (g) { g.rotation.z = lerp(g.rotation.z || 0, 0, Math.min(1, dt * 3)); g.rotation.x = lerp(g.rotation.x || 0, 0, Math.min(1, dt * 3)); }
 
   if (T < 6) {                            // 1 · banking approach over the ruined labs (golden hour)
     intro.phase = "approach"; intro.shake = 0.05;
@@ -4494,9 +4570,15 @@ function updateIntroResearch(dt) {
 }
 function updateIntroCameraResearch() {
   const g = intro.heli ? intro.heli.group : null; if (!g) return;
-  camera.position.lerp(tmp.set(g.position.x - 13, g.position.y + 7, g.position.z + 19), 0.05);
-  camera.lookAt(g.position.x, g.position.y - 1, g.position.z - 6);
-  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+  const T = intro.t;
+  if (T < 12) {          // banking approach: wide 3/4 trailing shot with a slow push-in
+    const d = 1 - Math.min(0.30, T * 0.025);
+    cineCam(g.position.x - 13 * d, g.position.y + 7 * d, g.position.z + 19 * d,
+            g.position.x, g.position.y - 1, g.position.z - 6, 0.05, 0.08);
+  } else {               // touchdown: low ground-level angle looking up — the classic LZ landing shot
+    const gy = groundH(intro.wx + 11, intro.wz + 15);
+    cineCam(intro.wx + 11, gy + 1.7, intro.wz + 15, g.position.x, g.position.y + 1.2, g.position.z, 0.045, 0.08);
+  }
 }
 function endIntroResearch() {                             // stand the player at the LZ, facing into the valley
   const P = S.player; P.x = 0; P.z = 0; P.yaw = 0;
@@ -4603,6 +4685,15 @@ function updateIntroJeep(dt) {
   }
   tint.style.background = "#1f2733"; tint.style.opacity = "0.3";   // last light / dusk
   const driveTo = (tz, rate) => { if (j) { j.position.z += (tz - j.position.z) * dt * rate; j.position.y = groundH(j.position.x, j.position.z); } };
+  if (j) {   // AAA drive feel: nose follows the track gradient, squats on accel / dips on braking,
+             // suspension jitter + body sway scale with speed (travel = -z, local +x forward)
+    const fr = vehFrame(j, dt);
+    const gA = groundH(j.position.x, j.position.z - 2.2), gB = groundH(j.position.x, j.position.z + 2.2);
+    j.rotation.z = clamp((gA - gB) * 0.20, -0.12, 0.12) + clamp(fr.fA * 0.010, -0.05, 0.07);
+    const sp = Math.min(1, Math.abs(fr.fV) * 0.45);
+    j.rotation.x = Math.sin(T * 8.7) * 0.006 * sp + Math.sin(T * 1.4) * 0.004;
+    j.position.y += Math.abs(Math.sin(T * 7.9)) * 0.02 * sp;
+  }
 
   if (T < 7) {                            // 1 · grind up the track toward the checkpoint
     intro.phase = "drive"; intro.shake = 0.09; driveTo(20, 0.5);
@@ -4619,9 +4710,10 @@ function updateIntroJeep(dt) {
 }
 function updateIntroCameraJeep() {
   const j = intro.jeep; if (!j) return;
-  camera.position.lerp(tmp.set(j.position.x - 1.4, j.position.y + 2.35, j.position.z + 5.2), 0.1);   // over the driver's shoulder
-  camera.lookAt(j.position.x + 1.0, j.position.y + 1.5, j.position.z - 10);                          // forward over the hood
-  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+  // over-the-shoulder with true handheld sway; settles lower and closer as the convoy halts
+  const k = intro.stopped ? 0.6 : 1;
+  cineCam(j.position.x - 1.4, j.position.y + 2.35 - (1 - k) * 0.3, j.position.z + 4.6 + k * 0.6,
+          j.position.x + 1.0, j.position.y + 1.5, j.position.z - 10, 0.09, 0.12);
 }
 function endIntroJeep() {                                 // step out beside the jeep, on foot into Sector 9
   const j = intro.jeep; const P = S.player;
@@ -4869,8 +4961,10 @@ function updateIntroBoat(dt) {
   radioStep(INTRO_RADIO_BOAT);
   const near = intro.dockX - intro.bx, speed = near < 10 ? 3.5 : 7.5;     // ease in to the dock
   intro.bx = Math.min(intro.dockX, intro.bx + speed * dt);
-  positionBoatOnRiver(b, intro.bx, WATER_Y + Math.sin(T * 1.5) * 0.05);
-  b.rotation.z = Math.sin(T * 1.0) * 0.025;
+  positionBoatOnRiver(b, intro.bx, WATER_Y + Math.sin(T * 1.5) * 0.05 + Math.sin(T * 0.6 + 2) * 0.03);
+  // hull attitude: bow rises with throttle, swell pitch + slow side roll + fine chop (real water, not a slide)
+  b.rotation.z = 0.012 + speed * 0.006 + Math.sin(T * 0.9) * 0.018;
+  b.rotation.x = Math.sin(T * 0.63 + 1.2) * 0.028 + Math.sin(T * 2.3) * 0.008;
   if (b.userData.wake) b.userData.wake.material.opacity = 0.22 + Math.abs(Math.sin(T * 4)) * 0.12;
   const prog = (intro.bx - (-64)) / (intro.dockX - (-64));
   tint.style.background = "#5a6e72"; tint.style.opacity = (0.34 - prog * 0.12).toFixed(2);   // mist thins as you arrive
@@ -4888,10 +4982,8 @@ function updateIntroCameraBoat() {
   const cy = b.position.y + 5.5;
   const cz = b.position.z - vz * 6 + sideZ * 7;
   camera.up.set(0, 1, 0);
-  camera.position.lerp(tmp.set(cx, cy, cz), 0.05);
-  // look DOWN-river toward the pier (well ahead of the bow) so the channel + far dock fill the frame
-  camera.lookAt(b.position.x + vx * 18, b.position.y + 0.6, b.position.z + vz * 18);
-  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+  // eased riverine establishing shot, looking down-river toward the pier — handheld drift, no jitter
+  cineCam(cx, cy, cz, b.position.x + vx * 18, b.position.y + 0.6, b.position.z + vz * 18, 0.05, 0.08);
 }
 function endIntroBoat() {
   introProp = null;
@@ -4978,7 +5070,7 @@ function updateIntroMonorail(dt) {
   if (!intro) return;
   intro.t += dt; const T = intro.t, c = intro.car, tint = $("introTint"), cap = $("introCap");
   radioStep(INTRO_RADIO_MONO);
-  if (c) c.position.y = intro.y0;
+  if (c) { c.position.y = intro.y0 + Math.sin(T * 3.1) * 0.006; c.rotation.z = Math.sin(T * 0.62) * 0.007; c.rotation.x = Math.sin(T * 1.7) * 0.004; }   // rail hum + gentle cabin sway
   const driveTo = (tz, rate) => { if (c) c.position.z += (tz - c.position.z) * dt * rate; };
   if (T < 6) {                            // 1 · gliding transit through the dark
     intro.phase = "transit"; intro.shake = 0.035; driveTo(34, 0.5);
@@ -5001,9 +5093,9 @@ function updateIntroCameraMonorail() {
   const c = intro.car; if (!c) return;
   // RIGID follow (no lerp) so the camera moves exactly with the moving car — a lerping camera trailed
   // the car as it drove, so the car kept sliding out of frame & back ("disappears and reappears").
-  camera.position.set(c.position.x + 0.55, c.position.y + 1.5, c.position.z + 1.7);   // inside, just behind the seated crew, looking forward
-  camera.lookAt(c.position.x, c.position.y + 1.2, c.position.z - 9);
-  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake * 0.6; }
+  const n = cineNoise(intro.t, (intro.shake || 0.03) * 1.5);   // smooth cabin tremor (random jitter reads as glitch)
+  camera.position.set(c.position.x + 0.55 + n.x * 0.3, c.position.y + 1.5 + n.y * 0.35, c.position.z + 1.7);
+  camera.lookAt(c.position.x + n.x * 0.6, c.position.y + 1.2 + n.y * 0.5, c.position.z - 9);
 }
 function endIntroMonorail() { introProp = null; endIntroAtOrigin("THE LAST SAMPLE · restore power & retrieve the sample — reach the objective"); }
 
@@ -5221,6 +5313,7 @@ function platformCam(exit) {
   const wx = intro._pwx, wy = intro._pwy, wz = intro._pwz; if (wx == null) return;
   if (exit === "x") { camera.position.lerp(tmp.set(wx - 4.8, wy + 2.1, wz + 0.2), 0.12); camera.lookAt(wx + 4, wy + 0.7, wz); }
   else { camera.position.lerp(tmp.set(wx + 0.2, wy + 2.2, wz - 4.8), 0.12); camera.lookAt(wx, wy + 0.7, wz + 5); }
+  const np = cineNoise(intro.t, 0.05); camera.position.x += np.x; camera.position.y += np.y;   // held-camera life on the platform shots
 }
 function placeOnPlatform(plat) {   // static stand during the opening cinematic, before walk control
   const wx = plat.position.x + intro.px, wy = plat.position.y + 0.9, wz = plat.position.z + intro.pz;
@@ -5232,7 +5325,8 @@ function updateCanopyCamera() {
   const a = intro.heading, gy = groundH(intro.cx, intro.cz), py = Math.max(gy + 0.9, intro.cy);
   camera.position.lerp(tmp.set(intro.cx - Math.sin(a) * 10.5, py + 5.2, intro.cz - Math.cos(a) * 10.5), 0.09);
   camera.lookAt(intro.cx + Math.sin(a) * 5, py - 0.8, intro.cz + Math.cos(a) * 5);
-  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+  const nb = cineNoise(intro.ct || intro.t, 0.10);   // wind buffet — smooth, not random jitter
+  camera.position.x += nb.x; camera.position.y += nb.y * 0.7;
 }
 function landCanopy(hard) {
   if (intro.chute) scene.remove(intro.chute);
@@ -5266,7 +5360,7 @@ function updateIntroHalo(dt) {
   // ── PHASE 1 (0-6.5s): cinematic establishing shot — the C-130 cruising the storm front ──
   if (T < 6.5) {
     intro.phase = "approach";
-    if (intro.plane) { intro.plane.position.x += 3.2 * dt; intro.plane.position.z -= 0.6 * dt; intro.plane.rotation.z = Math.sin(T * 0.5) * 0.03; spinProps(intro.plane, dt); }
+    if (intro.plane) { intro.plane.position.x += 3.2 * dt; intro.plane.position.z -= 0.6 * dt; intro.plane.rotation.z = Math.sin(T * 0.5) * 0.03; intro.plane.rotation.x = Math.sin(T * 0.8 + 1) * 0.02; intro.plane.position.y += Math.sin(T * 0.55) * 0.03; spinProps(intro.plane, dt); }
     if (playerMesh) playerMesh.visible = false;
     cap.style.opacity = "1"; big.style.opacity = "0";
     return;
@@ -5314,16 +5408,15 @@ function updateIntroCameraHalo() {
   if (intro.phase === "canopy") return updateCanopyCamera();
   if (intro.phase === "approach") {       // orbit the exterior C-130
     const p = intro.plane; if (!p) return;
-    camera.position.lerp(tmp.set(p.position.x - 13, p.position.y + 5, p.position.z + 21), 0.05);
-    camera.lookAt(p.position.x, p.position.y + 1.0, p.position.z);
-    if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+    // establishing shot with a slow parallax arc + push-in — the Herc crosses the storm front
+    const arc = intro.t * 0.10;
+    cineCam(p.position.x - 13 - Math.sin(arc) * 5, p.position.y + 5 - intro.t * 0.12, p.position.z + 21 - intro.t * 0.5,
+            p.position.x, p.position.y + 1.0, p.position.z, 0.05, 0.08);
     return;
   }
   if (intro.phase === "walk") return platformCam("x");
   const b = intro.bay; if (!b) return;
-  camera.position.lerp(tmp.set(b.position.x - 3.6, b.position.y + 1.7, b.position.z + 0.3), 0.08);
-  camera.lookAt(b.position.x + 5, b.position.y + 1.0, b.position.z);
-  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+  cineCam(b.position.x - 3.6, b.position.y + 1.7, b.position.z + 0.3, b.position.x + 5, b.position.y + 1.0, b.position.z, 0.08, 0.11);
 }
 /* Evac airship — EXTINCTION PROTOCOL (walk the deck, pick a descent pad, step off) */
 function addDescentPads(deck) {
@@ -5351,6 +5444,9 @@ function updateIntroAirship(dt) {
   if (intro.phase === "canopy") return updateCanopyPhase(dt);
   intro.t += dt; const T = intro.t, tint = $("introTint"), cap = $("introCap"), big = $("introBig");
   radioStep(INTRO_RADIO_AIRSHIP);
+  const dk = intro.deck;
+  if (dk) { if (dk.userData._y0 == null) dk.userData._y0 = dk.position.y;
+    dk.position.y = dk.userData._y0 + Math.sin(T * 0.55) * 0.4; dk.rotation.z = Math.sin(T * 0.42) * 0.008; }   // the airship FLOATS — deck rides a slow swell (player is re-seated from deck.position each frame)
   tint.style.background = T < 6 ? "#3a1c10" : "#5a1810"; tint.style.opacity = (0.3 + (T > 6 ? Math.abs(Math.sin(T * 8)) * 0.18 : 0)).toFixed(2);   // fiery glow → breach alarm
   if (T < 6) { intro.phase = "deck"; cap.style.opacity = T > 4.5 ? "0" : "1"; placeOnPlatform(intro.deck); big.style.opacity = "0"; }
   else {                                  // breach — walk to a descent pad and step off the edge
@@ -5367,9 +5463,8 @@ function updateIntroCameraAirship() {
   if (intro.phase === "canopy") return updateCanopyCamera();
   if (intro.phase === "walk") return platformCam("z");
   const d = intro.deck; if (!d) return;
-  camera.position.lerp(tmp.set(d.position.x, d.position.y + 2.3, d.position.z - 3.2), 0.06);
-  camera.lookAt(d.position.x, d.position.y + 1.3, d.position.z + 9);
-  if (intro.shake > 0) { camera.position.x += (Math.random() - 0.5) * intro.shake; camera.position.y += (Math.random() - 0.5) * intro.shake; }
+  cineCam(d.position.x + Math.sin(intro.t * 0.07) * 2.5, d.position.y + 2.3, d.position.z - 3.2 - Math.min(1.6, intro.t * 0.1),
+          d.position.x, d.position.y + 1.3, d.position.z + 9, 0.06, 0.09)
 }
 function lockPointer() {   // pointer lock needs a user gesture; the timer-driven auto-end may be rejected — canvas click recovers it
   if (isTouch) return;
