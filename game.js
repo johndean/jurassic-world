@@ -13,7 +13,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-07-06-intro5";
+const BUILD = "2026-07-07-crew2";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -3931,10 +3931,14 @@ function buildHeli() {
   let topY = 3.4, len = 12, tailRotor = null, rotorX = 0, rotorZ = 0;
   const bladeMat = new THREE.MeshStandardMaterial({ color: 0x14160f, roughness: 0.95, metalness: 0.05 });
   if (MODELS[HELI_MODEL]) {
-    const m = fitModel(MODELS[HELI_MODEL].clone(true), 4.6, 0);   // realistic model, ~4.6m tall, feet at y=0
+    // GLB local nose = -X (tail-fin verts at +X); yaw +90° maps -X onto +Z (THREE R_y: z' = -sin·x + cos·z), the game's flight
+    // convention (evac + heliAttitude steer with atan2(dx,dz)). Without this the fuselage flew
+    // in a permanent 90-degree crab and every crew placement landed on the hull SIDE, mid-air.
+    const m = fitModel(MODELS[HELI_MODEL].clone(true), 4.6, Math.PI / 2);
     g.add(m);
-    const bb = measureBox(m); topY = bb.max.y; len = Math.max(bb.max.x - bb.min.x, 7);
+    const bb = measureBox(m); topY = bb.max.y; len = Math.max(bb.max.z - bb.min.z, 7);
     const rc = modelRotorXZ(m); rotorX = rc.x; rotorZ = rc.z; topY = rc.y;   // centre the blur disc on the actual main-rotor hub
+    m.userData.isRealHeli = true;
   } else {                                                     // procedural fallback (boxy but functional)
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0x49513f, roughness: 0.85, metalness: 0.2, flatShading: true });
     const dark = new THREE.MeshStandardMaterial({ color: 0x20231e, roughness: 1 });
@@ -4010,7 +4014,7 @@ function startEvac() {
   let landY = groundH(lx, lz);
   const heli = buildHeli();
   heli.group.position.set(lx + 50, landY + 120, lz + 50);   // enters high + far
-  { const h = measureHull(heli.group); addPilots(heli.group, h.halfW, h.floorY, h.noseZ); }   // visible flight crew — the pickup bird must not fly itself
+  addPilots(heli.group, measureHull(heli.group));            // visible flight crew — the pickup bird must not fly itself
   heli.group.rotation.y = Math.atan2(bx - lx, bz - lz);      // nose roughly toward the pad
   evac = { phase: "incoming", t: 0, heli, hx: bx, hz: bz, lx, lz, groundY: landY, hoverY: landY + 14, done: false };
 }
@@ -4396,34 +4400,48 @@ function makeTrooper(color) {
 // Fix: measure the real hull (children[0] — NOT the group, the rotor blur disc inflates the box)
 // and seat the squad IN THE OPEN SIDE DOORWAYS, legs hanging out — the classic Huey door-ride,
 // readable from any exterior angle. Pilot + co-pilot sit high at the canopy line up front.
-function addPilots(group, halfW, floorY, noseZ) {
-  for (const sx of [-1, 1]) {
+function addPilots(group, h) {
+  for (const sx of [-1, 1]) {                         // pilot + co-pilot side-by-side behind the canopy glass
     const p = makeTrooper(0x3a3f30);
-    p.position.set(sx * Math.min(0.36, halfW * 0.4), floorY + 0.16, noseZ * 0.42);
+    p.position.set(sx * 0.52, h.canopyY, h.canopyZ);  // butt on the cockpit floor; helmet rises into the glass band
     p.scale.setScalar(0.92); group.add(p);
   }
 }
+// REAL hull chart, measured from the GLB vertices at fitModel height 4.6m and expressed in the
+// post-yaw group frame (nose = +Z). bbox-derived guesses put crew a metre off the skin — the rotor
+// disc inflates every bbox axis and the cabin wall is at |x|=1.16..1.50, NOT at the 7.7m disc edge.
+//   skids: tube top y=0.30, tubes at |x|=1.52, span z +0.48..+4.62 (fwd of centre)
+//   cabin wall: |x|<=1.50; canopy glass band z +4.0..+6.0, crew eye y~1.9
+//   fuselage nose z=+6.04, tail cone z=-7.60 (fin top centroid z=-6.2)
+// Fallback (procedural) heli is measured live from its own bbox — it has no rotor disc.
 function measureHull(group) {
-  const body = group.children[0] || group;
-  const bb = new THREE.Box3().setFromObject(body);
-  return { halfW: clamp((bb.max.x - bb.min.x) * 0.5 * 0.92, 0.8, 1.7),
-           floorY: bb.min.y + (bb.max.y - bb.min.y) * 0.32,
-           noseZ: bb.max.z, tailZ: bb.min.z };
+  const real = !!(group.children[0] && group.children[0].userData && group.children[0].userData.isRealHeli) || !!MODELS[HELI_MODEL];
+  if (real) return { halfW: 1.42, wallX: 1.50, skidX: 1.52, skidTopY: 0.30, floorY: 0.42,
+                     canopyZ: 4.7, canopyY: 1.28, noseZ: 6.04, tailZ: -7.60, benchZ0: 0.6, benchZ1: 4.3 };
+  const bb = new THREE.Box3().setFromObject(group.children[0] || group);
+  const hw = clamp((bb.max.x - bb.min.x) * 0.5 * 0.92, 0.8, 1.7);
+  return { halfW: hw, wallX: hw, skidX: 1.1, skidTopY: 0.24, floorY: bb.min.y + (bb.max.y - bb.min.y) * 0.32,
+           canopyZ: bb.max.z * 0.42, canopyY: bb.min.y + (bb.max.y - bb.min.y) * 0.32,
+           noseZ: bb.max.z, tailZ: bb.min.z, benchZ0: -1.5, benchZ1: 0.6 };
 }
 function buildRiders(group) {
   const h = measureHull(group);
-  const cz = (h.noseZ + h.tailZ) / 2;                       // cabin midline (aft of the cockpit)
   const n = Math.min(4, Math.max(2, Net.on ? (remotePlayers.size + 1) : 2));   // squad always reads crewed
   const colors = [0x5a6b3f, 0x4a5236, 0x6b6f4a, 0x47513f];
-  // door seats: alternate sides, spaced along the cabin, facing OUT, boots hanging past the sill
-  const seats = [[1, cz - 0.15], [-1, cz - 0.85], [1, cz - 1.45], [-1, cz + 0.45]];
+  // This hull has NO open doorway in the mesh (walls solid at seat height) — 'hovering at the door'
+  // is physically impossible to stage. The truthful pose the geometry supports is the SKID RIDE:
+  // troopers sit ON the skid tube (measured: tube top y=0.30 at |x|=1.52), backs against the hull
+  // wall (|x|=1.50), boots hooked on the tube — a real insertion pose, visibly SUPPORTED by the
+  // airframe from every camera angle. Seat pelvis at tube top; trooper origin is the pelvis and
+  // its thighs extend forward, so the figure reads seated on the tube, back on the wall.
+  const seats = [[1, h.benchZ1 - 0.55], [-1, h.benchZ1 - 0.55], [1, h.benchZ0 + 0.75], [-1, h.benchZ0 + 0.75]];
   for (let i = 0; i < n; i++) {
     const s = seats[i], t = makeTrooper(colors[i % colors.length]);
-    t.position.set(s[0] * (h.halfW + 0.05), h.floorY, s[1]);
-    t.rotation.y = s[0] * Math.PI / 2;                      // face outward through the open door
+    t.position.set(s[0] * (h.skidX - 0.10), h.skidTopY + 0.06, s[1]);
+    t.rotation.y = s[0] * Math.PI / 2;                      // face outward, legs over the tube
     t.scale.setScalar(0.95); group.add(t);
   }
-  addPilots(group, h.halfW, h.floorY, h.noseZ);
+  addPilots(group, h);
 }
 function upgradeIntroHeli() {                             // swap the boxy fallback for the realistic Huey the instant it loads
   if (!intro || intro.crashed || !intro.heli || intro.heli.real || !MODELS[HELI_MODEL]) return;
