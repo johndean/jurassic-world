@@ -13,7 +13,7 @@ import { Net } from "./net.js";
 import { STR } from "./strings.js";
 
 // Build stamp + visible error surface — so we can tell a stale cached bundle from a live runtime error.
-const BUILD = "2026-07-06-intro3";
+const BUILD = "2026-07-06-intro4";
 console.log("%cJurassic Survival build " + BUILD, "color:#6fae6b;font-weight:700");
 addEventListener("error", e => { try { const d = document.getElementById("buildTag"); if (d) { d.textContent = "BUILD " + BUILD + " · ERR: " + String(e.message || e.error || "").slice(0, 90); d.style.color = "#ff6b5a"; d.style.opacity = "1"; } } catch (_) {} });
 addEventListener("DOMContentLoaded", () => { const d = document.getElementById("buildTag"); if (d) d.textContent = "BUILD " + BUILD; });
@@ -5239,6 +5239,33 @@ function buildTransportBay() {                            // C-130-style fuselag
   const redL = mkLamp(0.0, 0xff2a1a, true), amberL = mkLamp(-0.34, 0xffb020, false), greenL = mkLamp(-0.68, 0x35e06a, false);
   const redGlow = mk3(new THREE.PointLight(0xff2a1a, 1.4, 6), { position: new THREE.Vector3(L / 2 - 0.6, H - 0.4, W / 2 - 0.2) }); g.add(redGlow);
   g.userData.jumpLight = redL; g.userData.lamps = { red: redL, amber: amberL, green: greenL, glow: redGlow };
+  // ── fuselage EXTERIOR so the interior set can never read as a floating box: hull tube around the
+  // bay (front-face culled = invisible from inside), nose cone, tail boom + fin, high wings. Any
+  // glimpse through the ramp opening or a stray outside angle reads as an aircraft. ──
+  const hullMat = new THREE.MeshStandardMaterial({ color: 0x4c5548, roughness: 0.72, metalness: 0.35 });
+  const hull = new THREE.Mesh(new THREE.CylinderGeometry(2.35, 2.35, L + 1.6, 22, 1, true), hullMat);
+  hull.rotation.z = Math.PI / 2; hull.position.set(-0.4, H / 2, 0); g.add(hull);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(2.32, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), hullMat);
+  nose.rotation.z = Math.PI / 2; nose.position.set(-L / 2 - 1.15, H / 2, 0); g.add(nose);
+  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.9, 5.6, 14, 1, true), hullMat);
+  boom.rotation.z = Math.PI / 2; boom.position.set(L / 2 + 3.2, H / 2 + 0.55, 0); g.add(boom);
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(2.2, 3.4, 0.24), hullMat); fin.position.set(L / 2 + 5.4, H / 2 + 2.2, 0); g.add(fin);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.22, 5.6), hullMat); tail.position.set(L / 2 + 5.2, H / 2 + 1.4, 0); g.add(tail);
+  for (const sz of [-1, 1]) {
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.3, 7.6), hullMat); wing.position.set(-1.2, H + 1.35, sz * 4.9); g.add(wing);
+    for (const wx of [-2.2, 0.2]) { const nac = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.9, 10), hullMat); nac.rotation.z = Math.PI / 2; nac.position.set(-1.2 + wx + 1.0, H + 0.9, sz * (3.1 + (wx > -1 ? 3.0 : 0))); g.add(nac); }
+  }
+  // ── interior dressing (kept OUT of the walk corridor x -4.7..5.0, z -1.3..1.3): static-line
+  // cable overhead, cargo netting on both walls, strapped crate stack at the bulkhead ──
+  const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, L - 1.5, 6), new THREE.MeshStandardMaterial({ color: 0x8a8f96, roughness: 0.5, metalness: 0.7 }));
+  cable.rotation.z = Math.PI / 2; cable.position.set(0, H - 0.35, 0); g.add(cable);
+  const netMat = new THREE.MeshStandardMaterial({ color: 0x39412f, roughness: 0.95, metalness: 0.05, wireframe: true });
+  for (const sz of [W / 2 - 0.12, -W / 2 + 0.12]) { const net = new THREE.Mesh(new THREE.PlaneGeometry(L * 0.62, H * 0.62, 10, 4), netMat); net.position.set(-0.6, H * 0.52, sz); g.add(net); }
+  const crateMat = new THREE.MeshStandardMaterial({ color: 0x54503c, roughness: 0.9, metalness: 0.1 });
+  for (const c of [[-5.05, 0.38, 1.45, 0.66], [-5.0, 0.95, -1.5, 0.5]]) {
+    const cr = new THREE.Mesh(new THREE.BoxGeometry(c[3], c[3] * 0.78, c[3]), crateMat); cr.position.set(c[0], c[1], c[2]); cr.rotation.y = c[2]; g.add(cr);
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(c[3] + 0.04, 0.05, 0.09), new THREE.MeshStandardMaterial({ color: 0x8a2f22, roughness: 0.8 })); strap.position.set(c[0], c[1] + c[3] * 0.2, c[2]); g.add(strap);
+  }
   return g;
 }
 function buildAirshipDeck() {                             // open flight deck of the evac carrier (jump edge at +z)
@@ -5299,6 +5326,7 @@ const DESCENT = {
   wing: { off: 62, alt: 118, fwdN: 20, fwdD: 27, fwdF: 10, vN: 6.5, vD: 10, vF: 3.5, steer: 1.7, wind: 1.0, chute: false }, // fast, shallow wingsuit glide
 };
 function beginCanopy(tx, tz) {   // hand off from the pre-jump cinematic into the controllable descent
+  cineReset();
   if (introProp) { scene.remove(introProp); introProp = null; }
   if (intro.plane) { scene.remove(intro.plane); intro.plane = null; }
   intro.bay = null; intro.deck = null;
@@ -5414,9 +5442,15 @@ function updateIntroHalo(dt) {
     let op = f < 0.4 ? f / 0.4 : f < 0.6 ? 1 : (1 - f) / 0.4;
     tint.style.background = "#05070a"; tint.style.opacity = Math.min(1, op).toFixed(2);
     cap.style.opacity = "0"; big.style.opacity = "0";
-    if (f >= 0.4) {   // under full black: remove the plane, reveal the interior bay
+    if (f >= 0.4 && !intro._inside) {   // under FULL BLACK: filmic hard cut — exterior strikes, interior is live
+      intro._inside = true;
       if (intro.plane) { scene.remove(intro.plane); intro.plane = null; }
       if (intro.bay) intro.bay.visible = true;
+      placeOnPlatform(intro.bay);                       // player + squad present before anything is visible
+      cineReset();                                      // kill the eased-camera memory of the exterior shot
+      const b = intro.bay;                              // CUT the camera straight to the interior framing
+      camera.position.set(b.position.x - 3.6, b.position.y + 1.7, b.position.z + 0.3);
+      camera.lookAt(b.position.x + 5, b.position.y + 1.0, b.position.z);
     }
     return;
   }
@@ -5446,7 +5480,7 @@ function updateIntroHalo(dt) {
 }
 function updateIntroCameraHalo() {
   if (intro.phase === "canopy") return updateCanopyCamera();
-  if (intro.phase === "approach") {       // orbit the exterior C-130
+  if (intro.phase === "approach" && !intro._inside) {   // exterior C-130 establishing shot (pre-cut ONLY)
     const p = intro.plane; if (!p) return;
     // establishing shot with a slow parallax arc + push-in — the Herc crosses the storm front
     const arc = intro.t * 0.10;
